@@ -1,5 +1,5 @@
-import pandas_lite._libs.math as m
-import pandas_lite.math_columns as mc
+import dexplo._libs.math as m
+import dexplo.math_columns as mc
 
 funcs = {'i': {'min': m.min_int,
                'max': m.max_int,

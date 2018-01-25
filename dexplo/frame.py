@@ -8,10 +8,10 @@ import dexplo.utils as utils
 import dexplo.options as options
 import copy
 from dexplo._libs import (string_funcs as sf,
-                               groupby as gb,
-                               validate_arrays as va,
-                               math as _math,
-                               stat_funcs as stat)
+                          groupby as gb,
+                          validate_arrays as va,
+                          math as _math,
+                          stat_funcs as stat)
 
 from numpy import nan, ndarray
 from collections import defaultdict, OrderedDict
