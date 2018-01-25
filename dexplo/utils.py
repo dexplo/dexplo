@@ -1,7 +1,7 @@
 import decimal
 from typing import List
 import numpy as np
-from pandas_lite._libs import validate_arrays as va
+from dexplo._libs import validate_arrays as va
 
 
 _DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str'}

@@ -4,10 +4,10 @@ import numpy as np
 from typing import (Union, Dict, List, Optional, Tuple,
                     NoReturn, Any, Set, Sequence)
 import bottleneck as bn
-import pandas_lite.utils as utils
-import pandas_lite.options as options
+import dexplo.utils as utils
+import dexplo.options as options
 import copy
-from pandas_lite._libs import (string_funcs as sf,
+from dexplo._libs import (string_funcs as sf,
                                groupby as gb,
                                validate_arrays as va,
                                math as _math,
