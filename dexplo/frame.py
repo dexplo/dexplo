@@ -1584,6 +1584,9 @@ class DataFrame(object):
         return df._construct_from_new(new_data, new_column_dtype, new_columns)
 
     def corr(self, method='pearson', min_periods=1):
+        """
+        Get correlation between two columns
+        """
         df = self.select_dtypes(['number', 'bool'])
         values = df._values_number()
         n = df.shape[1]
