@@ -1,24 +1,20 @@
-import decimal
-from functools import partial
+from collections import defaultdict, OrderedDict
+
 import numpy as np
+from numpy import nan, ndarray
 from typing import (Union, Dict, List, Optional, Tuple,
-                    NoReturn, Any, Set, Sequence)
-import bottleneck as bn
-import dexplo.utils as utils
+                    NoReturn, Set)
+
 import dexplo.options as options
-import copy
+import dexplo.utils as utils
 from dexplo._libs import (string_funcs as sf,
                           groupby as gb,
                           validate_arrays as va,
-                          math as _math,
-                          stat_funcs as stat)
-
-from numpy import nan, ndarray
-from collections import defaultdict, OrderedDict
-
+                          math as _math)
+from dexplo import stat_funcs as stat
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
-ColC = Dict[str, ndarray]
+KindList = Dict[str, List[ndarray]]
 DtypeCol = Dict[str, List[str]]
 
 # can change to array of strings?
@@ -26,9 +22,6 @@ ColumnT = Optional[Union[List[str], ndarray]]
 
 ColumnSelection = Union[int, str, slice, List[Union[str, int]]]
 RowSelection = Union[int, slice, List[int]]
-
-_NUMERIC_KINDS: Set[str] = set('bif')
-_ALL_DTYPES: Set[str] = set('bifOM')
 
 
 class DataFrame(object):
@@ -54,10 +47,7 @@ class DataFrame(object):
                 self._initialize_data_from_array(data)
 
         else:
-            raise TypeError('data parameter must be either a dict '
-                            'of arrays or an array')
-
-        # self._add_accessors()
+            raise TypeError('data parameter must be either a dict of arrays or an array')
 
     @property
     def columns(self) -> List[str]:
@@ -71,8 +61,8 @@ class DataFrame(object):
 
         len_new, len_old = len(new_columns), len(self._columns)
         if len_new != len_old:
-            raise ValueError(f'''There are {len_old} columns in the DataFrame.
-                              You provided {len_new}''')
+            raise ValueError(f'There are {len_old} columns in the DataFrame. '
+                             f'You provided {len_new}')
 
         new_data = {}
         new_column_dtype = {}
@@ -84,8 +74,7 @@ class DataFrame(object):
         self._column_dtype = new_column_dtype
         self._columns = new_columns
 
-    def _initialize_columns_from_dict(self, columns: ColumnT,
-                                      data: DataC) -> None:
+    def _initialize_columns_from_dict(self, columns: ColumnT, data: DataC) -> None:
         if columns is None:
             columns = np.array(list(data.keys()))
             self._check_column_validity(columns)
@@ -96,17 +85,15 @@ class DataFrame(object):
 
         self._columns = np.asarray(columns, dtype='O')
 
-    def _initialize_columns_from_array(self, columns: ColumnT,
-                                       num_cols: int) -> None:
+    def _initialize_columns_from_array(self, columns: ColumnT, num_cols: int) -> None:
         if columns is None:
             col_list = ['a' + str(i) for i in range(num_cols)]
             self._columns = np.array(col_list, dtype='O')
         else:
             self._check_column_validity(columns)
             if len(columns) != num_cols:
-                raise ValueError(f'Number of column names {len(columns)}'
-                                 'does not equal number of columns '
-                                 f'of data array {num_cols}')
+                raise ValueError(f'Number of column names {len(columns)} does not equal '
+                                 f'number of columns of data array {num_cols}')
             self._columns = np.asarray(columns, dtype='O')
 
     def _check_column_validity(self, cols: ColumnT) -> None:
@@ -120,19 +107,15 @@ class DataFrame(object):
             if not isinstance(col, str):
                 raise TypeError('Column names must be a string')
             if col in col_set:
-                raise ValueError(f'Column name {col} is duplicated. '
-                                 'Column names must '
-                                 'be unique')
+                raise ValueError(f'Column name {col} is duplicated. Column names must be unique')
             col_set.add(col)
 
     def _initialize_data_from_dict(self, data: DataC) -> None:
 
-        data_dict: ColC = {'f': [], 'i': [], 'b': [], 'O': []}
-        data_kind = {}
+        data_dict: KindList = {'f': [], 'i': [], 'b': [], 'O': []}
         for i, (col, values) in enumerate(data.items()):
             if not isinstance(values, (list, ndarray)):
-                raise TypeError('Values of dictionary must be an '
-                                'array or a list')
+                raise TypeError('Values of dictionary must be an array or a list')
             if isinstance(values, list):
                 arr = utils.convert_list_to_single_arr(values, col)
             else:
@@ -151,8 +134,7 @@ class DataFrame(object):
 
     def _validate_data_from_array(self, data: ndarray) -> int:
         if data.dtype.kind not in 'bifSUO':
-            raise TypeError('Array must be of type boolean, integer, '
-                            'float, string, or unicode')
+            raise TypeError('Array must be of type boolean, integer, float, string, or unicode')
         if data.ndim == 1:
             return 1
         elif data.ndim == 2:
@@ -177,9 +159,9 @@ class DataFrame(object):
 
     def _initialize_from_object_array(self, data: ndarray) -> None:
         """
-        Used to convert individial columns in object array
+        Used to convert individual columns in object array
         """
-        data_dict: ColC = {'f': [], 'i': [], 'b': [], 'O': []}
+        data_dict: KindList = {'f': [], 'i': [], 'b': [], 'O': []}
         for i, col in enumerate(self._columns):
             arr = va.maybe_convert_object_array(data[:, i], col)
             kind = arr.dtype.kind
@@ -296,8 +278,8 @@ class DataFrame(object):
                 long_len.append(cur_len)
                 decimal_len.append(0)
             elif self._column_dtype[column].dtype == 'f':
-                dec_len = [utils._get_decimal_len(x) for x in data[1:]]
-                whole_len = [utils._get_whole_len(x) for x in data[1:]]
+                dec_len = [utils.get_decimal_len(x) for x in data[1:]]
+                whole_len = [utils.get_whole_len(x) for x in data[1:]]
 
                 dec_len = np.array(dec_len).clip(0, 6)
                 whole_len = np.array(whole_len)
@@ -402,8 +384,7 @@ class DataFrame(object):
         try:
             return self._columns[iloc]
         except IndexError:
-            raise IndexError(f'Index {iloc} is out of bounds for '
-                             'the columns')
+            raise IndexError(f'Index {iloc} is out of bounds for the columns')
 
     def _get_list_of_cols_from_selection(self, cs):
         new_cols: List[str] = []
@@ -438,8 +419,7 @@ class DataFrame(object):
                         raise TypeError('Slice step must be None or int')
                     sss.append(self._find_col_location(value))
                 else:
-                    raise TypeError('Slice start, stop, and step values must '
-                                    'be int, str, or None')
+                    raise TypeError('Slice start, stop, and step values must be int, str, or None')
             if isinstance(cs.stop, str):
                 if cs.step is None or cs.step > 0:
                     sss[1] += 1
@@ -452,10 +432,9 @@ class DataFrame(object):
             cs = utils.try_to_squeeze_array(cs)
             if cs.dtype.kind == 'b':
                 if len(cs) != self.shape[1]:
-                    raise ValueError('Length of column selection boolean '
-                                     'array must be the same as number of '
-                                     'columns in the DataFrame. '
-                                     f'{len(rs)} != {self.shape[1]}')
+                    raise ValueError('Length of column selection boolean array must be the same '
+                                     'as number of columns in the DataFrame. '
+                                     f'{len(cs)} != {self.shape[1]}')
             elif cs.dtype.kind == 'i':
                 cs = cs.tolist()
             else:
@@ -464,16 +443,13 @@ class DataFrame(object):
             cs = self._get_list_of_cols_from_selection(cs)
         elif isinstance(cs, self.__class__):
             if cs.shape[0] != 1:
-                raise ValueError('Boolean selection only works with single-'
-                                 'row DataFames')
+                raise ValueError('Boolean selection only works with single-row DataFames')
             cs = cs.values.squeeze()
             if cs.dtype.kind != 'b':
-                raise TypeError('All values for column selection must '
-                                'be boolean')
+                raise TypeError('All values for column selection must be boolean')
             if len(cs) != self.shape[1]:
-                raise ValueError('Number of booleans in DataFrame does not '
-                                 'equal number of columns in self '
-                                 f'{len(cs)} != {self.shape[1]}')
+                raise ValueError('Number of booleans in DataFrame does not equal number of '
+                                 f'columns in self {len(cs)} != {self.shape[1]}')
             cs = self._columns[cs]
         else:
             raise TypeError('Selection must either be one of '
@@ -490,32 +466,26 @@ class DataFrame(object):
                             check_none_int(rs.step))
 
             if not all_ok:
-                raise TypeError('Slice start, stop, and step values must '
-                                'be int or None')
+                raise TypeError('Slice start, stop, and step values must be int or None')
         elif isinstance(rs, list):
             for row in rs:
                 # self.columns is a list to prevent numpy warning
                 if not isinstance(row, int):
-                    raise TypeError('Row selection must consist '
-                                    'only of integers')
+                    raise TypeError('Row selection must consist only of integers')
         elif isinstance(rs, ndarray):
             rs = utils.try_to_squeeze_array(rs)
             if rs.dtype.kind == 'b':
                 if len(rs) != len(self):
-                    raise ValueError('Length of boolean array must be the '
-                                     'same as DataFrame. '
+                    raise ValueError('Length of boolean array must be the same as DataFrame. '
                                      f'{len(rs)} != {len(self)}')
             elif rs.dtype.kind != 'i':
-                raise TypeError('Row selection array data type must be '
-                                'either integer or boolean')
+                raise TypeError('Row selection array data type must be either integer or boolean')
         elif isinstance(rs, self.__class__):
             if rs.shape[1] != 1:
-                raise ValueError('Boolean selection only works with single-'
-                                 'column DataFames')
+                raise ValueError('Boolean selection only works with single-column DataFames')
             rs = rs.values.squeeze()
             if rs.dtype.kind != 'b':
-                raise TypeError('All values for row selection must '
-                                'be boolean')
+                raise TypeError('All values for row selection must be boolean')
         elif not isinstance(rs, int):
             raise TypeError('Selection must either be one of '
                             'int, list, array, slice, or DataFrame')
@@ -569,11 +539,9 @@ class DataFrame(object):
                     arr = arr.astype('U').astype('O')
                 new_data[dtype] = arr
 
-        return self._construct_from_new(new_data, new_column_dtype,
-                                        new_columns)
+        return self._construct_from_new(new_data, new_column_dtype, new_columns)
 
-    def __getitem__(self, value: Tuple[RowSelection,
-                                       ColumnSelection]) -> 'DataFrame':
+    def __getitem__(self, value: Tuple[RowSelection, ColumnSelection]) -> 'DataFrame':
         utils.validate_selection_size(value)
         row_selection, col_selection = value
         if (isinstance(row_selection, int) and
@@ -588,6 +556,7 @@ class DataFrame(object):
     def to_dict(self, orient: str='array'):
         '''
         Conver DataFrame to dictionary of 1-dimensional arrays or lists
+        asdflkjsadf asdflk jasdflk j
 
         Parameters
         ----------
@@ -608,7 +577,7 @@ class DataFrame(object):
         return data
 
     def _is_numeric_or_bool(self):
-        return set(self._data.keys()) <= _NUMERIC_KINDS
+        return set(self._data.keys()) <= set('bif')
 
     def _is_numeric_strict(self):
         return set(self._data.keys()) <= {'i', 'f'}
@@ -642,8 +611,7 @@ class DataFrame(object):
         new_columns = self._columns.copy()
         new_column_dtype = {col: utils.Column(*col_obj.values)
                             for col, col_obj in self._column_dtype.items()}
-        return self._construct_from_new(new_data, new_column_dtype,
-                                        new_columns)
+        return self._construct_from_new(new_data, new_column_dtype, new_columns)
 
     def select_dtypes(self, include=None, exclude=None):
         if include is not None and exclude is not None:
@@ -684,8 +652,7 @@ class DataFrame(object):
                 new_columns.append(col)
                 order += 1
 
-        return self._construct_from_new(new_data, new_column_dtype,
-                                        new_columns)
+        return self._construct_from_new(new_data, new_column_dtype, new_columns)
 
     @classmethod
     def _construct_from_new(cls, data, column_dtype, columns):
@@ -697,19 +664,22 @@ class DataFrame(object):
         return df_new
 
     def _do_eval(self, op_string, other):
-        data_dict: Dict[str, ndarray] = {'b': [], 'i': [],
-                                         'f': [], 'O': []}
+        data_dict: Dict[str, ndarray] = {'b': [], 'i': [], 'f': [], 'O': []}
         new_column_dtype = {}
-        order = 0
-        for dt, arr in self._data.items():
+        kind_shape = {}
+
+        for old_kind, arr in self._data.items():
             arr_res = eval(f"{'arr'} .{op_string}({'other'})")
-            new_dt = arr_res.dtype.kind
-            data_dict[new_dt].append(arr_res)
-            cur_len = utils.get_arr_length(data_dict, get(new_dt, []))
-            for i, col in enumerate(cols):
-                new_column_dtype[col] = utils.Column(new_dt, i + cur_len,
-                                                     order)
-                order += 1
+            new_kind = arr_res.dtype.kind
+
+            cur_len = utils.get_arr_length(data_dict.get(new_kind, []))
+            kind_shape[old_kind] = (new_kind, cur_len)
+            data_dict[new_kind].append(arr_res)
+
+        for col, col_obj in self._column_dtype.items():
+            old_kind, _, order = col_obj.values
+            new_kind, new_loc = kind_shape[old_kind]
+            new_column_dtype[col] = utils.Column(new_kind, new_loc, order)
         return data_dict, new_column_dtype
 
     def _op(self, other, op_string):
@@ -819,8 +789,7 @@ class DataFrame(object):
                                         self._columns.copy())
 
     def __bool__(self):
-        raise ValueError(': The truth value of an array with more than '
-                         'one element is ambiguous. '
+        raise ValueError(': The truth value of an array with more than one element is ambiguous. '
                          'Use a.any() or a.all()')
 
     def __getattr__(self, name: str) -> NoReturn:
@@ -884,16 +853,14 @@ class DataFrame(object):
             else:
                 oshape = other.shape
 
-        if self.shape != other.shape:
-            raise ValueError('Shape of left DataFrame does not match '
-                             'shape of right'
-                             f'{self.shape} != {other.shape}')
+        if self.shape != oshape:
+            raise ValueError('Shape of left DataFrame does not match shape of right '
+                             f'{self.shape} != {oshape}')
 
     def _op_logical(self, other, op_logical):
         if not isinstance(other, (self.__class__, ndarray)):
             d = {'__and__': '&', '__or__': '|'}
-            raise TypeError(f'Must use {d[op_logical]} operator with either '
-                            ' DataFrames or arrays.')
+            raise TypeError(f'Must use {d[op_logical]} operator with either DataFrames or arrays.')
 
         self._validate_matching_shape(other)
         is_other_df = isinstance(other, self.__class__)
@@ -912,19 +879,15 @@ class DataFrame(object):
                             for i, (col, _) in
                             enumerate(self._column_dtype.items())}
 
-        return self._construct_from_new(new_data, new_column_dtype,
-                                        self._columns.copy())
+        return self._construct_from_new(new_data, new_column_dtype, self._columns.copy())
 
     def __invert__(self):
         if set(self._data) == {'b'}:
             new_data = {dt: ~arr for dt, arr in self._data.items()}
             new_column_dtype = self._copy_cd()
-            return self._construct_from_new(new_data,
-                                            new_column_dtype,
-                                            self._columns.copy())
+            return self._construct_from_new(new_data, new_column_dtype, self._columns.copy())
         else:
-            raise TypeError('Invert operator only works on DataFrames '
-                            'with all boolean columns')
+            raise TypeError('Invert operator only works on DataFrames with all boolean columns')
 
     def _copy_cd(self):
         return {col: utils.Column(*col_obj.values)
@@ -965,8 +928,7 @@ class DataFrame(object):
         loc = self._data[new_kind].shape[1]
         self._column_dtype[column] = utils.Column(new_kind, loc, order)
         if new_kind in self._data:
-            self._data[new_kind] = np.column_stack((self._data[new_kind],
-                                                    data))
+            self._data[new_kind] = np.column_stack((self._data[new_kind], data))
         else:
             self._data[new_kind] = data
 
@@ -1003,7 +965,7 @@ class DataFrame(object):
 
         # select an entire column or new column
         if utils.is_entire_column_selection(rs, cs):
-            return self._setitem_entire_column(rs, cs, value)
+            return self._setitem_entire_column(cs, value)
 
         cs = self._convert_col_selection(cs)
         rs = self._convert_row_selection(rs)
@@ -1034,11 +996,10 @@ class DataFrame(object):
             value = value.decode()
             utils.check_set_value_type(dtype, 'O', 'bytes')
         else:
-            raise TypeError(f'Type {type(value).__name__} not able '
-                            'to be assigned')
+            raise TypeError(f'Type {type(value).__name__} not able to be assigned')
         self._data[dtype][rs, loc] = value
 
-    def _setitem_entire_column(self, rs, cs, value):
+    def _setitem_entire_column(self, cs, value):
         """
         Called when setting an entire column (old or new)
         df[:, 'col'] = value
@@ -1105,8 +1066,7 @@ class DataFrame(object):
             else:
                 dt = utils.convert_kind_to_dtype(kind)
                 ct = utils.convert_kind_to_dtype(cur_kind)
-                raise TypeError(f'Trying to set a {dt} on column'
-                                f' {col} which has type {ct}')
+                raise TypeError(f'Trying to set a {dt} on column {col} which has type {ct}')
 
     def _validate_set_array_shape(self, rows, cols, other):
         num_rows_to_set = len(np.arange(len(self))[rows])
@@ -1121,11 +1081,9 @@ class DataFrame(object):
             num_cols_set = other.shape[1]
 
         if num_rows_to_set != num_rows_set:
-            raise ValueError('Mismatch of number of rows '
-                             f'{num_rows_to_set} != {num_rows_set}')
+            raise ValueError(f'Mismatch of number of rows {num_rows_to_set} != {num_rows_set}')
         if num_cols_to_set != num_cols_set:
-            raise ValueError('Mismatch of number of columns'
-                             f'{num_cols_to_set} != {num_cols_set}')
+            raise ValueError(f'Mismatch of number of columns {num_cols_to_set} != {num_cols_set}')
 
     def _get_kinds(self, cols, other):
         kinds = [self._column_dtype[col].dtype for col in cols]
@@ -1185,8 +1143,7 @@ class DataFrame(object):
                 df_new._astype_internal(column, new_dtype_numpy)
             return df_new
         else:
-            raise TypeError('Argument dtype must be either a string '
-                            'or a dictionary')
+            raise TypeError('Argument dtype must be either a string or a dictionary')
 
     def head(self, n=5):
         return self[:n, :]
@@ -1198,7 +1155,6 @@ class DataFrame(object):
     def hasnans(self):
         if self._hasnans == {}:
             for kind, arr in self._data.items():
-                kinds += kind
                 if kind == 'f':
                     self._hasnans['f'] = np.isnan(arr).any(0)
                 elif kind == 'O':
@@ -1214,7 +1170,7 @@ class DataFrame(object):
 
         columns = np.array(['Column Name', 'Has NaN'])
         new_data = {'O': self._columns[:, np.newaxis],
-                    'b': bool_array[col_order, np.newaxis]}
+                    'b': bool_array[:, np.newaxis]}
 
         new_column_dtype = {'Column Name': utils.Column('O', 0, 0),
                             'Has NaN': utils.Column('b', 0, 1)}
@@ -1240,8 +1196,7 @@ class DataFrame(object):
         elif axis == 1:
             if name in ['std', 'var', 'mean', 'median']:
                 return self._get_numeric()
-            elif name in ['sum', 'max', 'min', 'cumsum', 'cummax', 'cummin',
-                          'argmin', 'argmax']:
+            elif name in ['sum', 'max', 'min', 'cumsum', 'cummax', 'cummin', 'argmin', 'argmax']:
                 if self._is_numeric_or_bool():
                     return self
                 elif self._is_string():
@@ -1269,7 +1224,7 @@ class DataFrame(object):
 
     def _get_kind_cols(self):
         kind_cols = defaultdict(list)
-        for col, col_obj in df._column_dtype.items():
+        for col, col_obj in self._column_dtype.items():
             kind_cols[col_obj.dtype].append(col)
 
     def _stat_funcs(self, name, axis, **kwargs):
@@ -1336,8 +1291,7 @@ class DataFrame(object):
 
             for i, col in enumerate(new_columns):
                 new_column_dtype[col] = utils.Column(new_kind, i, i)
-            return df._construct_from_new(new_data, new_column_dtype,
-                                          new_columns)
+            return df._construct_from_new(new_data, new_column_dtype, new_columns)
 
     def sum(self, axis='rows'):
         return self._stat_funcs('sum', axis)
@@ -1364,15 +1318,13 @@ class DataFrame(object):
         df = self._get_numeric()
         new_data = {dt: np.abs(arr) for dt, arr in df._data.items()}
         new_column_dtype = self._copy_cd()
-        return self._construct_from_new(new_data, new_column_dtype,
-                                        df._columns.copy())
+        return self._construct_from_new(new_data, new_column_dtype, df._columns.copy())
 
     __abs__ = abs
 
     def _get_numeric(self):
         if not self._has_numeric_or_bool():
-            raise TypeError('All columns must be either integer, '
-                            'float, or boolean')
+            raise TypeError('All columns must be either integer, float, or boolean')
         return self.select_dtypes(['number', 'bool'])
 
     def _check_if_hasnans_exist(self):
@@ -1398,8 +1350,7 @@ class DataFrame(object):
 
     def _get_clip_df(self, value, name):
         if value is None:
-            raise ValueError('You must provide a value for either lower '
-                             'or upper')
+            raise ValueError('You must provide a value for either lower or upper')
         if utils.is_number(value):
             if self._has_numeric_or_bool():
                 return self.select_dtypes(['number', 'bool']), 'number'
@@ -1439,25 +1390,21 @@ class DataFrame(object):
         else:
             if utils.is_integer(lower) or utils.is_integer(upper):
                 if 'b' in self._data:
-                    as_type_dict = {col: 'int'
-                                    for col in df._dtype_column['b']}
+                    as_type_dict = {col: 'int' for col in df._dtype_column['b']}
                     df = df.astype(as_type_dict)
             if utils.is_float(lower) or utils.is_float(upper):
                 if 'i' in df._data:
-                    as_type_dict = {col: 'float'
-                                    for col in df._dtype_column['i']}
+                    as_type_dict = {col: 'float' for col in df._dtype_column['i']}
                     df = df.astype(as_type_dict)
                 if 'b' in df._data:
-                    as_type_dict = {col: 'float'
-                                    for col in df._dtype_column['b']}
+                    as_type_dict = {col: 'float' for col in df._dtype_column['b']}
                     df = df.astype(as_type_dict)
             new_data = {}
             for dtype, arr in df._data.items():
                 new_data[dtype] = arr.clip(lower, upper)
 
         new_column_dtype = df._copy_cd()
-        return df._construct_from_new(new_data, new_column_dtype,
-                                      df._columns.copy())
+        return df._construct_from_new(new_data, new_column_dtype, df._columns.copy())
 
     def cummax(self, axis='rows'):
         return self._stat_funcs('cummax', axis)
@@ -1474,10 +1421,6 @@ class DataFrame(object):
 
     def isna(self):
         data_dict = defaultdict(list)
-        new_column_dtype = {}
-        n = len(self)
-        i = 0
-
         kind_shape = OrderedDict()
         total_shape = 0
         for kind, arr in self._data.items():
@@ -1496,8 +1439,7 @@ class DataFrame(object):
 
         new_column_dtype = self._new_cd_from_kind_shape(kind_shape, 'b')
         new_data = utils.concat_stat_arrays(data_dict)
-        return self._construct_from_new(new_data, new_column_dtype,
-                                        self._columns.copy())
+        return self._construct_from_new(new_data, new_column_dtype, self._columns.copy())
 
     def describe(self):
         df = self.select_dtypes('number')
@@ -1544,12 +1486,10 @@ class DataFrame(object):
                 criteria = (~df.isna()).sum(axis) >= thresh
             elif isinstance(thresh, float):
                 if thresh < 0 or thresh > 1:
-                    raise ValueError('thresh must either be an integer or '
-                                     ' a float between 0 and 1')
+                    raise ValueError('thresh must either be an integer or a float between 0 and 1')
                 criteria = (~df.isna()).mean(axis) >= thresh
             else:
-                raise TypeError('thresh must be an integer or a float '
-                                'between 0 and 1')
+                raise TypeError('thresh must be an integer or a float between 0 and 1')
         elif how == 'any':
             criteria = ~df.isna().any(axis)
         elif how == 'all':
@@ -1629,14 +1569,11 @@ class DataFrame(object):
         self._validate_column_name(col)
         arr = self._get_col_array(col)
 
-        (group_labels,
-         group_names,
-         group_position) = gb.get_group_assignment(arr)
+        group_labels, group_names, group_position = gb.get_group_assignment(arr)
 
         size = gb.size(group_labels, d)
 
-        new_data: Block = {'O': group_names,
-                           'b': None, 'f': None, 'i': size[:, np.newaxis]}
+        new_data = {'O': group_names, 'b': None, 'f': None, 'i': size[:, np.newaxis]}
         new_columns = ['Column Values', 'Counts']
         # add _column_dtype
         return self._construct_from_new(new_data, new_columns)
@@ -1648,9 +1585,7 @@ class DataFrame(object):
         elif isinstance(columns, str):
             self._validate_column_name(columns)
         else:
-            raise ValueError('Must pass in grouping column(s) as a string '
-                             'or list of strings')
-
+            raise ValueError('Must pass in grouping column(s) as a string or list of strings')
         return Grouper(self, columns)
 
 

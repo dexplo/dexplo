@@ -40,13 +40,13 @@ def get_arr_length(arrs):
     return col_length
 
 
-def _get_decimal_len(num):
+def get_decimal_len(num):
     if not np.isfinite(num):
         return 0
     return abs(decimal.Decimal(str(num)).as_tuple().exponent)
 
 
-def _get_whole_len(num):
+def get_whole_len(num):
         return len(str(num).split('.')[0])
 
 
