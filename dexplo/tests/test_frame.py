@@ -323,4 +323,3 @@ class TestSimultaneousRowColumnSelection:
                 'h': [6, 7, 8, 9, 0]}
         df2 = de.DataFrame(data, columns=['c', 'd', 'e', 'f', 'g', 'h'])
         assert_frame_equal(df1, df2)
-        

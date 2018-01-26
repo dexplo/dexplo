@@ -1,6 +1,21 @@
-from setuptools import setup, find_packages
-from Cython.Build import cythonize
+from setuptools import setup, find_packages, Extension
+import glob
 import numpy as np
+
+
+try:
+    from Cython.Build import cythonize
+except ImportError:
+    USE_CYTHON = False
+else:
+    USE_CYTHON = True
+
+if USE_CYTHON:
+    extensions = cythonize('dexplo/_libs/*.pyx')
+else:
+    extensions = []
+    for fn in glob.glob('dexplo/_libs/*.c'):
+        extensions.append(Extension(fn[:-2].replace(r'/', '.'), [fn]))
 
 
 def readme():
@@ -9,7 +24,7 @@ def readme():
 
 
 setup(name='dexplo',
-      version='0.0.1',
+      version='0.0.3',
       description='A library for data exploration comparible to pandas. '
                   'No Series, No hierarchical indexing, only one indexer [ ]',
       long_description=readme(),
@@ -28,4 +43,4 @@ setup(name='dexplo',
       install_requires=['numpy'],
       python_requires='>=3.6',
       include_dirs=[np.get_include()],
-      ext_modules=cythonize('dexplo/_libs/*.pyx'))
+      ext_modules=extensions)
