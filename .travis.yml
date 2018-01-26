@@ -6,6 +6,3 @@ script:
 os:
   - osx
   - linux
-
-install:
-  - python setup.py -q install
