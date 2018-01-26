@@ -3,8 +3,6 @@ python: 3.6
 script:
 - python setup.py test
 - pytest
-os:
-- linux
 deploy:
   provider: pypi
   user: TedPetrou

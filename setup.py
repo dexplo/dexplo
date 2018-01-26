@@ -7,6 +7,7 @@ def readme():
     with open('README.rst') as f:
         return f.read()
 
+
 setup(name='dexplo',
       version='0.0.1',
       description='A library for data exploration comparible to pandas. '
