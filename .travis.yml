@@ -1,6 +1,11 @@
 language: python
 python: 3.6
-script: pytest
+script: 
+  - python setup.py test
+  - pytest
 os:
   - osx
   - linux
+
+install:
+  - python setup.py -q install
