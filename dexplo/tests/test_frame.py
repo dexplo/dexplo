@@ -2,7 +2,7 @@ import dexplo as de
 import numpy as np
 from numpy import array
 import pytest
-from dexplo.tests.testing import assert_frame_equal
+from dexplo.testing import assert_frame_equal
 
 df = de.DataFrame({'a': [1, 2, 5, 9, 3, 4, 5, 1],
                    'b': [1.5, 8, 9, 1, 2, 3, 2, 8],

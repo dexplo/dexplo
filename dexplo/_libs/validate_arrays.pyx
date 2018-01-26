@@ -73,6 +73,17 @@ def isnan_object(ndarray[object, ndim=2] a):
     return hasnan
 
 
+def is_equal_1d_object(ndarray[object] a, ndarray[object] b):
+    cdef int i
+    cdef int n = len(a)
+    for i in range(n):
+        if a[i] == b[i]:
+            continue
+        if a[i] is nan and b[i] is nan:
+            continue
+        return False
+    return True
+
 def any_int(ndarray[np.int64_t] a):
     cdef int i
     cdef int n = len(a)

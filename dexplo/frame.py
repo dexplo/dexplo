@@ -640,7 +640,7 @@ class DataFrame(object):
     def copy(self):
         new_data = {dt: arr.copy() for dt, arr in self._data.items()}
         new_columns = self._columns.copy()
-        new_column_dtype = {col: copy.copy(col_obj)
+        new_column_dtype = {col: utils.Column(*col_obj.values)
                             for col, col_obj in self._column_dtype.items()}
         return self._construct_from_new(new_data, new_column_dtype,
                                         new_columns)
