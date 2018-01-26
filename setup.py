@@ -9,7 +9,7 @@ def readme():
 
 
 setup(name='dexplo',
-      version='0.0.5',
+      version='0.0.6',
       description='A library for data exploration comparible to pandas. '
                   'No Series, No hierarchical indexing, only one indexer [ ]',
       long_description=readme(),
