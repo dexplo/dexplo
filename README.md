@@ -1,6 +1,8 @@
 # dexplo
 A data analysis library comparible to pandas
 
+[![Build Status](https://travis-ci.org/dexplo/dexplo.svg?branch=master)](https://travis-ci.org/dexplo/dexplo)
+
 # Main Goals
 * A very minimal set of features 
 * Be as explicit as possible
