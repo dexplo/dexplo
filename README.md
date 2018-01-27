@@ -64,6 +64,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 
 #### Methods
 **Stats**
+
 - [x] abs
 - [x] all
 - [x] any
@@ -94,6 +95,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] nunique
 
 **Selection**
+
 - [ ] drop
 - [ ] drop_duplicates
 - [x] head
@@ -104,12 +106,14 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] where
 
 **Missing Data**
+
 - [x] isna
 - [x] dropna
 - [ ] fillna
 - [ ] interpolate
 
 **Other**
+
 - [ ] append
 - [ ] apply
 - [ ] assign
@@ -125,6 +129,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] sort_values
 
 **Functions**
+
 - [ ] read_csv
 - [ ] read_sql
 - [ ] concat

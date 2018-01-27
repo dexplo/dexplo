@@ -11,13 +11,13 @@ df = de.DataFrame({'a': [1, 2, 5, 9, 3, 4, 5, 1],
                    'e': [10, 20, 30, 4, 5, 6, 7, 8],
                    'f': [1., 3, 3, 3, 11, 4, 5, 1],
                    'g': list('xyxxyyxy'),
-                   'h': [3, 4, 5, 6, 7, 8, 9, 0]})
+                   'h': [3, 4, 5, 6, 7, 8, 9, 0]},
+                  columns=list('abcdefgh'))
 
 
 class TestFrameConstructor(object):
 
     def setup_method(self, method):
-
         self.df = de.DataFrame({'a': [1, 2, 5, 9, 3, 4, 5, 1],
                                 'b': [1.5, 8, 9, 1, 2, 3, 2, 8],
                                 'c': list('abcdefgh'),
@@ -31,12 +31,12 @@ class TestFrameConstructor(object):
 class TestScalarSelection:
 
     def test_scalar_selection(self):
-        assert(df[5, -1] == 8)
-        assert(df[3, 2] == 'd')
-        assert(df[4, 'g'] == 'y')
-        assert(df[1, 1] == 8)
-        assert(df[3, 'h'] == 6)
-        assert(df[0, 'e'] == 10)
+        assert (df[5, -1] == 8)
+        assert (df[3, 2] == 'd')
+        assert (df[4, 'g'] == 'y')
+        assert (df[1, 1] == 8)
+        assert (df[3, 'h'] == 6)
+        assert (df[0, 'e'] == 10)
 
 
 class TestRowOnlySelection:
@@ -322,4 +322,108 @@ class TestSimultaneousRowColumnSelection:
                 'g': ['x', 'y', 'y', 'x', 'y'],
                 'h': [6, 7, 8, 9, 0]}
         df2 = de.DataFrame(data, columns=['c', 'd', 'e', 'f', 'g', 'h'])
+        assert_frame_equal(df1, df2)
+
+
+class TestBooleanSelection:
+
+    df = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
+                       'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
+                       'c': [''] + list('bgggzgh'),
+                       'd': [False, False, True, False] * 2,
+                       'e': [0, 20, 30, 4, 5, 6, 7, 8],
+                       'f': [0., 3, 3, 3, 11, 4, 5, 1],
+                       'g': ['', None, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
+                       'h': [0, 4, 5, 6, 7, 8, 9, 0],
+                       'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
+                       'j': np.zeros(8, dtype='int'),
+                       'k': np.ones(8) - 1,
+                       'l': [np.nan] * 8},
+                      columns=list('abcdefghijkl'))
+
+    def test_integer_condition(self):
+        criteria = self.df[:, 'a'] > 4
+        df1 = self.df[criteria, :]
+        df2 = self.df[[2, 3, 6], :]
+        assert_frame_equal(df1, df2)
+
+        criteria = self.df[:, 'a'] == 0
+        df1 = self.df[criteria, :]
+        df2 = self.df[[0, 1], :]
+        assert_frame_equal(df1, df2)
+
+        criteria = (self.df[:, 'a'] > 2) & (self.df[:, 'i'] < 6)
+        df1 = self.df[criteria, :]
+        df2 = self.df[[3, 4, 5, 6], :]
+        assert_frame_equal(df1, df2)
+
+        criteria = (self.df[:, 'a'] > 2) | (self.df[:, 'i'] < 6)
+        df1 = self.df[criteria, :]
+        df2 = self.df[[0, 2, 3, 4, 5, 6], :]
+        assert_frame_equal(df1, df2)
+
+        criteria = ~((self.df[:, 'a'] > 2) | (self.df[:, 'i'] < 6))
+        df1 = self.df[criteria, :]
+        df2 = self.df[[1, 7], :]
+        assert_frame_equal(df1, df2)
+
+        criteria = ~((self.df[:, 'a'] > 2) | (self.df[:, 'i'] < 6))
+        df1 = self.df[criteria, ['d', 'b']]
+        df2 = de.DataFrame({'b': [1.512344353, 8],
+                            'd': [False, False]}, columns=['d', 'b'])
+        assert_frame_equal(df1, df2)
+
+    def test_list_of_booleans(self):
+        criteria = [False, True, False, True, False, True, False, True]
+        df1 = self.df[criteria, :]
+        df2 = self.df[[1, 3, 5, 7], :]
+        assert_frame_equal(df1, df2)
+
+        criteria = [False, True, False, True, False, True, False]
+        with pytest.raises(ValueError):
+            self.df[criteria, :]
+
+        criteria = [False, True, False, True, False, True] * 2
+        df1 = self.df[:, criteria]
+        df2 = self.df[:, list(range(1, 12, 2))]
+        assert_frame_equal(df1, df2)
+
+        criteria_row = [False, False, True, False, True, True, False, False]
+        criteria_col = [False, True, False, True, False, True] * 2
+        df1 = self.df[criteria_row, criteria_col]
+        df2 = self.df[[2, 4, 5], list(range(1, 12, 2))]
+        assert_frame_equal(df1, df2)
+
+        with pytest.raises(TypeError):
+            self.df[[0, 5], [False, 5]]
+
+        with pytest.raises(ValueError):
+            self.df[:, [True, False, True, False]]
+
+        df1 = self.df[self.df[:, 'c'] == 'g', ['d', 'j']]
+        df2 = de.DataFrame({'d': [True, False, False, True],
+                            'j': [0, 0, 0, 0]}, columns=['d', 'j'])
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df[self.df[:, 'b'] < 2, 'b']
+        df2 = de.DataFrame({'b': [0, 1.512344353]})
+        assert_frame_equal(df1, df2)
+
+
+
+class TestSimpleSetItem:
+    df = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy']})
+
+    def test_scalar_setitem(self):
+        df1 = self.df.copy()
+        df1[0, 0] = -99
+        df2 = de.DataFrame({'a': [-99, 5], 'b': ['eleni', 'teddy']})
+        assert_frame_equal(df1, df2)
+
+        df1[0, 'b'] = 'pen'
+        df2 = de.DataFrame({'a': [-99, 5], 'b': ['pen', 'teddy']})
+        assert_frame_equal(df1, df2)
+
+        df1[1, 'b'] = np.nan
+        df2 = de.DataFrame({'a': [-99, 5], 'b': ['pen', np.nan]})
         assert_frame_equal(df1, df2)

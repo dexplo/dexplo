@@ -16,8 +16,8 @@ def assert_frame_equal(df1, df2):
 
     for i, col in enumerate(df1.columns):
         if df2.columns[i] != col:
-            raise AssertionError(f'column number {i} in left DataFrame not '
-                                 f' {col} != {df2.columns[i]}')
+            raise AssertionError(f'column number {i} in left DataFrame not equal to right '
+                                 f'{col} != {df2.columns[i]}')
 
         kind1, loc1, _ = df1._column_dtype[col].values
         arr1 = df1._data[kind1][:, loc1]
