@@ -388,16 +388,28 @@ class DataFrame(object):
 
     def _get_list_of_cols_from_selection(self, cs):
         new_cols: List[str] = []
+        bool_count = 0
         for i, col in enumerate(cs):
             if isinstance(col, bool):
+                bool_count += 1
                 if col:
                     new_cols.append(self._get_col_name_from_int(i))
-            elif isinstance(col, int):
+                continue
+
+            if isinstance(col, int):
                 new_cols.append(self._get_col_name_from_int(col))
             elif col not in self._column_dtype:
                 raise ValueError(f'{col} is not in the columns')
             else:
                 new_cols.append(col)
+            if bool_count > 0:
+                raise TypeError('Your column selection has booleans mixed with other types. '
+                                'You must only use booleans by themselves.')
+
+        if bool_count > 0:
+            if bool_count != self.shape[1]:
+                raise ValueError('The length of the boolean list must match the number of '
+                                 f'columns {i} != {self.shape[1]}')
 
         utils.check_duplicate_list(new_cols)
         return new_cols
@@ -405,10 +417,10 @@ class DataFrame(object):
     def _convert_col_selection(self, cs: ColumnSelection) -> List[str]:
         if isinstance(cs, str):
             self._validate_column_name(cs)
-            cs = [cs]
-        elif isinstance(cs, int):
-            cs = [self._get_col_name_from_int(cs)]
-        elif isinstance(cs, slice):
+            return [cs]
+        if isinstance(cs, int):
+            return [self._get_col_name_from_int(cs)]
+        if isinstance(cs, slice):
             sss: List[Optional[int]] = []
             for s in ['start', 'stop', 'step']:
                 value: Optional[Union[str, int]] = getattr(cs, s)
@@ -419,42 +431,43 @@ class DataFrame(object):
                         raise TypeError('Slice step must be None or int')
                     sss.append(self._find_col_location(value))
                 else:
-                    raise TypeError('Slice start, stop, and step values must be int, str, or None')
+                    raise TypeError('Slice start, stop, and step values must '
+                                    'be int, str, or None')
             if isinstance(cs.stop, str):
                 if cs.step is None or cs.step > 0:
                     sss[1] += 1
                 elif cs.step < 0:
                     sss[1] -= 1
-            cs = self._columns[slice(*sss)]
-        elif isinstance(cs, list):
-            cs = self._get_list_of_cols_from_selection(cs)
-        elif isinstance(cs, ndarray):
+            return self._columns[slice(*sss)]
+        if isinstance(cs, list):
+            return self._get_list_of_cols_from_selection(cs)
+        if isinstance(cs, ndarray):
             cs = utils.try_to_squeeze_array(cs)
             if cs.dtype.kind == 'b':
                 if len(cs) != self.shape[1]:
-                    raise ValueError('Length of column selection boolean array must be the same '
-                                     'as number of columns in the DataFrame. '
+                    raise ValueError('Length of column selection boolean '
+                                     'array must be the same as number of '
+                                     'columns in the DataFrame. '
                                      f'{len(cs)} != {self.shape[1]}')
-            elif cs.dtype.kind == 'i':
-                cs = cs.tolist()
+                return self._columns[cs]
             else:
-                raise TypeError('Column selection array data type must be '
-                                'either integer or boolean')
-            cs = self._get_list_of_cols_from_selection(cs)
+                return self._get_list_of_cols_from_selection(cs)
         elif isinstance(cs, self.__class__):
             if cs.shape[0] != 1:
-                raise ValueError('Boolean selection only works with single-row DataFames')
+                raise ValueError('Boolean selection only works with single-'
+                                 'row DataFames')
             cs = cs.values.squeeze()
             if cs.dtype.kind != 'b':
-                raise TypeError('All values for column selection must be boolean')
+                raise TypeError('All values for column selection must '
+                                'be boolean')
             if len(cs) != self.shape[1]:
-                raise ValueError('Number of booleans in DataFrame does not equal number of '
-                                 f'columns in self {len(cs)} != {self.shape[1]}')
-            cs = self._columns[cs]
+                raise ValueError('Number of booleans in DataFrame does not '
+                                 'equal number of columns in self '
+                                 f'{len(cs)} != {self.shape[1]}')
+            return self._columns[cs]
         else:
             raise TypeError('Selection must either be one of '
                             'int, str, list, array, slice or DataFrame')
-        return cs
 
     def _convert_row_selection(self, rs: RowSelection):
         if isinstance(rs, slice):
@@ -468,10 +481,23 @@ class DataFrame(object):
             if not all_ok:
                 raise TypeError('Slice start, stop, and step values must be int or None')
         elif isinstance(rs, list):
-            for row in rs:
+            # check length of boolean list is length of rows
+            bool_count = 0
+            for i, row in enumerate(rs):
+                if isinstance(row, bool):
+                    bool_count += 1
+                    continue
                 # self.columns is a list to prevent numpy warning
                 if not isinstance(row, int):
                     raise TypeError('Row selection must consist only of integers')
+
+                if bool_count > 0:
+                    raise TypeError('Your row selection has a mix of boolean and integers. They '
+                                    'must be either all booleans or all integers.')
+
+            if bool_count > 0 and bool_count != len(self):
+                raise ValueError('Length of boolean array must be the same as DataFrame. '
+                                 f'{len(rs)} != {len(self)}')
         elif isinstance(rs, ndarray):
             rs = utils.try_to_squeeze_array(rs)
             if rs.dtype.kind == 'b':
@@ -903,7 +929,9 @@ class DataFrame(object):
             return None
         col_data = self._data[dtype][:, loc]
         if numpy_dtype == 'O':
+            nulls = np.isnan(col_data)
             col_data = col_data.astype('U').astype('O')
+            col_data[nulls] = nan
         else:
             col_data = col_data.astype(numpy_dtype)
         self._remove_column(column)
@@ -916,6 +944,8 @@ class DataFrame(object):
         """
         dtype, loc, order = self._column_dtype.pop(column).values
         self._data[dtype] = np.delete(self._data[dtype], loc, axis=1)
+        if self._data[dtype].shape[1] == 0:
+            del self._data[dtype]
         for col, col_obj in self._column_dtype.items():
             if col_obj.dtype == dtype and col_obj.loc > loc:
                 col_obj.loc -= 1
@@ -925,11 +955,16 @@ class DataFrame(object):
         Adds data to _data, the data type info but does not
         append name to columns
         """
-        loc = self._data[new_kind].shape[1]
+        if new_kind not in self._data:
+            loc = 0
+        else:
+            loc = self._data[new_kind].shape[1]
         self._column_dtype[column] = utils.Column(new_kind, loc, order)
         if new_kind in self._data:
             self._data[new_kind] = np.column_stack((self._data[new_kind], data))
         else:
+            if data.ndim == 1:
+                data = data[:, np.newaxis]
             self._data[new_kind] = data
 
     def _add_new_column(self, column, kind, data):
@@ -986,10 +1021,15 @@ class DataFrame(object):
             utils.check_set_value_type(dtype, 'b', 'bool')
         elif isinstance(value, (int, np.integer)):
             utils.check_set_value_type(dtype, 'if', 'int')
+        elif value is nan or value is None:
+            if dtype in 'ib':
+                self._astype_internal(cs, 'float64')
+                dtype = 'f'
         elif isinstance(value, (float, np.floating)):
             utils.check_set_value_type(dtype, 'if', 'float')
             if dtype == 'i':
-                self._astype_internal(cs, np.float64)
+                self._astype_internal(cs, 'float64')
+                dtype = 'f'
         elif isinstance(value, str):
             utils.check_set_value_type(dtype, 'O', 'str')
         elif isinstance(value, bytes):
