@@ -1,6 +1,6 @@
 import dexplo as de
 import numpy as np
-from numpy import array
+from numpy import array, nan
 import pytest
 from dexplo.testing import assert_frame_equal
 
@@ -143,7 +143,7 @@ class TestColumnOnlySelection:
         df2 = de.DataFrame(data)
         assert_frame_equal(df1, df2)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(KeyError):
             df[:, 'asdf']
 
     def test_list_of_integer_col_selection(self):
@@ -328,7 +328,7 @@ class TestSimultaneousRowColumnSelection:
 class TestBooleanSelection:
 
     df = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
-                       'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
+                       'b': [0, 1.512344353, 8, 9, nan, 3, 2, 8],
                        'c': [''] + list('bgggzgh'),
                        'd': [False, False, True, False] * 2,
                        'e': [0, 20, 30, 4, 5, 6, 7, 8],
@@ -338,7 +338,7 @@ class TestBooleanSelection:
                        'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
                        'j': np.zeros(8, dtype='int'),
                        'k': np.ones(8) - 1,
-                       'l': [np.nan] * 8},
+                       'l': [nan] * 8},
                       columns=list('abcdefghijkl'))
 
     def test_integer_condition(self):
@@ -405,25 +405,325 @@ class TestBooleanSelection:
                             'j': [0, 0, 0, 0]}, columns=['d', 'j'])
         assert_frame_equal(df1, df2)
 
-        df1 = self.df[self.df[:, 'b'] < 2, 'b']
-        df2 = de.DataFrame({'b': [0, 1.512344353]})
-        assert_frame_equal(df1, df2)
+        with np.errstate(invalid='ignore'):
+            df1 = self.df[self.df[:, 'b'] < 2, 'b']
+            df2 = de.DataFrame({'b': [0, 1.512344353]})
+            assert_frame_equal(df1, df2)
 
 
 
-class TestSimpleSetItem:
-    df = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy']})
+class TestSetItem:
+    df = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                       'd': [True, False]})
 
-    def test_scalar_setitem(self):
+    df1 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+                        'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
+
+    def test_setitem_scalar(self):
         df1 = self.df.copy()
         df1[0, 0] = -99
-        df2 = de.DataFrame({'a': [-99, 5], 'b': ['eleni', 'teddy']})
+        df2 = de.DataFrame({'a': [-99, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1[0, 'b'] = 'pen'
-        df2 = de.DataFrame({'a': [-99, 5], 'b': ['pen', 'teddy']})
+        df2 = de.DataFrame({'a': [-99, 5], 'b': ['pen', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False]})
         assert_frame_equal(df1, df2)
 
-        df1[1, 'b'] = np.nan
-        df2 = de.DataFrame({'a': [-99, 5], 'b': ['pen', np.nan]})
+        df1[1, 'b'] = nan
+        df2 = de.DataFrame({'a': [-99, 5], 'b': ['pen', nan], 'c': [nan, 5.4],
+                            'd': [True, False]})
         assert_frame_equal(df1, df2)
+
+        with pytest.raises(TypeError):
+            df1 = self.df.copy()
+            df1[0, 0] = 'sfa'
+
+        df1 = self.df.copy()
+        df1[0, 'c'] = 4.3
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [4.3, 5.4],
+                           'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[0, 'a'] = nan
+        df2 = de.DataFrame({'a': [nan, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[1, 'a'] = -9.9
+        df2 = de.DataFrame({'a': [1, -9.9], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+    def test_setitem_entire_column_one_value(self):
+        df1 = self.df.copy()
+        df1[:, 'e'] = 5
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [5, 5]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = nan
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = 'grasshopper'
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': ['grasshopper', 'grasshopper']})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = True
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [True, True]})
+        assert_frame_equal(df1, df2)
+
+    def test_setitem_entire_new_colunm_from_array(self):
+        df1 = self.df.copy()
+        df1[:, 'e'] = np.array([9, 99])
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [9, 99]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = np.array([9, np.nan])
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [9, np.nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = np.array([True, False])
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = np.array(['poop', nan], dtype='O')
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': ['poop', nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = np.array(['poop', 'pants'])
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': ['poop', 'pants']})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = np.array([nan, nan])
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+    def test_setitem_entire_new_colunm_from_list(self):
+        df1 = self.df.copy()
+        df1[:, 'e'] = [9, 99]
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [9, 99]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = [9, np.nan]
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [9, np.nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = [True, False]
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = ['poop', nan]
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': ['poop', nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = ['poop', 'pants']
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': ['poop', 'pants']})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'e'] = [nan, nan]
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False], 'e': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+    def test_setitem_entire_old_column_from_array(self):
+        df1 = self.df.copy()
+        df1[:, 'd'] = np.array([9, 99])
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [9, 99]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'd'] = np.array([9, np.nan])
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [9, np.nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'd'] = np.array([True, False])
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'd'] = np.array(['poop', nan], dtype='O')
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': ['poop', nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'a'] = np.array(['poop', 'pants'], dtype='O')
+        df2 = de.DataFrame({'a': ['poop', 'pants'], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'b'] = np.array([nan, nan])
+        df2 = de.DataFrame({'a': [1, 5], 'b': [nan, nan], 'c': [nan, 5.4],
+                            'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'c'] = np.array([False, False])
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [False, False],
+                           'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        with pytest.raises(ValueError):
+            df1[:, 'b'] = np.array([1, 2, 3])
+
+        with pytest.raises(ValueError):
+            df1[:, 'b'] = np.array([1])
+
+        with pytest.raises(TypeError):
+            df1[:, 'a'] = np.array([5, {1, 2, 3}])
+
+    def test_setitem_entire_old_column_from_list(self):
+        df1 = self.df.copy()
+        df1[:, 'd'] = [9, 99]
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [9, 99]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'd'] = [9, np.nan]
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [9, np.nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'd'] = [True, False]
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'd'] = ['poop', nan]
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': ['poop', nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'a'] = ['poop', 'pants']
+        df2 = de.DataFrame({'a': ['poop', 'pants'], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+                            'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'b'] = [nan, nan]
+        df2 = de.DataFrame({'a': [1, 5], 'b': [nan, nan], 'c': [nan, 5.4],
+                            'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.copy()
+        df1[:, 'c'] = [False, False]
+        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [False, False],
+                           'd': [True, False]})
+        assert_frame_equal(df1, df2)
+
+        with pytest.raises(ValueError):
+            self.df[:, 'b'] = [1, 2, 3]
+
+        with pytest.raises(ValueError):
+            self.df[:, 'b'] = [1]
+
+        with pytest.raises(TypeError):
+            self.df[:, 'a'] = [5, {1, 2, 3}]
+
+    def test_setitem_simultaneous_row_and_column(self):
+        df1 = self.df1.copy()
+        df1[[0, 1], 'a'] = [9, 10]
+        df2 = de.DataFrame({'a': [9, 10, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+                            'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df1.copy()
+        df1[[0, -1], 'a'] = np.array([9, 10.5])
+        df2 = de.DataFrame({'a': [9, 5, 7, 10.5], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+                            'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df1.copy()
+        df1[2:, 'b'] = np.array(['NIKO', 'PENNY'])
+        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'NIKO', 'PENNY'],
+                            'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df1.copy()
+        df1[2, ['b', 'c']] = ['NIKO', 9.3]
+        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'NIKO', 'penny'],
+                            'c': [nan, 5.4, 9.3, .045], 'd': [True, False, False, True]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df1.copy()
+        df1[2, ['c', 'b']] = [9.3, nan]
+
+        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', nan, 'penny'],
+                            'c': [nan, 5.4, 9.3, .045], 'd': [True, False, False, True]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df1.copy()
+        df1[[1, -1], 'b':'d'] = [['TEDDY', nan, True], [nan, 5.5, False]]
+
+        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'TEDDY', 'niko', nan],
+                            'c': [nan, nan, -1.1, 5.5], 'd': [True, True, False, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df1.copy()
+        df1[1:-1, 'a':'d':2] = [[nan, 4], [3, 99]]
+
+        df2 = de.DataFrame({'a': [1, nan, 3, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+                            'c': [nan, 4, 99, .045], 'd': [True, False, False, True]})
+        assert_frame_equal(df1, df2)
+
+    def test_testitem_boolean(self):
+        df1 = self.df1.copy()
+        criteria = df1[:, 'a'] > 4
+        df1[criteria, 'b'] = 'TEDDY'
+        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'TEDDY', 'TEDDY', 'TEDDY'],
+                            'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df1.copy()
+        criteria = df1[:, 'a'] > 4
+        df1[criteria, 'b'] = ['A', 'B', 'C']
+        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'A', 'B', 'C'],
+                            'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
+        assert_frame_equal(df1, df2)
+
+
+        df1 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+                            'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
+
+
