@@ -117,7 +117,7 @@ class DataFrame(object):
             if not isinstance(values, (list, ndarray)):
                 raise TypeError('Values of dictionary must be an array or a list')
             if isinstance(values, list):
-                arr = utils.convert_list_to_single_arr(values, col)
+                arr = utils.convert_list_to_single_arr(values)
             else:
                 arr = values
             arr = utils.maybe_convert_1d_array(arr, col)
@@ -306,7 +306,7 @@ class DataFrame(object):
         string: str = ''
         for i in range(len(idx) + 1):
             for d, fl, dl in zip(data_list, long_len, decimal_len):
-                if str(d[i]) == 'nan':
+                if isinstance(d[i], (float, np.floating)) and np.isnan(d[i]):
                     d[i] = 'NaN'
                 if isinstance(d[i], bool):
                     d[i] = str(d[i])
@@ -695,7 +695,8 @@ class DataFrame(object):
         kind_shape = {}
 
         for old_kind, arr in self._data.items():
-            arr_res = eval(f"{'arr'} .{op_string}({'other'})")
+            with np.errstate(invalid='ignore'):
+                arr_res = eval(f"{'arr'} .{op_string}({'other'})")
             new_kind = arr_res.dtype.kind
 
             cur_len = utils.get_arr_length(data_dict.get(new_kind, []))
@@ -703,9 +704,9 @@ class DataFrame(object):
             data_dict[new_kind].append(arr_res)
 
         for col, col_obj in self._column_dtype.items():
-            old_kind, _, order = col_obj.values
+            old_kind, old_loc, order = col_obj.values
             new_kind, new_loc = kind_shape[old_kind]
-            new_column_dtype[col] = utils.Column(new_kind, new_loc, order)
+            new_column_dtype[col] = utils.Column(new_kind, new_loc + old_loc, order)
         return data_dict, new_column_dtype
 
     def _op(self, other, op_string):
@@ -1021,21 +1022,24 @@ class DataFrame(object):
             utils.check_set_value_type(dtype, 'b', 'bool')
         elif isinstance(value, (int, np.integer)):
             utils.check_set_value_type(dtype, 'if', 'int')
-        elif value is nan or value is None:
+        elif value is nan:
             if dtype in 'ib':
                 self._astype_internal(cs, 'float64')
                 dtype = 'f'
+                loc = -1
         elif isinstance(value, (float, np.floating)):
             utils.check_set_value_type(dtype, 'if', 'float')
             if dtype == 'i':
                 self._astype_internal(cs, 'float64')
                 dtype = 'f'
+                loc = -1
         elif isinstance(value, str):
             utils.check_set_value_type(dtype, 'O', 'str')
         elif isinstance(value, bytes):
             value = value.decode()
             utils.check_set_value_type(dtype, 'O', 'bytes')
         else:
+            # Cannot set with None. Must use nan for missing value
             raise TypeError(f'Type {type(value).__name__} not able to be assigned')
         self._data[dtype][rs, loc] = value
 
@@ -1051,9 +1055,12 @@ class DataFrame(object):
             self._full_columm_add(cs, kind, data)
         elif isinstance(value, (ndarray, list)):
             if isinstance(value, list):
-                value = utils.maybe_convert_1d_array(np.array(value))
+                value = utils.convert_list_to_single_arr(value)
+                value = utils.maybe_convert_1d_array(value)
             value = utils.try_to_squeeze_array(value)
             utils.validate_array_size(value, len(self))
+            if value.dtype.kind == 'U':
+                value = value.astype('O')
             if value.dtype.kind == 'O':
                 va.validate_strings_in_object_array(value)
             self._full_columm_add(cs, value.dtype.kind, value)
@@ -1077,8 +1084,11 @@ class DataFrame(object):
                 self._data[dtype][rs, loc] = value
         # not scalar
         else:
+            num_rows_to_set, num_cols_to_set = self._get_num_rows_cols_to_set(rs, cs)
+            single_row = utils.is_one_row(num_rows_to_set, num_cols_to_set)
+
             if isinstance(value, list):
-                arrs = utils.convert_list_to_arrays(value)
+                arrs = utils.convert_list_to_arrays(value, single_row)
             elif isinstance(value, ndarray):
                 arrs = utils.convert_array_to_arrays(value)
             elif isinstance(value, self.__class__):
@@ -1089,10 +1099,24 @@ class DataFrame(object):
             else:
                 raise TypeError('Must use a scalar, a list, an array, or a '
                                 'DataFrame when setting new values')
-            self._validate_set_array_shape(rs, cs, arrs)
+            self._validate_set_array_shape(num_rows_to_set, num_cols_to_set, arrs)
+            # need to check for object nan compatibility
             kinds, other_kinds = self._get_kinds(cs, arrs)
-            utils.check_compatible_kinds(kinds, other_kinds)
+            all_nans = utils.check_all_nans(arrs)
+            utils.check_compatible_kinds(kinds, other_kinds, all_nans)
+
+            # Must use scalar value when setting object arrays
+            if single_row:
+                arrs = [arr[0] for arr in arrs]
             self._setitem_other_cols(rs, cs, arrs, kinds, other_kinds)
+
+    def _get_num_rows_cols_to_set(self, rs, cs):
+        if isinstance(rs, int):
+            rows = 1
+        else:
+            rows = len(np.arange(len(self))[rs])
+        cols = len(cs)
+        return rows, cols
 
     def _validate_setitem_col_types(self, columns, kind):
         """
@@ -1108,10 +1132,7 @@ class DataFrame(object):
                 ct = utils.convert_kind_to_dtype(cur_kind)
                 raise TypeError(f'Trying to set a {dt} on column {col} which has type {ct}')
 
-    def _validate_set_array_shape(self, rows, cols, other):
-        num_rows_to_set = len(np.arange(len(self))[rows])
-        num_cols_to_set = len(cols)
-
+    def _validate_set_array_shape(self, num_rows_to_set, num_cols_to_set, other):
         if isinstance(other, list):
             num_rows_set = len(other[0])
             num_cols_set = len(other)
@@ -1139,12 +1160,12 @@ class DataFrame(object):
             if k1 == 'i' and k2 == 'f':
                 dtype = utils.convert_kind_to_numpy(k2)
                 self._astype_internal(col, dtype)
-            dtype, loc, order = self._column_dtype[col]
+            dtype, loc, order = self._column_dtype[col].values
             self._data[dtype][rows, loc] = arr
 
     def _validate_column_name(self, column):
         if column not in self._column_dtype:
-            raise ValueError(f'Column {column} does not exist')
+            raise KeyError(f'Column {column} does not exist')
 
     def _new_cd_from_kind_shape(self, kind_shape, new_kind):
         new_column_dtype = {}
