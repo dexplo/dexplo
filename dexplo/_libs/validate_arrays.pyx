@@ -79,7 +79,8 @@ def is_equal_1d_object(ndarray[object] a, ndarray[object] b):
     for i in range(n):
         if a[i] == b[i]:
             continue
-        if a[i] is nan and b[i] is nan:
+        if (isinstance(a[i], (float, np.floating)) and np.isnan(a[i]) and
+            isinstance(b[i], (float, np.floating)) and np.isnan(b[i])):
             continue
         return False
     return True
