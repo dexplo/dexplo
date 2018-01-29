@@ -1,15 +1,17 @@
 import numpy as np
+from numpy import ndarray
 from . import utils
 import dexplo._libs.validate_arrays as va
+from dexplo.frame import DataFrame
 
 
-def _check_1d_arrays(a, b, kind):
+def _check_1d_arrays(a: ndarray, b: ndarray, kind: str) -> bool:
     if kind == 'O':
         return va.is_equal_1d_object(a, b)
     return ((a == b) | (np.isnan(a) & np.isnan(b))).all()
 
 
-def assert_frame_equal(df1, df2):
+def assert_frame_equal(df1: DataFrame, df2: DataFrame) -> None:
     if df1.shape != df2.shape:
         raise AssertionError('DataFrame shapes are not equal, '
                              f'{df1.shape} != {df2.shape}')
@@ -19,10 +21,17 @@ def assert_frame_equal(df1, df2):
             raise AssertionError(f'column number {i} in left DataFrame not equal to right '
                                  f'{col} != {df2.columns[i]}')
 
-        kind1, loc1, _ = df1._column_dtype[col].values
+        kind1: str
+        loc1: int
+        kind2: str
+        loc2: int
+        arr1: ndarray
+        arr2: ndarray
+
+        kind1, loc1, _ = df1._column_info[col].values
         arr1 = df1._data[kind1][:, loc1]
 
-        kind2, loc2, order = df2._column_dtype[col].values
+        kind2, loc2, order = df2._column_info[col].values
         arr2 = df2._data[kind2][:, loc2]
 
         if kind1 != kind2:
@@ -33,3 +42,29 @@ def assert_frame_equal(df1, df2):
 
         if not _check_1d_arrays(arr1, arr2, kind1):
             raise AssertionError(f'The values of column {col} are not equal')
+
+
+def assert_array_equal(arr1, arr2):
+    if arr1.shape != arr2.shape:
+        raise AssertionError(f'Array shapes not equal: {arr1.shape} != {arr2.shape}')
+
+    if arr1.dtype.kind != arr2.dtype.kind:
+        raise AssertionError(f'Array data types not equal: {arr1.dtype} != {arr2.dtype}')
+
+    if arr1.ndim == 1:
+        if not _check_1d_arrays(arr1, arr2, arr1.dtype.kind):
+            raise AssertionError('Arrays not equal')
+    else:
+        for i in range(arr1.shape[1]):
+            if not _check_1d_arrays(arr1[:, i], arr2[:, i], arr1.dtype.kind):
+                raise AssertionError(f'Column {i} not equal')
+
+
+def assert_dict_list(d1, d2):
+    for key, values1 in d1.items():
+        for v1, v2 in zip(values1, d2[key]):
+            if v1 != v2:
+                if isinstance(v1, (float, np.floating)) and np.isnan(v1) and \
+                   isinstance(v2, (float, np.floating)) and np.isnan(v2):
+                    continue
+                raise AssertionError('Lists are not equal')
