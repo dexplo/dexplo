@@ -1,8 +1,8 @@
 import decimal
-from typing import List
+from typing import List, Dict, Set, Any, Optional, Union
 import numpy as np
+from numpy import ndarray
 from dexplo._libs import validate_arrays as va
-
 
 _DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str'}
 _KIND = {'int': 'i', 'float': 'f', 'bool': 'b', 'str': 'O'}
@@ -16,6 +16,9 @@ _AXIS = {'rows': 0, 'columns': 1}
 _NON_AGG_FUNCS = {'cumsum', 'cummin', 'cummax'}
 _COLUMN_STACK_FUNCS = {'cumsum', 'cummin', 'cummax', 'mean',
                        'median', 'var', 'std', 'argmax', 'argmin'}
+
+ColumnSelection = Union[int, str, slice, List[Union[str, int]]]
+RowSelection = Union[int, slice, List[int], 'DataFrame']
 
 
 class Column:
@@ -33,25 +36,27 @@ class Column:
         return f'dtype={self.dtype}, loc={self.loc}, order={self.order}'
 
 
-def get_arr_length(arrs):
-    col_length = 0
+def get_arr_length(arrs: List[ndarray]) -> int:
+    col_length: int = 0
+    arr: ndarray
+
     for arr in arrs:
         col_length += arr.shape[1]
     return col_length
 
 
-def get_decimal_len(num):
+def get_decimal_len(num: float) -> int:
     if not np.isfinite(num):
         return 0
     return abs(decimal.Decimal(str(num)).as_tuple().exponent)
 
 
-def get_whole_len(num):
+def get_whole_len(num: float) -> int:
         return len(str(num).split('.')[0])
 
 
-def check_duplicate_list(lst: List) -> None:
-    s = set()
+def check_duplicate_list(lst: List[str]) -> None:
+    s: Set[str] = set()
     for i, elem in enumerate(lst):
         if elem in s:
             raise ValueError(f'Column {elem} is selected more than once')
@@ -64,17 +69,17 @@ def check_empty_slice(s: slice) -> bool:
             (s.step is None or s.step == 1))
 
 
-def try_to_squeeze_array(arr):
+def try_to_squeeze_array(arr: ndarray) -> ndarray:
     if arr.ndim == 1:
         return arr
-    if arr.ndim == 2 and arr.shape[1] == 1:
+    if arr.ndim == 2 and (arr.shape[0] == 1 or arr.shape[1] == 1):
         return arr.squeeze()
     else:
         raise ValueError('Array must be one dimensional or two dimensional '
                          'with 1 column')
 
 
-def convert_bytes_or_unicode(arr):
+def convert_bytes_or_unicode(arr: ndarray) -> ndarray:
     if arr.dtype.kind == 'S':
         arr = arr.astype('U').astype('O')
     elif arr.dtype.kind == 'U':
@@ -82,23 +87,23 @@ def convert_bytes_or_unicode(arr):
     return arr
 
 
-def is_scalar(value):
+def is_scalar(value: Any) -> bool:
     return isinstance(value, (int, str, float, np.number, bool, bytes))
 
 
-def is_number(value):
+def is_number(value: Any) -> bool:
     return isinstance(value, (int, float, np.number))
 
 
-def is_integer(value):
+def is_integer(value: Any) -> bool:
     return isinstance(value, (int, np.integer))
 
 
-def is_float(value):
+def is_float(value: Any) -> bool:
     return isinstance(value, (float, np.floating))
 
 
-def get_overall_dtype(value):
+def get_overall_dtype(value: Any) -> str:
     if is_number(value):
         return 'number'
     if isinstance(value, str):
@@ -106,7 +111,7 @@ def get_overall_dtype(value):
     return 'unknown'
 
 
-def is_compatible_values(v1, v2):
+def is_compatible_values(v1: Any, v2: Any) -> str:
     overall_dtype1 = get_overall_dtype(v1)
     overall_dtype2 = get_overall_dtype(v2)
     if overall_dtype1 == 'unknown' or overall_dtype2 == 'unknown':
@@ -117,18 +122,18 @@ def is_compatible_values(v1, v2):
     return overall_dtype1
 
 
-def convert_list_to_single_arr(values, column):
-    arr = np.array(values)
-    kind = arr.dtype.kind
+def convert_list_to_single_arr(values: List) -> ndarray:
+    arr: ndarray = np.array(values)
+    kind: str = arr.dtype.kind
     if kind in 'ifbO':
         return arr
     elif kind in 'US':
         return np.array(values, dtype='O')
 
 
-def maybe_convert_1d_array(arr, column=None):
+def maybe_convert_1d_array(arr: ndarray, column: Optional[str]=None) -> ndarray:
     arr = try_to_squeeze_array(arr)
-    kind = arr.dtype.kind
+    kind: str = arr.dtype.kind
     if kind in 'ifb':
         return arr
     elif kind == 'U':
@@ -141,9 +146,22 @@ def maybe_convert_1d_array(arr, column=None):
         raise NotImplementedError(f'Data type {kind} unknown')
 
 
-def convert_list_to_arrays(value):
+def is_one_row(num_rows_to_set: int, num_cols_to_set: int) -> bool:
+    return num_rows_to_set == 1 and num_cols_to_set >= 1
+
+
+def convert_list_to_arrays(value: List, single_row: bool) -> List[ndarray]:
     # check if one dimensional array
+    arr: ndarray
     if is_scalar(value[0]):
+        if single_row:
+            arrs = []
+            for v in value:
+                arr = convert_list_to_single_arr([v])
+                arr = convert_list_to_single_arr(arr)
+                arrs.append(arr)
+            return arrs
+
         arr = convert_list_to_single_arr(value)
         return [maybe_convert_1d_array(arr)]
     else:
@@ -162,25 +180,28 @@ def convert_list_to_arrays(value):
     return arrs
 
 
-def convert_array_to_arrays(arr):
+def convert_array_to_arrays(arr: ndarray) -> List[ndarray]:
     if arr.ndim == 1:
         arr = arr[:, np.newaxis]
     if arr.ndim != 2:
         raise ValueError('Setting array must be 1 or 2 dimensions')
 
-    arrs = []
+    arrs: List[ndarray] = []
+    i: int
     for i in range(arr.shape[1]):
-        a = np.array(arr[:, i].tolist())
-        arrs.append(convert_bytes_or_unicode(a))
+        a = convert_bytes_or_unicode(arr[:, i])
+        if a.dtype.kind == 'O':
+            va.validate_strings_in_object_array(a)
+        arrs.append(a)
     return arrs
 
 
-def is_entire_column_selection(rs, cs):
+def is_entire_column_selection(rs: Any, cs: Any) -> bool:
     return (isinstance(rs, slice) and isinstance(cs, str) and
             check_empty_slice(rs))
 
 
-def validate_selection_size(key):
+def validate_selection_size(key: Any) -> None:
     if not isinstance(key, tuple):
         raise ValueError('You must provide both a row and column '
                          'selection separated by a comma')
@@ -189,36 +210,36 @@ def validate_selection_size(key):
                          'and one column selection')
 
 
-def check_set_value_type(dtype, good_dtypes, name):
+def check_set_value_type(dtype: str, good_dtypes: List[str], name: str) -> None:
     if dtype not in good_dtypes:
             raise TypeError(f'Cannot assign {name} to column of '
                             f'type {_DT[dtype]}')
 
 
-def check_valid_dtype_convet(dtype):
+def check_valid_dtype_convet(dtype: str) -> str:
     if dtype not in _DTYPES:
         raise ValueError(f'{dtype} is not a valid type. Must be one '
                          f'of {list(_DTYPES.keys())}')
     return _DTYPES[dtype]
 
 
-def convert_kind_to_dtype(kind):
+def convert_kind_to_dtype(kind: str) -> str:
     return _DT[kind]
 
 
-def convert_kind_to_numpy(kind):
+def convert_kind_to_numpy(kind: str) -> str:
     return _KIND_NP[kind]
 
 
-def convert_numpy_to_kind(dtype):
+def convert_numpy_to_kind(dtype: str) -> str:
     return _NP_KIND[dtype]
 
 
-def convert_dtype_to_kind(dtype):
+def convert_dtype_to_kind(dtype: str) -> str:
     return _KIND[dtype]
 
 
-def get_kind_from_scalar(s):
+def get_kind_from_scalar(s: Any) -> Union[str, bool]:
     if isinstance(s, bool):
         return 'b'
     elif isinstance(s, (int, np.integer)):
@@ -231,21 +252,21 @@ def get_kind_from_scalar(s):
         return False
 
 
-def validate_array_size(arr, num_rows):
+def validate_array_size(arr: ndarray, num_rows: int) -> None:
     if len(arr) != num_rows:
         raise ValueError(f'Mismatch number of rows {len(arr)} vs {num_rows}')
 
 
-def validate_multiple_string_cols(arr):
+def validate_multiple_string_cols(arr: ndarray) -> ndarray:
     if arr.ndim == 1:
         return va.validate_strings_in_object_array(arr)
-    arrays = []
+    arrays: List[ndarray] = []
     for i in range(arr.shape[1]):
         arrays.append(va.validate_strings_in_object_array(arr[:, i]))
     return np.column_stack(arrays)
 
 
-def get_selection_object(rs, cs):
+def get_selection_object(rs: RowSelection, cs: ColumnSelection):
     is_row_list = isinstance(rs, (list, np.ndarray))
     is_col_list = isinstance(cs, (list, np.ndarray))
     if is_row_list and is_col_list:
@@ -253,34 +274,39 @@ def get_selection_object(rs, cs):
     return rs, cs
 
 
-# def check_compatible_kinds(k1, k2):
-#     if k1 == k2:
-#         return True
-#     if k1 in 'if' and k2 in 'if':
-#         return True
-#     if k1 == 'O' and k2 in 'SU':
-#         return True
-#     raise TypeError(f'Incompaitble dtypes {_DT[k1]} and {_DT[k2]}')
-
-
-def check_compatible_kinds(kinds1, kinds2):
-    for k1, k2 in zip(kinds1, kinds2):
+def check_compatible_kinds(kinds1: List[str], kinds2: List[str], all_nans: List[bool]) -> bool:
+    for k1, k2, an in zip(kinds1, kinds2, all_nans):
         if k1 == k2:
             continue
         if k1 in 'if' and k2 in 'if':
+            continue
+        if k1 in 'O' and an:
             continue
         raise TypeError(f'Incompaitble dtypes {_DT[k1]} and {_DT[k2]}')
     return True
 
 
-def convert_axis_string(axis):
+def check_all_nans(arrs: List[ndarray]) -> List[bool]:
+    all_nans: List[bool] = []
+    arr: ndarray
+
+    for arr in arrs:
+        if arr.dtype.kind in 'ibO':
+            all_nans.append(False)
+        else:
+            all_nans.append(np.isnan(arr).all())
+    return all_nans
+
+
+def convert_axis_string(axis: str) -> int:
     try:
         return _AXIS[axis]
     except KeyError:
         raise KeyError('axis must be either "rows" or "columns')
 
 
-def convert_clude(clude, arg_name):
+def convert_clude(clude: Union[str, List[str]], arg_name: str) -> Union[str, List[str]]:
+    all_clude: Union[str, List[str]]
     if isinstance(clude, str):
         all_clude = try_to_convert_dtype(clude)
     elif isinstance(clude, list):
@@ -293,7 +319,7 @@ def convert_clude(clude, arg_name):
     return all_clude
 
 
-def try_to_convert_dtype(dtype):
+def try_to_convert_dtype(dtype: str) -> List[str]:
     try:
         return _KIND_LIST[dtype]
     except KeyError:
@@ -302,12 +328,7 @@ def try_to_convert_dtype(dtype):
                        "'str', 'number')")
 
 
-def validate_axis_name(axis):
-    if axis != 'rows' and axis != 'columns':
-        raise ValueError('axis must be either "rows" or "columns"')
-
-
-def swap_axis_name(axis):
+def swap_axis_name(axis: str) -> str:
     if axis == 'rows':
         return 'columns'
     if axis == 'columns':
@@ -315,8 +336,8 @@ def swap_axis_name(axis):
     raise ValueError('axis must be either "rows" or "columns"')
 
 
-def concat_stat_arrays(data_dict):
-    new_data = {}
+def concat_stat_arrays(data_dict: Dict[str, List[ndarray]]) -> Dict[str, ndarray]:
+    new_data: Dict[str, ndarray] = {}
     for dtype, arrs in data_dict.items():
         if arrs:
             arrs = np.column_stack(arrs)
@@ -324,10 +345,10 @@ def concat_stat_arrays(data_dict):
     return new_data
 
 
-def is_agg_func(name):
+def is_agg_func(name: str) -> bool:
     return name not in _NON_AGG_FUNCS
 
 
-def is_column_stack_func(name):
+def is_column_stack_func(name: str) -> bool:
     return name in _COLUMN_STACK_FUNCS
 
