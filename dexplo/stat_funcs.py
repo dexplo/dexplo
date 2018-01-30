@@ -68,3 +68,10 @@ funcs_columns = {'sum': mc.sum_columns,
                  'any': mc.any_columns,
                  'all': mc.all_columns,
                  'count': mc.count_columns}
+
+funcs_str = {'__add__': m.add_obj,
+             '__radd__': m.radd_obj,
+             '__lt__': m.lt_obj,
+             '__le__': m.le_obj,
+             '__gt__': m.gt_obj,
+             '__ge__': m.ge_obj}
