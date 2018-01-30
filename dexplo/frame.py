@@ -530,6 +530,7 @@ class DataFrame(object):
                     return_string += f'{d: >{fl}.{dl}f}  '
 
             if i == options.max_rows // 2 and len(self) > options.max_rows:
+                return_string += '\n'
                 for j, fl in enumerate(long_len):
                     return_string += f'{"...": >{str(fl)}}'
             return_string += '\n'
@@ -1091,9 +1092,9 @@ class DataFrame(object):
             for dt, arr in self._data.items():
                 new_data[dt] = -arr.copy()
         else:
-            raise ValueError('Only works for all numeric columns')
+            raise TypeError('Only works for all numeric columns')
         new_column_info = {col: utils.Column(*col_obj.values)
-                            for col, col_obj in self._column_info.items()}
+                           for col, col_obj in self._column_info.items()}
         return self._construct_from_new(new_data, new_column_info,
                                         self._columns.copy())
 
@@ -1122,7 +1123,7 @@ class DataFrame(object):
     def __imul__(self, value):
         raise NotImplementedError(f'Use df = df * {value}')
 
-    def __idiv__(self, value):
+    def __itruediv__(self, value):
         raise NotImplementedError(f'Use df = df / {value}')
 
     def __ifloordiv__(self, value):
@@ -1136,6 +1137,10 @@ class DataFrame(object):
 
     @property
     def dtypes(self):
+        """
+        Returns a two column name DataFrame with the name of each column and
+        its correspond data type
+        """
         arr = [utils.convert_kind_to_dtype(self._column_info[col].dtype)
                for col in self._columns]
         arr = np.array(arr, dtype='O')
@@ -1144,7 +1149,7 @@ class DataFrame(object):
         data = np.column_stack((cn, arr))
         new_data: Dict[str, ndarray] = {'O': data}
         new_column_info = {'Column Name': utils.Column('O', 0, 0),
-                            'Data Type': utils.Column('O', 1, 1)}
+                           'Data Type': utils.Column('O', 1, 1)}
         return self._construct_from_new(new_data, new_column_info, columns)
 
     def __and__(self, other):
@@ -1459,8 +1464,22 @@ class DataFrame(object):
         return new_column_info
 
     def astype(self, dtype):
+        """
+        Changes the data type of one or more columns. Valid data types are
+        int, float, bool, str. Change all the columns as once by passing a string, otherwise
+        use a dictionary of column names mapped to their data type
+
+        Parameters
+        ----------
+        dtype : str or list of strings
+
+        Returns
+        -------
+        New DataFrame with new data types
+
+        """
         if isinstance(dtype, str):
-            new_dtype = utils.check_valid_dtype_convet(dtype)
+            new_dtype = utils.check_valid_dtype_convert(dtype)
             data_dict = defaultdict(list)
             kind_shape = OrderedDict()
             total_shape = 0
@@ -1482,20 +1501,39 @@ class DataFrame(object):
             df_new = self.copy()
             for column, new_dtype in dtype.items():
                 df_new._validate_column_name(column)
-                new_dtype_numpy = utils.check_valid_dtype_convet(new_dtype)
+                new_dtype_numpy = utils.check_valid_dtype_convert(new_dtype)
                 df_new._astype_internal(column, new_dtype_numpy)
             return df_new
         else:
             raise TypeError('Argument dtype must be either a string or a dictionary')
 
     def head(self, n=5):
+        """
+        Select the first `n` rows
+
+        Parameters
+        ----------
+        n : int
+
+        """
         return self[:n, :]
 
     def tail(self, n=5):
+        """
+        Selects the last n rows
+
+        Parameters
+        ----------
+        n: int
+        """
         return self[-n:, :]
 
     @property
     def hasnans(self):
+        """
+        Returns a new two-column DataFrame with the column names in one column
+        and a boolean value in the other alerting whether any missing values exist
+        """
         if self._hasnans == {}:
             for kind, arr in self._data.items():
                 if kind == 'f':
