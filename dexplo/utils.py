@@ -8,7 +8,7 @@ _DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str'}
 _KIND = {'int': 'i', 'float': 'f', 'bool': 'b', 'str': 'O'}
 _KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'],
               'str': ['O'], 'number': ['i', 'f']}
-_DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'str'}
+_DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'O'}
 _KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'O': 'O'}
 _NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'O': 'O'}
 
@@ -216,7 +216,7 @@ def check_set_value_type(dtype: str, good_dtypes: List[str], name: str) -> None:
                             f'type {_DT[dtype]}')
 
 
-def check_valid_dtype_convet(dtype: str) -> str:
+def check_valid_dtype_convert(dtype: str) -> str:
     if dtype not in _DTYPES:
         raise ValueError(f'{dtype} is not a valid type. Must be one '
                          f'of {list(_DTYPES.keys())}')
