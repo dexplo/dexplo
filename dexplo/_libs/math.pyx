@@ -24,6 +24,84 @@ MIN_INT = np.iinfo(np.int64).min
 MAX_CHAR = chr(1_000_000)
 MIN_CHAR = chr(0)
 
+def add_obj(ndarray[object, ndim=2] arr, str other):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] final = np.empty((nr, nc), dtype='O')
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = arr[i, j] + other
+            except:
+                final[i, j] = nan
+    return final
+
+def radd_obj(ndarray[object, ndim=2] arr, str other):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] final = np.empty((nr, nc), dtype='O')
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = other + arr[i, j]
+            except:
+                final[i, j] = nan
+    return final
+
+def lt_obj(ndarray[object, ndim=2] arr, str other):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = arr[i, j] < other
+            except:
+                final[i, j] = False
+    return final
+
+def le_obj(ndarray[object, ndim=2] arr, str other):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = arr[i, j] <= other
+            except:
+                final[i, j] = False
+    return final
+
+def gt_obj(ndarray[object, ndim=2] arr, str other):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = arr[i, j] > other
+            except:
+                final[i, j] = False
+    return final
+
+def ge_obj(ndarray[object, ndim=2] arr, str other):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = arr[i, j] >= other
+            except:
+                final[i, j] = False
+    return final
+
 def min_max_int(ndarray[np.int64_t] a):
     cdef int i, n = len(a)
     cdef long low = a[0]
