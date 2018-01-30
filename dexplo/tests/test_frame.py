@@ -242,6 +242,45 @@ class TestColumnOnlySelection:
         df2 = de.DataFrame(data, columns=['g', 'f', 'e', 'd'])
         assert_frame_equal(df1, df2)
 
+    def test_head_tail(self):
+        df1 = df.head()
+        df2 = de.DataFrame({'a': [1, 2, 5, 9, 3],
+                           'b': [1.5, 8, 9, 1, 2],
+                           'c': list('abcde'),
+                           'd': [True, False, True, False, True],
+                           'e': [10, 20, 30, 4, 5],
+                           'f': [1., 3, 3, 3, 11],
+                           'g': list('xyxxy'),
+                           'h': [3, 4, 5, 6, 7]},
+                          columns=list('abcdefgh'))
+
+        assert_frame_equal(df1, df2)
+
+        df1 = df.head(2)
+        df2 = de.DataFrame({'a': [1, 2],
+                            'b': [1.5, 8],
+                            'c': list('ab'),
+                            'd': [True, False],
+                            'e': [10, 20],
+                            'f': [1., 3],
+                            'g': list('xy'),
+                            'h': [3, 4]},
+                           columns=list('abcdefgh'))
+        assert_frame_equal(df1, df2)
+
+        df1 = df.tail(3)
+        df2 = de.DataFrame({'a': [4, 5, 1],
+                           'b': [3., 2, 8],
+                           'c': list('fgh'),
+                           'd': [False, True, False],
+                           'e': [6, 7, 8],
+                           'f': [4., 5, 1],
+                           'g': list('yxy'),
+                           'h': [8, 9, 0]},
+                          columns=list('abcdefgh'))
+        assert_frame_equal(df1, df2)
+
+
 
 class TestSimultaneousRowColumnSelection:
 
@@ -929,6 +968,14 @@ class TestSelectDtypes:
                            columns=list('abefhijkl'))
         assert_frame_equal(df1, df2)
 
+    def test_get_dtypes(self):
+        df1 = self.df.dtypes
+        df2 = de.DataFrame({'Column Name': list('abcdefghijkl'),
+                            'Data Type': ['int', 'float', 'str', 'bool', 'int', 'float',
+                                          'str', 'int', 'int', 'int', 'float', 'float']},
+                           columns=['Column Name', 'Data Type'])
+        assert_frame_equal(df1, df2)
+
     def test_selectdtypes_multiple(self):
         df1 = self.df.select_dtypes(['bool', 'int'])
         df2 = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
@@ -1320,6 +1367,108 @@ class TestArithmeticOperations:
                             })
         assert_frame_equal(df1, df2)
 
+    def test_neg_frame(self):
+        with pytest.raises(TypeError):
+            -self.df
+
+        with pytest.raises(TypeError):
+            -self.df.select_dtypes('str')
+
+        df = de.DataFrame({'a': [6, 7, 10],
+                           'b': [0, 2, nan],
+                           'f': [0, 10, 3],
+                           'g': np.zeros(3, dtype='int'),
+                           'h': [np.nan] * 3})
+        df1 = -df
+
+        df2 = de.DataFrame({'a': [-6, -7, -10],
+                            'b': [0, -2, nan],
+                            'f': [0, -10, -3],
+                            'g': np.zeros(3, dtype='int'),
+                            'h': [np.nan] * 3})
+        assert_frame_equal(df1, df2)
+
+    def test_inplace_operators(self):
+        with pytest.raises(NotImplementedError):
+            self.df += 5
+
+        with pytest.raises(NotImplementedError):
+            self.df -= 5
+
+        with pytest.raises(NotImplementedError):
+            self.df *= 5
+
+        with pytest.raises(NotImplementedError):
+            self.df /= 5
+
+        with pytest.raises(NotImplementedError):
+            self.df //= 5
+
+        with pytest.raises(NotImplementedError):
+            self.df **= 5
+
+        with pytest.raises(NotImplementedError):
+            self.df %= 5
+
+
+class TestMultipleBooleanConditions:
+    df = de.DataFrame({'a': [1, 4, 10, 20],
+                       'b': ['a', 'a', 'c', 'c'],
+                       'c': [5, 1, 14, 3]})
+
+    def test_and(self):
+        df1 = (self.df[:, 'a'] > 5) & (self.df[:, 'a'] < 15)
+        df2 = de.DataFrame({'a': [False, False, True, False]})
+        assert_frame_equal(df1, df2)
+
+    def test_or(self):
+        df1 = (self.df[:, 'a'] > 5) | (self.df[:, 'c'] < 2)
+        df2 = de.DataFrame({'a': [False, True, True, True]})
+        assert_frame_equal(df1, df2)
+
+    def test_invert(self):
+        df1 = ~((self.df[:, 'a'] > 5) | (self.df[:, 'c'] < 2))
+        df2 = de.DataFrame({'a': [True, False, False, False]})
+        assert_frame_equal(df1, df2)
+
+
+class TestAsType:
+
+    df = de.DataFrame({'a': [1, 4, 10, 20],
+                       'b': ['a', 'a', 'c', 'c'],
+                       'c': [5, 1, 14, 3]})
+
+    def test_to_float(self):
+        df1 = self.df.astype({'a': 'float'})
+        df2 = de.DataFrame({'a': [1., 4, 10, 20],
+                            'b': ['a', 'a', 'c', 'c'],
+                            'c': [5, 1, 14, 3]})
+        assert_frame_equal(df1, df2)
+
+        with pytest.raises(ValueError):
+            self.df.astype('float')
+
+        df1 = self.df[:, ['a', 'c']].astype('float')
+        df2 = de.DataFrame({'a': [1., 4, 10, 20],
+                            'c': [5., 1, 14, 3]})
+        assert_frame_equal(df1, df2)
+
+    def test_to_str(self):
+        df1 = self.df.astype({'a': 'str'})
+        df2 = de.DataFrame({'a': ['1', '4', '10', '20'],
+                            'b': ['a', 'a', 'c', 'c'],
+                            'c': [5, 1, 14, 3]})
+        assert_frame_equal(df1, df2)
+
+    def test_to_bool(self):
+        df = de.DataFrame({'a': [1, 0, 10, 20],
+                           'b': ['a', '', 'c', 'c'],
+                           'c': [5, 1, 14, nan]})
+        df1 = df.astype('bool')
+        df2 = de.DataFrame({'a': [True, False, True, True],
+                            'b': [True, False, True, True],
+                            'c': [True, True, True, True]})
+        assert_frame_equal(df1, df2)
 
 
 
