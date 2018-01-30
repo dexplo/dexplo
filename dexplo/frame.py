@@ -345,7 +345,8 @@ class DataFrame(object):
         """
         if len(self._data) == 1:
             kind: str = list(self._data.keys())[0]
-            return self._data[kind].copy('F')
+            order = [col_obj.loc for col, col_obj in self._column_info.items()]
+            return self._data[kind].copy('F')[:, order]
 
         if 'b' in self._data or 'O' in self._data:
             dtype: str = 'O'
@@ -1621,7 +1622,6 @@ class DataFrame(object):
                 hasnans = df._hasnans_dtype(kind)
                 kwargs.update({'hasnans': hasnans})
                 arr = df._get_stat_func_result(func, arr, 0, kwargs)
-                del kwargs['hasnans']
 
                 new_kind = arr.dtype.kind
                 cur_loc = utils.get_arr_length(data_dict.get(new_kind, []))
@@ -1695,11 +1695,30 @@ class DataFrame(object):
     def var(self, axis='rows', ddof=1):
         return self._stat_funcs('var', axis, ddof=ddof)
 
-    def abs(self):
-        df = self._get_numeric()
-        new_data = {dt: np.abs(arr) for dt, arr in df._data.items()}
-        new_column_info = self._copy_cd()
-        return self._construct_from_new(new_data, new_column_info, df._columns.copy())
+    def abs(self, keep: bool=False):
+        """
+        Take the absolute value of each element.
+        By default it will drop any non-numeric/bool columns
+        Set `keep` to `True` to keep all columns
+
+        Parameters
+        ----------
+        keep : bool - Set to `True` to keep all columns
+
+        """
+        if keep:
+            df = self
+        else:
+            df = self._get_numeric()
+
+        new_data = {}
+        for dt, arr in df._data.items():
+            if dt in 'ifb':
+                new_data[dt] = np.abs(arr)
+            else:
+                new_data[dt] = arr.copy()
+        new_column_info = df._copy_cd()
+        return df._construct_from_new(new_data, new_column_info, df._columns.copy())
 
     __abs__ = abs
 
@@ -1797,7 +1816,7 @@ class DataFrame(object):
         return self._stat_funcs('cumsum', axis)
 
     def _hasnans_dtype(self, kind):
-        hasnans = np.ones(self.shape[1], dtype='bool')
+        hasnans = np.ones(self._data[kind].shape[1], dtype='bool')
         return self._hasnans.get(kind, hasnans)
 
     def isna(self):

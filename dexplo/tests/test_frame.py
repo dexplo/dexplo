@@ -245,14 +245,14 @@ class TestColumnOnlySelection:
     def test_head_tail(self):
         df1 = df.head()
         df2 = de.DataFrame({'a': [1, 2, 5, 9, 3],
-                           'b': [1.5, 8, 9, 1, 2],
-                           'c': list('abcde'),
-                           'd': [True, False, True, False, True],
-                           'e': [10, 20, 30, 4, 5],
-                           'f': [1., 3, 3, 3, 11],
-                           'g': list('xyxxy'),
-                           'h': [3, 4, 5, 6, 7]},
-                          columns=list('abcdefgh'))
+                            'b': [1.5, 8, 9, 1, 2],
+                            'c': list('abcde'),
+                            'd': [True, False, True, False, True],
+                            'e': [10, 20, 30, 4, 5],
+                            'f': [1., 3, 3, 3, 11],
+                            'g': list('xyxxy'),
+                            'h': [3, 4, 5, 6, 7]},
+                           columns=list('abcdefgh'))
 
         assert_frame_equal(df1, df2)
 
@@ -270,16 +270,15 @@ class TestColumnOnlySelection:
 
         df1 = df.tail(3)
         df2 = de.DataFrame({'a': [4, 5, 1],
-                           'b': [3., 2, 8],
-                           'c': list('fgh'),
-                           'd': [False, True, False],
-                           'e': [6, 7, 8],
-                           'f': [4., 5, 1],
-                           'g': list('yxy'),
-                           'h': [8, 9, 0]},
-                          columns=list('abcdefgh'))
+                            'b': [3., 2, 8],
+                            'c': list('fgh'),
+                            'd': [False, True, False],
+                            'e': [6, 7, 8],
+                            'f': [4., 5, 1],
+                            'g': list('yxy'),
+                            'h': [8, 9, 0]},
+                           columns=list('abcdefgh'))
         assert_frame_equal(df1, df2)
-
 
 
 class TestSimultaneousRowColumnSelection:
@@ -365,7 +364,6 @@ class TestSimultaneousRowColumnSelection:
 
 
 class TestBooleanSelection:
-
     df = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
                        'b': [0, 1.512344353, 8, 9, nan, 3, 2, 8],
                        'c': [''] + list('bgggzgh'),
@@ -510,7 +508,7 @@ class TestSetItem:
         df1 = self.df.copy()
         df1[0, 'c'] = 4.3
         df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [4.3, 5.4],
-                           'd': [True, False]})
+                            'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
@@ -664,7 +662,7 @@ class TestSetItem:
         df1 = self.df.copy()
         df1[:, 'c'] = np.array([False, False])
         df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [False, False],
-                           'd': [True, False]})
+                            'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         with pytest.raises(ValueError):
@@ -716,7 +714,7 @@ class TestSetItem:
         df1 = self.df.copy()
         df1[:, 'c'] = [False, False]
         df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [False, False],
-                           'd': [True, False]})
+                            'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         with pytest.raises(ValueError):
@@ -853,12 +851,12 @@ class TestColumns:
 
     def test_get_columns(self):
         columns = self.df1.columns
-        assert(columns == ['a', 'b', 'c', 'd'])
+        assert (columns == ['a', 'b', 'c', 'd'])
 
 
 class TestValues:
     df1 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
-                            'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
+                        'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
 
     def test_get_values(self):
         values1 = self.df1.values
@@ -879,7 +877,7 @@ class TestValues:
         assert df.shape == (100, 5)
 
     def test_size(self):
-        assert(self.df1.size == 16)
+        assert (self.df1.size == 16)
 
         a = np.random.rand(100, 5)
         df = de.DataFrame(a)
@@ -923,7 +921,6 @@ class TestSelectDtypes:
     df = de.DataFrame(data, columns=list('abcdefghijkl'))
 
     def test_selectdtypes_ints(self):
-
         df1 = self.df.select_dtypes('int')
         df2 = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
                             'e': [0, 20, 30, 4, 5, 6, 7, 8],
@@ -940,7 +937,7 @@ class TestSelectDtypes:
                             'f': [0., 3, 3, 3, 11, 4, 5, 1],
                             'k': np.ones(8) - 1,
                             'l': [np.nan] * 8},
-                            columns=list('bfkl'))
+                           columns=list('bfkl'))
 
     def test_selectdtypes_bool(self):
         df1 = self.df.select_dtypes('bool')
@@ -1177,7 +1174,6 @@ class TestArithmeticOperations:
         assert_frame_equal(df1, df2)
 
     def test_floordiv_frame(self):
-
         with pytest.raises(TypeError):
             self.df // 5
 
@@ -1261,7 +1257,7 @@ class TestArithmeticOperations:
                             'f': [0, 1, 0],
                             'g': np.zeros(3, dtype='int'),
                             'h': [np.nan] * 3},
-                          columns=list('abfgh'))
+                           columns=list('abfgh'))
         assert_frame_equal(df1, df2)
 
     def test_greater_than(self):
@@ -1287,7 +1283,7 @@ class TestArithmeticOperations:
                             'f': [False, True, False],
                             'g': np.zeros(3, dtype='bool'),
                             'h': [False] * 3},
-                          columns=list('abfgh'))
+                           columns=list('abfgh'))
         assert_frame_equal(df1, df2)
 
     def test_greater_than_equal(self):
@@ -1313,7 +1309,7 @@ class TestArithmeticOperations:
                             'f': [False, True, True],
                             'g': np.zeros(3, dtype='bool'),
                             'h': [False] * 3},
-                          columns=list('abfgh'))
+                           columns=list('abfgh'))
         assert_frame_equal(df1, df2)
 
     def test_less_than(self):
@@ -1433,7 +1429,6 @@ class TestMultipleBooleanConditions:
 
 
 class TestAsType:
-
     df = de.DataFrame({'a': [1, 4, 10, 20],
                        'b': ['a', 'a', 'c', 'c'],
                        'c': [5, 1, 14, 3]})
@@ -1470,5 +1465,13 @@ class TestAsType:
                             'c': [True, True, True, True]})
         assert_frame_equal(df1, df2)
 
-
-
+    def test_hasnans(self):
+        df = de.DataFrame({'a': [1, 0, 10, 20],
+                           'b': ['a', nan, 'c', 'c'],
+                           'c': [5, 1, 14, nan],
+                           'd': [False, True, False, False]})
+        df1 = df.hasnans
+        df2 = de.DataFrame({'Column Name': list('abcd'),
+                            'Has NaN': [False, True, True, False]},
+                           columns=['Column Name', 'Has NaN'])
+        assert_frame_equal(df1, df2)

@@ -11,15 +11,15 @@ def sum_columns(arrs: List[ndarray]) -> ndarray:
 
 
 def max_columns(arrs: List[ndarray]):
-    return np.max(arrs, 0)
+    return np.nanmax(arrs, 0)
 
 
 def min_columns(arrs: List[ndarray]):
-    return np.min(arrs, 0)
+    return np.nanmin(arrs, 0)
 
 
 def mean_columns(arrs: List[ndarray]):
-    return np.mean(arrs, 0)
+    return np.nanmean(arrs, 0)
 
 
 def any_columns(arrs: List[ndarray]):

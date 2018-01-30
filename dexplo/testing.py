@@ -5,10 +5,17 @@ import dexplo._libs.validate_arrays as va
 from dexplo.frame import DataFrame
 
 
-def _check_1d_arrays(a: ndarray, b: ndarray, kind: str) -> bool:
+def _check_1d_arrays(a: ndarray, b: ndarray, kind: str, tol: float = 10 ** -4) -> bool:
     if kind == 'O':
         return va.is_equal_1d_object(a, b)
-    return ((a == b) | (np.isnan(a) & np.isnan(b))).all()
+    if kind == 'f':
+        with np.errstate(invalid='ignore'):
+            criteria1 = np.abs(a - b) < tol
+            criteria2 = np.isnan(a) & np.isnan(b)
+            criteria3 = np.isinf(a) & np.isinf(b)
+        return (criteria1 | criteria2 | criteria3).all()
+    else:
+        return (a == b).all()
 
 
 def assert_frame_equal(df1: DataFrame, df2: DataFrame) -> None:

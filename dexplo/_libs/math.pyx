@@ -224,21 +224,16 @@ def sum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, **kwargs):
     cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef int ct
     cdef long idx
     cdef ndarray[np.float64_t] total
 
     if axis == 0:
         total = np.zeros(nc, dtype=np.float64)
         for i in range(nc):
-            ct = 0
-            if hasnans[i] is None or hasnans[i] is True:
+            if hasnans[i] is None or hasnans[i] == True:
                 for j in range(nr):
                     if not isnan(arr[i * nr + j]):
                         total[i] += arr[i * nr + j]
-                        ct += 1
-                if ct == 0:
-                    total[i] = nan
             else:
                 for j in range(nr):
                     total[i] += arr[i * nr + j]
@@ -246,12 +241,10 @@ def sum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, **kwargs):
     else:
         total = np.zeros(nr, dtype=np.float64)
         for i in range(nc):
-            ct = 0
-            if hasnans[i] is None or hasnans[i] is True:
+            if hasnans[i] is None or hasnans[i] == True:
                 for j in range(nr):
                     if not isnan(arr[i * nr + j]):
                         total[j] += arr[i * nr + j]
-                        ct += 1  
             else:
                 for j in range(nr):
                     total[j] += arr[i * nr + j]
@@ -263,11 +256,12 @@ def sum_str(ndarray[object, ndim=2] a, axis, hasnans):
     cdef int nr = a.shape[0]
     cdef ndarray[object] total
     cdef int ct
+
     if axis == 0:
         total = np.zeros(nc, dtype='U').astype('O')
         for i in range(nc):
             ct = 0
-            if hasnans[i] is None or hasnans[i] is True:
+            if hasnans[i] is None or hasnans[i] == True:
                 for j in range(nr):
                     if a[j, i] is not nan:
                         total[i] = total[i] + a[j, i]
@@ -281,16 +275,16 @@ def sum_str(ndarray[object, ndim=2] a, axis, hasnans):
         total = np.zeros(nr, dtype='U').astype('O')
         for i in range(nc):
             ct = 0
-            if hasnans[i] is None or hasnans[i] is True:
+            if hasnans[i] is None or hasnans[i] == True:
                 for j in range(nr):
                     if a[j, i] is not nan:
-                        total[i] = total[i] + a[j, i]
+                        total[j] = total[j] + a[j, i]
                         ct += 1
                 if ct == 0:
                     total[i] = nan
             else:
                 for j in range(nr):
-                    total[i] = total[i] + a[j, i]
+                    total[j] = total[j] + a[j, i]
     return total
 
 def max_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
@@ -328,14 +322,14 @@ def min_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
         amin.fill(MAX_INT)
         for i in range(nc):
             for j in range(nr):
-                if arr[i * nr + j] > amin[i]:
+                if arr[i * nr + j] < amin[i]:
                     amin[i] = arr[i * nr + j]
     else:
         amin = np.empty(nr, dtype=np.int64)
         amin.fill(MAX_INT)
         for i in range(nc):
             for j in range(nr):
-                if arr[i * nr + j] > amin[j]:
+                if arr[i * nr + j] < amin[j]:
                     amin[j] = arr[i * nr + j]
     return amin
 
@@ -396,7 +390,7 @@ def max_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
         amax = np.empty(nc, dtype=np.float64)
         amax.fill(nan)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] is True:
+            if hasnans[i] is None or hasnans[i] == True:
                 k = 0
                 while isnan(arr[i * nr + k]) and k < nr - 1:
                     k += 1
@@ -406,16 +400,15 @@ def max_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                         if arr[i * nr + j] > amax[i]:
                             amax[i] = arr[i * nr + j]
             else:
-                for i in range(nc):
-                    for j in range(nr):
-                        if arr[i * nr + j] > amax[i]:
-                            amax[i] = arr[i * nr + j]
+                amax[i] = arr[i * nr]
+                for j in range(nr):
+                    if arr[i * nr + j] > amax[i]:
+                        amax[i] = arr[i * nr + j]
     else:
         amax = np.empty(nr, dtype=np.float64)
         amax.fill(nan)
-        hasnan = True
-        for i in range(nr):
-            if hasnan:
+        if hasnans.sum() > 0:
+            for i in range(nr):
                 k = 0
                 while isnan(arr[k * nr + i]) and k < nc - 1:
                     k += 1
@@ -424,11 +417,11 @@ def max_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                     if not isnan(arr[j * nr + i]):
                         if arr[j * nr + i] > amax[i]:
                             amax[i] = arr[j * nr + i]
-            else:
-                for i in range(nr):
-                    for j in range(nc):
-                        if arr[j * nr + i] > amax[i]:
-                            amax[i] = arr[j * nr + i]
+        else:
+            for i in range(nr):
+                for j in range(nc):
+                    if arr[j * nr + i] > amax[i]:
+                        amax[i] = arr[j * nr + i]
     return amax
 
 def min_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
@@ -442,7 +435,7 @@ def min_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
         amin = np.empty(nc, dtype=np.float64)
         amin.fill(nan)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] is True:
+            if hasnans[i] is None or hasnans[i] == True:
                 k = 0
                 while isnan(arr[i * nr + k]) and k < nr - 1:
                     k += 1
@@ -452,16 +445,15 @@ def min_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                         if arr[i * nr + j] < amin[i]:
                             amin[i] = arr[i * nr + j]
             else:
-                for i in range(nc):
-                    for j in range(nr):
-                        if arr[i * nr + j] < amin[i]:
-                            amin[i] = arr[i * nr + j]
+                amin[i] = arr[i * nr]
+                for j in range(nr):
+                    if arr[i * nr + j] < amin[i]:
+                        amin[i] = arr[i * nr + j]
     else:
         amin = np.empty(nr, dtype=np.float64)
         amin.fill(nan)
-        hasnan = True
-        for i in range(nr):
-            if hasnan:
+        if hasnans.sum() > 0:
+            for i in range(nr):
                 k = 0
                 while isnan(arr[k * nr + i]) and k < nc - 1:
                     k += 1
@@ -470,11 +462,11 @@ def min_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                     if not isnan(arr[j * nr + i]):
                         if arr[j * nr + i] < amin[i]:
                             amin[i] = arr[j * nr + i]
-            else:
-                for i in range(nr):
-                    for j in range(nc):
-                        if arr[j * nr + i] < amin[i]:
-                            amin[i] = arr[j * nr + i]
+        else:
+            for i in range(nr):
+                for j in range(nc):
+                    if arr[j * nr + i] < amin[i]:
+                        amin[i] = arr[j * nr + i]
     return amin
 
 def max_str(ndarray[object, ndim=2] a, axis, hasnans):
@@ -487,7 +479,7 @@ def max_str(ndarray[object, ndim=2] a, axis, hasnans):
         amax = np.empty(nc, dtype='O')
         amax.fill(nan)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] is True:
+            if hasnans[i] is None or hasnans[i] == True:
                 k = 0
                 while a[k, i] is nan and k < nr:
                     k += 1
@@ -497,29 +489,28 @@ def max_str(ndarray[object, ndim=2] a, axis, hasnans):
                         if a[j, i] > amax[i]:
                             amax[i] = a[j, i]
             else:
-                for i in range(nc):
-                    for j in range(nr):
-                        if a[j, i] > amax[i]:
-                            amax[i] = a[j, i]
+                amax[i] = a[0, i]
+                for j in range(nr):
+                    if a[j, i] > amax[i]:
+                        amax[i] = a[j, i]
     else:
         amax = np.empty(nr, dtype='O')
         amax.fill(nan)
-        hasnan = True
-        for i in range(nr):
-            if hasnan:
+        if hasnans.sum() > 0:
+            for i in range(nr):
                 k = 0
-                while isnan(a[i, k]) and k < nc:
+                while a[i, k] is nan and k < nc:
                     k += 1
                 amax[i] = a[i, k]
                 for j in range(k, nc):
-                    if not isnan(a[i, j]):
+                    if not a[i, j] is nan:
                         if a[i, j]  > amax[i]:
                             amax[i] = a[i, j] 
-            else:
-                for i in range(nr):
-                    for j in range(nc):
-                        if a[i, j]  > amax[i]:
-                            amax[i] = a[i, j] 
+        else:
+            for i in range(nr):
+                for j in range(nc):
+                    if a[i, j]  > amax[i]:
+                        amax[i] = a[i, j]
     return amax
 
 def min_str(ndarray[object, ndim=2] a, axis, hasnans):
@@ -531,40 +522,39 @@ def min_str(ndarray[object, ndim=2] a, axis, hasnans):
     if axis == 0:
         amin = np.empty(nc, dtype='O')
         amin.fill(nan)
-        hasnan = True
         for i in range(nc):
-            if hasnan:
+            if hasnans[i] is None or hasnans[i] == True:
                 k = 0
-                while isnan(a[k, i]) and k < nr:
+                while a[k, i] is nan and k < nr:
                     k += 1
                 amin[i] = a[k, i]
                 for j in range(k, nr):
-                    if not isnan(a[j, i]):
+                    if not a[j, i] is nan:
                         if a[j, i] < amin[i]:
                             amin[i] = a[j, i]
             else:
-                for i in range(nc):
-                    for j in range(nr):
-                        if a[j, i] < amin[i]:
-                            amin[i] = a[j, i]
+                amin[i] = a[0, i]
+                for j in range(nr):
+                    if a[j, i] < amin[i]:
+                        amin[i] = a[j, i]
     else:
         amin = np.empty(nr, dtype='O')
         amin.fill(nan)
-        for i in range(nr):
-            if hasnans[i] is None or hasnans[i] is True:
+        if hasnans.sum() > 0:
+            for i in range(nr):
                 k = 0
-                while isnan(a[i, k]) and k < nc:
+                while a[i, k] is nan and k < nc:
                     k += 1
                 amin[i] = a[i, k]
                 for j in range(k, nc):
-                    if not isnan(a[i, j]):
+                    if not a[i, j] is nan:
                         if a[i, j] < amin[i]:
                             amin[i] = a[i, j]
-            else:
-                for i in range(nr):
-                    for j in range(nc):
-                        if a[i, j] < amin[i]:
-                            amin[i] = a[i, j]
+        else:
+            for i in range(nr):
+                for j in range(nc):
+                    if a[i, j] < amin[i]:
+                        amin[i] = a[i, j]
     return amin
 
 def mean_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
@@ -618,7 +608,7 @@ def mean_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     if axis == 0:
         total = np.zeros(nc, dtype=np.float64)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] is True:
+            if hasnans[i] is None or hasnans[i] == True:
                 ct = 0
                 for j in range(nr):
                     if not isnan(arr[i * nr + j]):
@@ -1008,7 +998,7 @@ def all_str(ndarray[object, ndim=2] a, axis, hasnans):
             for j in range(nr):
                 if a[j, i] != '':
                     try:
-                        if isnan(a[j, i]):
+                        if a[j, i] is nan:
                             result[i] = False
                             break
                     except TypeError:
@@ -1023,7 +1013,7 @@ def all_str(ndarray[object, ndim=2] a, axis, hasnans):
             for j in range(nc):
                 if a[i, j] != '':
                     try:
-                        if isnan(a[i, j]):
+                        if a[i, j] is nan:
                             result[i] = False
                             break
                     except TypeError:
