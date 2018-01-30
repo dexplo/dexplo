@@ -942,14 +942,384 @@ class TestSelectDtypes:
         df1 = self.df.select_dtypes(['float', 'str'])
         df2 = de.DataFrame({'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
                             'c': [''] + list('bgggzgh'),
-                            'g': ['', None, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
                             'f': [0., 3, 3, 3, 11, 4, 5, 1],
+                            'g': ['', None, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
                             'k': np.ones(8) - 1,
                             'l': [np.nan] * 8},
                            columns=list('bcfgkl'))
         assert_frame_equal(df1, df2)
 
+        df1 = self.df.select_dtypes(exclude='float')
+        df2 = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
+                            'c': [''] + list('bgggzgh'),
+                            'd': [False, False, True, False] * 2,
+                            'e': [0, 20, 30, 4, 5, 6, 7, 8],
+                            'g': ['', None, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
+                            'h': [0, 4, 5, 6, 7, 8, 9, 0],
+                            'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
+                            'j': np.zeros(8, dtype='int')})
+        assert_frame_equal(df1, df2)
 
 
-        df1 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
-                            'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
+class TestArithmeticOperations:
+    df = de.DataFrame({'a': [0, 0, 5],
+                       'b': [0, 1.5, nan],
+                       'c': [''] + list('bg'),
+                       'd': [False, False, True],
+                       'e': ['', None, 'ad'],
+                       'f': [0, 4, 5],
+                       'g': np.zeros(3, dtype='int'),
+                       'h': [np.nan] * 3})
+
+    def test_add_number_frame(self):
+        with pytest.raises(TypeError):
+            self.df + 5
+
+        df1 = self.df.select_dtypes('int') + 5
+        df2 = de.DataFrame({'a': [5, 5, 10],
+                            'f': [5, 9, 10],
+                            'g': np.zeros(3, dtype='int') + 5},
+                           columns=['a', 'f', 'g'])
+        assert_frame_equal(df1, df2)
+
+        df1 = 5 + self.df.select_dtypes('int')
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.select_dtypes('number') + 5
+        df2 = de.DataFrame({'a': [5, 5, 10],
+                            'b': [5, 6.5, nan],
+                            'f': [5, 9, 10],
+                            'g': np.zeros(3, dtype='int') + 5,
+                            'h': [np.nan] * 3},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+        df1 = 5 + self.df.select_dtypes('number')
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.select_dtypes(['number', 'bool']) + 5
+        df2 = de.DataFrame({'a': [5, 5, 10],
+                            'b': [5, 6.5, nan],
+                            'd': [5, 5, 6],
+                            'f': [5, 9, 10],
+                            'g': np.zeros(3, dtype='int') + 5,
+                            'h': [np.nan] * 3},
+                           columns=list('abdfgh'))
+        assert_frame_equal(df1, df2)
+
+        df1 = 5 + self.df.select_dtypes(['number', 'bool'])
+        assert_frame_equal(df1, df2)
+
+    def test_add_string_frame(self):
+        df1 = self.df.select_dtypes('str') + 'aaa'
+        df2 = de.DataFrame({'c': ['aaa', 'baaa', 'gaaa'],
+                            'e': ['aaa', None, 'adaaa']})
+        assert_frame_equal(df1, df2)
+
+        df1 = 'aaa' + self.df.select_dtypes('str')
+        df2 = de.DataFrame({'c': ['aaa', 'aaab', 'aaag'],
+                            'e': ['aaa', None, 'aaaad']})
+        assert_frame_equal(df1, df2)
+
+    def test_comparison_string_frame(self):
+        df1 = self.df.select_dtypes('str') > 'boo'
+        df2 = de.DataFrame({'c': [False, False, True],
+                            'e': [False, False, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.select_dtypes('str') < 'boo'
+        df2 = de.DataFrame({'c': [True, True, False],
+                            'e': [True, False, True]})
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.select_dtypes('str') == 'b'
+        df2 = de.DataFrame({'c': [False, True, False],
+                            'e': [False, False, False]})
+        assert_frame_equal(df1, df2)
+
+    def test_subtract_frame(self):
+        with pytest.raises(TypeError):
+            self.df - 5
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') - 10
+
+        df1 = self.df.select_dtypes('int') - 5
+        df2 = de.DataFrame({'a': [-5, -5, 0],
+                            'f': [-5, -1, 0],
+                            'g': np.zeros(3, dtype='int') - 5},
+                           columns=['a', 'f', 'g'])
+        assert_frame_equal(df1, df2)
+
+        df1 = 5 - self.df.select_dtypes('int')
+        df2 = de.DataFrame({'a': [5, 5, 0],
+                            'f': [5, 1, 0],
+                            'g': 5 - np.zeros(3, dtype='int')},
+                           columns=['a', 'f', 'g'])
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.select_dtypes(['number', 'bool']) - 5
+        df2 = de.DataFrame({'a': [-5, -5, 0],
+                            'b': [-5, -3.5, nan],
+                            'd': [-5, -5, -4],
+                            'f': [-5, -1, 0],
+                            'g': np.zeros(3, dtype='int') - 5,
+                            'h': [np.nan] * 3},
+                           columns=list('abdfgh'))
+        assert_frame_equal(df1, df2)
+
+        df1 = 5 - self.df.select_dtypes(['number', 'bool'])
+        df2 = de.DataFrame({'a': [5, 5, 0],
+                            'b': [5, 3.5, nan],
+                            'd': [5, 5, 4],
+                            'f': [5, 1, 0],
+                            'g': 5 - np.zeros(3, dtype='int'),
+                            'h': [np.nan] * 3},
+                           columns=list('abdfgh'))
+        assert_frame_equal(df1, df2)
+
+    def test_mult_frame(self):
+        df1 = self.df * 2
+        df2 = de.DataFrame({'a': [0, 0, 10],
+                            'b': [0, 3, nan],
+                            'c': ['', 'bb', 'gg'],
+                            'd': [0, 0, 2],
+                            'e': ['', None, 'adad'],
+                            'f': [0, 8, 10],
+                            'g': np.zeros(3, dtype='int'),
+                            'h': [np.nan] * 3})
+        assert_frame_equal(df1, df2)
+
+        df1 = 2 * self.df
+        df2 = de.DataFrame({'a': [0, 0, 10],
+                            'b': [0, 3, nan],
+                            'c': ['', 'bb', 'gg'],
+                            'd': [0, 0, 2],
+                            'e': ['', None, 'adad'],
+                            'f': [0, 8, 10],
+                            'g': np.zeros(3, dtype='int'),
+                            'h': [np.nan] * 3})
+        assert_frame_equal(df1, df2)
+
+    def test_truediv_frame(self):
+        with pytest.raises(TypeError):
+            self.df / 5
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') / 10
+
+        with pytest.raises(TypeError):
+            self.df / 'asdf'
+
+        df1 = self.df.select_dtypes('number') / 2
+        df2 = de.DataFrame({'a': [0, 0, 2.5],
+                            'b': [0, .75, nan],
+                            'f': [0, 2, 2.5],
+                            'g': np.zeros(3),
+                            'h': [np.nan] * 3},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+        df1 = 10 / self.df.select_dtypes('number')
+        df2 = de.DataFrame({'a': [np.inf, np.inf, 2],
+                            'b': [np.inf, 10 / 1.5, nan],
+                            'f': [np.inf, 2.5, 2],
+                            'g': [np.inf] * 3,
+                            'h': [np.nan] * 3},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+    def test_floordiv_frame(self):
+
+        with pytest.raises(TypeError):
+            self.df // 5
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') // 10
+
+        with pytest.raises(TypeError):
+            self.df // 'asdf'
+
+        df = de.DataFrame({'a': [0, 0, 10],
+                           'b': [0, 20, nan],
+                           'f': [0, 100, 10],
+                           'g': np.zeros(3, dtype='int'),
+                           'h': [np.nan] * 3},
+                          columns=list('abfgh'))
+
+        df1 = df // 3
+        df2 = de.DataFrame({'a': [0, 0, 3],
+                            'b': [0, 6, nan],
+                            'f': [0, 33, 3],
+                            'g': np.zeros(3, dtype='int'),
+                            'h': [np.nan] * 3},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+    def test_pow_frame(self):
+        with pytest.raises(TypeError):
+            self.df ** 5
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') ** 10
+
+        with pytest.raises(TypeError):
+            self.df ** 'asdf'
+
+        df = de.DataFrame({'a': [0, 0, 10],
+                           'b': [0, 2, nan],
+                           'f': [0, 10, 3],
+                           'g': np.zeros(3, dtype='int'),
+                           'h': [np.nan] * 3},
+                          columns=list('abfgh'))
+        df1 = df ** 2
+        df2 = de.DataFrame({'a': [0, 0, 100],
+                            'b': [0, 4, nan],
+                            'f': [0, 100, 9],
+                            'g': np.zeros(3, dtype='int'),
+                            'h': [np.nan] * 3},
+                           columns=list('abfgh'))
+
+        assert_frame_equal(df1, df2)
+
+        df1 = 2 ** df
+        df2 = de.DataFrame({'a': [1, 1, 1024],
+                            'b': [1, 4, nan],
+                            'f': [1, 1024, 8],
+                            'g': np.ones(3, dtype='int'),
+                            'h': [np.nan] * 3},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+    def test_mod_division_frame(self):
+        with pytest.raises(TypeError):
+            self.df % 5
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') % 10
+
+        with pytest.raises(TypeError):
+            self.df % 'asdf'
+
+        df = de.DataFrame({'a': [6, 7, 10],
+                           'b': [0, 2, nan],
+                           'f': [0, 10, 3],
+                           'g': np.zeros(3, dtype='int'),
+                           'h': [np.nan] * 3},
+                          columns=list('abfgh'))
+
+        df1 = df % 3
+        df2 = de.DataFrame({'a': [0, 1, 1],
+                            'b': [0, 2, nan],
+                            'f': [0, 1, 0],
+                            'g': np.zeros(3, dtype='int'),
+                            'h': [np.nan] * 3},
+                          columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+    def test_greater_than(self):
+        with pytest.raises(TypeError):
+            self.df > 5
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') > 10
+
+        with pytest.raises(TypeError):
+            self.df > 'asdf'
+
+        df = de.DataFrame({'a': [6, 7, 10],
+                           'b': [0, 2, nan],
+                           'f': [0, 10, 3],
+                           'g': np.zeros(3, dtype='int'),
+                           'h': [np.nan] * 3},
+                          columns=list('abfgh'))
+
+        df1 = df > 3
+        df2 = de.DataFrame({'a': [True, True, True],
+                            'b': [False, False, False],
+                            'f': [False, True, False],
+                            'g': np.zeros(3, dtype='bool'),
+                            'h': [False] * 3},
+                          columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+    def test_greater_than_equal(self):
+        with pytest.raises(TypeError):
+            self.df >= 5
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') >= 10
+
+        with pytest.raises(TypeError):
+            self.df >= 'asdf'
+
+        df = de.DataFrame({'a': [6, 7, 10],
+                           'b': [0, 2, nan],
+                           'f': [0, 10, 3],
+                           'g': np.zeros(3, dtype='int'),
+                           'h': [np.nan] * 3},
+                          columns=list('abfgh'))
+
+        df1 = df >= 3
+        df2 = de.DataFrame({'a': [True, True, True],
+                            'b': [False, False, False],
+                            'f': [False, True, True],
+                            'g': np.zeros(3, dtype='bool'),
+                            'h': [False] * 3},
+                          columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+    def test_less_than(self):
+        with pytest.raises(TypeError):
+            self.df < 5
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') < 10
+
+        with pytest.raises(TypeError):
+            self.df < 'asdf'
+
+        df = de.DataFrame({'a': [6, 7, 10],
+                           'b': [0, 2, nan],
+                           'f': [0, 10, 3],
+                           'g': np.zeros(3, dtype='int'),
+                           'h': [np.nan] * 3},
+                          columns=list('abfgh'))
+
+        df1 = df < 3
+        df2 = de.DataFrame({'a': [False, False, False],
+                            'b': [True, True, False],
+                            'f': [True, False, False],
+                            'g': np.ones(3, dtype='bool'),
+                            'h': [False] * 3},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+    def test_less_than_equal(self):
+        with pytest.raises(TypeError):
+            self.df <= 5
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') <= 10
+
+        with pytest.raises(TypeError):
+            self.df <= 'asdf'
+
+        df = de.DataFrame({'a': [6, 7, 10],
+                           'b': [0, 2, nan],
+                           'f': [0, 10, 3],
+                           'g': np.zeros(3, dtype='int'),
+                           'h': [np.nan] * 3})
+        df1 = df <= 3
+
+        df2 = de.DataFrame({'a': [False, False, False],
+                            'b': [True, True, False],
+                            'f': [True, False, True],
+                            'g': np.ones(3, dtype='bool'),
+                            'h': [False] * 3
+                            })
+        assert_frame_equal(df1, df2)
+
+
+
+
