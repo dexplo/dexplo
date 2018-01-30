@@ -29,6 +29,8 @@ def maybe_convert_object_array(ndarray[object] arr, column):
     
     for i in range(n):
         if not isinstance(arr[i], types):
+            if isinstance(arr[i], (float, np.floating)) and np.isnan(arr[i]):
+                continue
             raise TypeError(f'Found mixed data in column {column}.')
 
     if types != (str, bytes):
