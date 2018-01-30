@@ -320,7 +320,7 @@ class DataFrame(object):
         for i, col in enumerate(self._columns):
             arr: ndarray = va.maybe_convert_object_array(data[:, i], col)
             kind: str = arr.dtype.kind
-            loc: int = utils.get_arr_length(data_dict.get(kind, []))
+            loc: int = utils.get_num_cols(data_dict.get(kind, []))
             data_dict[kind].append(arr)
             self._column_info[col] = utils.Column(kind, loc, i)
         # use utils.concat_stat_arrays?
@@ -940,16 +940,12 @@ class DataFrame(object):
         new_column_info: ColInfoT = {}
         new_columns: ColumnT = []
         order: int = 0
-        dtype_loc_count: Dict[str, int] = defaultdict(int)
-        for col, col_obj in self._column_info.items():
-            dtype: str = col_obj.dtype
+        for col in self._columns:
+            dtype, loc, _ = self._column_info[col].values
             if dtype in include_final:
-                loc: int = dtype_loc_count[dtype]
-                dtype_loc_count[dtype] += 1
                 new_column_info[col] = utils.Column(dtype, loc, order)
                 new_columns.append(col)
                 order += 1
-
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     @classmethod
@@ -985,7 +981,7 @@ class DataFrame(object):
                     arr_res = eval(f"{'arr'} .{op_string}({'other'})")
             new_kind = arr_res.dtype.kind
 
-            cur_len = utils.get_arr_length(data_dict.get(new_kind, []))
+            cur_len = utils.get_num_cols(data_dict.get(new_kind, []))
             kind_shape[old_kind] = (new_kind, cur_len)
             data_dict[new_kind].append(arr_res)
 
@@ -1614,8 +1610,8 @@ class DataFrame(object):
         data_dict = defaultdict(list)
         df = self._get_specific_stat_data(name, axis)
         new_column_info = {}
-
         change_kind = {}
+        
         if axis == 0:
             for kind, arr in df._data.items():
                 func = stat.funcs[kind][name]
@@ -1624,7 +1620,7 @@ class DataFrame(object):
                 arr = df._get_stat_func_result(func, arr, 0, kwargs)
 
                 new_kind = arr.dtype.kind
-                cur_loc = utils.get_arr_length(data_dict.get(new_kind, []))
+                cur_loc = utils.get_num_cols(data_dict.get(new_kind, []))
                 change_kind[kind] = (new_kind, cur_loc)
                 data_dict[new_kind].append(arr)
 
@@ -1740,68 +1736,106 @@ class DataFrame(object):
         return self._stat_funcs('all', axis)
 
     def argmax(self, axis='rows'):
+        """
+        Returns the integer location of the maximum value of each column
+        When setting `axis` to 'columns', all the non-numeric/bool columns are dropped first
+
+        Parameters
+        ----------
+        axis : str - either 'rows' or 'columns'
+        """
         return self._stat_funcs('argmax', axis)
 
     def argmin(self, axis='rows'):
+        """
+        Returns the integer location of the minimum value of each column
+        When setting `axis` to 'columns', all the non-numeric/bool columns are dropped first
+
+        Parameters
+        ----------
+        axis : str - either 'rows' or 'columns'
+        """
         return self._stat_funcs('argmin', axis)
 
     def count(self, axis='rows'):
         return self._stat_funcs('count', axis)
 
-    def _get_clip_df(self, value, name):
+    def _get_clip_df(self, value, name, keep):
         if value is None:
             raise ValueError('You must provide a value for either lower or upper')
         if utils.is_number(value):
             if self._has_numeric_or_bool():
-                return self.select_dtypes(['number', 'bool']), 'number'
+                if keep:
+                    df = self
+                else:
+                    df = self.select_dtypes(['number', 'bool'])
+                return df, 'number'
             else:
                 raise TypeError(f'You provided a numeric value for {name} '
                                 'but do not have any numeric columns')
         elif isinstance(value, str):
             if self._has_string():
-                return self.select_dtypes('str'), 'str'
+                if keep:
+                    df = self
+                else:
+                    df = self.select_dtypes('str')
+                return df, 'str'
             else:
                 raise TypeError(f'You provided a string value for {name} '
                                 'but do not have any string columns')
         else:
             raise NotImplementedError('Data type incompatible')
 
-    def clip(self, lower=None, upper=None):
+    def clip(self, lower=None, upper=None, keep=False):
         if lower is None:
-            df, overall_dtype = self._get_clip_df(upper, 'upper')
+            df, overall_dtype = self._get_clip_df(upper, 'upper', keep)
         elif upper is None:
-            df, overall_dtype = self._get_clip_df(lower, 'lower')
+            df, overall_dtype = self._get_clip_df(lower, 'lower', keep)
         else:
             overall_dtype = utils.is_compatible_values(lower, upper)
             if lower > upper:
                 raise ValueError('The upper value must be less than lower')
-            if overall_dtype == 'number':
+
+            if overall_dtype == 'number' and not keep:
                 df = self.select_dtypes(['number', 'bool'])
-            else:
+            elif overall_dtype == 'str' and not keep:
                 df = self.select_dtypes('str')
+            else:
+                df = self
 
         if overall_dtype == 'str':
             new_data = {}
             if lower is None:
-                lower = chr(0)
-            if upper is None:
-                upper = chr(1000000)
-            new_data['O'] = _math.clip_str(df._data['O'], lower, upper)
+                new_data['O'] = _math.clip_str_upper(df._data['O'], upper)
+            elif upper is None:
+                new_data['O'] = _math.clip_str_lower(df._data['O'], lower)
+            else:
+                new_data['O'] = _math.clip_str_both(df._data['O'], lower, upper)
+
+            for kind, arr in self._data.items():
+                if kind != 'O':
+                    new_data[kind] = arr
         else:
             if utils.is_integer(lower) or utils.is_integer(upper):
-                if 'b' in self._data:
-                    as_type_dict = {col: 'int' for col in df._dtype_column['b']}
+                if 'b' in df._data:
+                    as_type_dict = {col: 'int' for col, col_obj in df._column_info.items()
+                                    if col_obj.dtype == 'b'}
                     df = df.astype(as_type_dict)
             if utils.is_float(lower) or utils.is_float(upper):
                 if 'i' in df._data:
-                    as_type_dict = {col: 'float' for col in df._dtype_column['i']}
+                    as_type_dict = {col: 'float' for col, col_obj in df._column_info.items()
+                                    if col_obj.dtype == 'i'}
                     df = df.astype(as_type_dict)
                 if 'b' in df._data:
-                    as_type_dict = {col: 'float' for col in df._dtype_column['b']}
+                    as_type_dict = {col: 'float' for col, col_obj in df._column_info.items()
+                                    if col_obj.dtype == 'f'}
                     df = df.astype(as_type_dict)
             new_data = {}
             for dtype, arr in df._data.items():
-                new_data[dtype] = arr.clip(lower, upper)
+                if dtype in 'if':
+                    new_data[dtype] = arr.clip(lower, upper)
+                else:
+                    new_data[dtype] = arr.copy(order='F')
 
         new_column_info = df._copy_cd()
         return df._construct_from_new(new_data, new_column_info, df._columns.copy())

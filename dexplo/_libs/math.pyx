@@ -594,7 +594,7 @@ def mean_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, **kwargs):
         total = np.zeros(nr, dtype='int64')
         for i in range(nc):
             for j in range(nr):
-                total[i] += arr[j * nr + i]
+                total[j] += arr[i * nr + j]
         return total / nc
 
 def mean_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
@@ -1340,11 +1340,50 @@ def count_str(ndarray[object, ndim=2] a, axis, hasnans):
             result[i] = ct
     return result
 
-def clip_str(ndarray[object, ndim=2] a, str lower, str upper, hasnans):
+def clip_str_lower(ndarray[object, ndim=2] a, str lower):
     cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[object, ndim=2] b = np.empty((nr, nc), dtype='O')
+    hasnans = True
+    if hasnans == True or hasnans is None:
+        for i in range(nc):
+            for j in range(nr):
+                if a[j, i] is nan:
+                    b[j, i] = nan
+                else:
+                    if a[j, i] < lower:
+                        b[j, i] = lower
+                    else:
+                        b[j, i] = a[j, i]
+        return b
+    return a.clip(lower)
+
+def clip_str_upper(ndarray[object, ndim=2] a, str upper):
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[object, ndim=2] b = np.empty((nr, nc), dtype='O')
+    hasnans = True
+    if hasnans == True or hasnans is None:
+        for i in range(nc):
+            for j in range(nr):
+                if a[j, i] is nan:
+                    b[j, i] = nan
+                else:
+                    if a[j, i] > upper:
+                        b[j, i] = upper
+                    else:
+                        b[j, i] = a[j, i]
+        return b
+    return a.clip(max=upper)
+
+def clip_str_both(ndarray[object, ndim=2] a, str lower, str upper):
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[object, ndim=2] b = np.empty((nr, nc), dtype='O')
+    hasnans = True
     if hasnans == True or hasnans is None:
         for i in range(nc):
             for j in range(nr):
@@ -1636,38 +1675,62 @@ def cummin_str(ndarray[object, ndim=2] a, axis, hasnans):
 
 def cumsum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     cdef np.float64_t *arr = <np.float64_t*> a.data
-    cdef int i, j, k
+    cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef ndarray[np.float64_t, ndim=2] total = np.empty((nr, nc), dtype=np.float64)
-    total.fill(nan)
-    cdef double cur_total
+    cdef ndarray[np.float64_t, ndim=2] total = np.zeros((nr, nc), dtype=np.float64)
+    cdef double cur_total = 0
 
     if axis == 0:
         for i in range(nc):
-            k = 0
-            cur_total = arr[i * nr + k]
-            while isnan(cur_total) and k < nr - 1:
-                k += 1
-                cur_total = arr[i * nr + k]
-            total[k, i] = cur_total
-            for j in range(k + 1, nr):
+            cur_total = 0
+            for j in range(nr):
                 if not isnan(arr[i * nr + j]):
                     cur_total += arr[i * nr + j]
                 total[j, i] = cur_total
     else:
         for i in range(nr):
-            k = 0
-            cur_total = arr[k * nr + i]
-            while isnan(cur_total) and k < nc - 1:
-                k += 1
-                cur_total = arr[k * nr + i]
-            total[i, k] = cur_total
-            for j in range(k + 1, nc):
+            cur_total = 0
+            for j in range(nc):
                 if not isnan(arr[j * nr + i]):
                     cur_total += arr[j * nr + i]
                 total[i, j] = cur_total
     return total
+
+# def cumsum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
+#     cdef np.float64_t *arr = <np.float64_t*> a.data
+#     cdef int i, j, k
+#     cdef int nc = a.shape[1]
+#     cdef int nr = a.shape[0]
+#     cdef ndarray[np.float64_t, ndim=2] total = np.empty((nr, nc), dtype=np.float64)
+#     total.fill(nan)
+#     cdef double cur_total
+#
+#     if axis == 0:
+#         for i in range(nc):
+#             k = 0
+#             cur_total = arr[i * nr + k]
+#             while isnan(cur_total) and k < nr - 1:
+#                 k += 1
+#                 cur_total = arr[i * nr + k]
+#             total[k, i] = cur_total
+#             for j in range(k + 1, nr):
+#                 if not isnan(arr[i * nr + j]):
+#                     cur_total += arr[i * nr + j]
+#                 total[j, i] = cur_total
+#     else:
+#         for i in range(nr):
+#             k = 0
+#             cur_total = arr[k * nr + i]
+#             while isnan(cur_total) and k < nc - 1:
+#                 k += 1
+#                 cur_total = arr[k * nr + i]
+#             total[i, k] = cur_total
+#             for j in range(k + 1, nc):
+#                 if not isnan(arr[j * nr + i]):
+#                     cur_total += arr[j * nr + i]
+#                 total[i, j] = cur_total
+#     return total
 
 def cumsum_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
     cdef np.int64_t *arr = <np.int64_t*> a.data
@@ -1724,11 +1787,14 @@ def cumsum_str(ndarray[object, ndim=2] a, axis, hasnans):
     if axis == 0:
         for i in range(nc):
             k = 0
-            cur_total = a[k, i]
-            while cur_total is nan and k < nr - 1:
+            while a[k, i] is nan and k < nr - 1:
+                total[k, i] = nan
                 k += 1
+            if a[k, i] is not nan:
                 cur_total = a[k, i]
-            total[k, i] = cur_total
+                total[k, i] = cur_total
+            else:
+                total[k, i] = nan
             for j in range(k + 1, nr):
                 try:
                     cur_total += a[j, i]
@@ -1738,11 +1804,14 @@ def cumsum_str(ndarray[object, ndim=2] a, axis, hasnans):
     else:
         for i in range(nr):
             k = 0
-            cur_total = a[i, k]
-            while cur_total is nan and k < nc - 1:
+            while a[i, k] is nan and k < nc - 1:
+                total[i, k] = nan
                 k += 1
+            if a[i, k] is not nan:
                 cur_total = a[i, k]
-            total[k, i] = cur_total
+                total[i, k] = cur_total
+            else:
+                total[i, k] = nan
             for j in range(k + 1, nc):
                 try:
                     cur_total += a[i, j]

@@ -36,7 +36,7 @@ class Column:
         return f'dtype={self.dtype}, loc={self.loc}, order={self.order}'
 
 
-def get_arr_length(arrs: List[ndarray]) -> int:
+def get_num_cols(arrs: List[ndarray]) -> int:
     col_length: int = 0
     arr: ndarray
 
@@ -339,7 +339,9 @@ def swap_axis_name(axis: str) -> str:
 def concat_stat_arrays(data_dict: Dict[str, List[ndarray]]) -> Dict[str, ndarray]:
     new_data: Dict[str, ndarray] = {}
     for dtype, arrs in data_dict.items():
-        if arrs:
+        if len(arrs) == 1:
+            new_data[dtype] = np.asfortranarray(arrs[0])
+        else:
             arrs = np.column_stack(arrs)
             new_data[dtype] = np.asfortranarray(arrs)
     return new_data
