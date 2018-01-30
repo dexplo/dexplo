@@ -313,6 +313,9 @@ class DataFrame(object):
         -------
         None
         """
+        if data.ndim == 1:
+            data = data[:, np.newaxis]
+
         data_dict: Dict[str, List[ndarray]] = {'f': [], 'i': [], 'b': [], 'O': []}
         for i, col in enumerate(self._columns):
             arr: ndarray = va.maybe_convert_object_array(data[:, i], col)
@@ -454,7 +457,7 @@ class DataFrame(object):
 
                 dec_len_arr = np.array(dec_len).clip(0, 6)
                 whole_len_arr = np.array(whole_len)
-                lengths = [len(column), (dec_len_arr + whole_len_arr).max() + 1]
+                lengths = [len(column), dec_len_arr.max() + whole_len_arr.max() + 1]
 
                 max_decimal = dec_len_arr.max()
                 long_len.append(max(lengths))
@@ -471,6 +474,35 @@ class DataFrame(object):
 
         return data_list, long_len, decimal_len, idx
 
+    # def __repr__(self) -> str:
+    #     data_list: List[List[str]]
+    #     decimal_len: List[int]
+    #     idx: List[int]
+    #     data_list, long_len, decimal_len, idx = self._build_repr()
+    #
+    #     return_string: str = ''
+    #     for i in range(len(idx) + 1):
+    #         for d, fl, dl in zip(data_list, long_len, decimal_len):
+    #             print('d is', d)
+    #             if isinstance(d[i], (float, np.floating)) and np.isnan(d[i]):
+    #                 d[i] = 'NaN'
+    #             if isinstance(d[i], bool):
+    #                 d[i] = str(d[i])
+    #             if isinstance(d[i], str):
+    #                 cur_str = d[i]
+    #                 if len(cur_str) > options.max_colwidth:
+    #                     cur_str = cur_str[:options.max_colwidth - 3] + "..."
+    #                 return_string += f'{cur_str: >{fl}}  '
+    #             else:
+    #                 print(i, d[i])
+    #                 return_string += f'{d[i]: >{fl}.{dl}f}  '
+    #         return_string += '\n'
+    #         if i == options.max_rows // 2 and len(self) > options.max_rows:
+    #             for j, fl in enumerate(long_len):
+    #                 return_string += f'{"...": >{str(fl)}}'
+    #             return_string += '\n'
+    #     return return_string
+
     def __repr__(self) -> str:
         data_list: List[List[str]]
         decimal_len: List[int]
@@ -478,24 +510,29 @@ class DataFrame(object):
         data_list, long_len, decimal_len, idx = self._build_repr()
 
         return_string: str = ''
-        for i in range(len(idx) + 1):
-            for d, fl, dl in zip(data_list, long_len, decimal_len):
-                if isinstance(d[i], (float, np.floating)) and np.isnan(d[i]):
-                    d[i] = 'NaN'
-                if isinstance(d[i], bool):
-                    d[i] = str(d[i])
-                if isinstance(d[i], str):
-                    cur_str = d[i]
+
+        for i in range(len(data_list[0])):
+            for j in range(len(data_list)):
+                d = data_list[j][i]
+                fl = long_len[j]
+                dl = decimal_len[j]
+
+                if isinstance(d, (float, np.floating)) and np.isnan(d):
+                    d = 'NaN'
+                if isinstance(d, bool):
+                    d = str(d)
+                if isinstance(d, str):
+                    cur_str = d
                     if len(cur_str) > options.max_colwidth:
                         cur_str = cur_str[:options.max_colwidth - 3] + "..."
                     return_string += f'{cur_str: >{fl}}  '
                 else:
-                    return_string += f'{d[i]: >{fl}.{dl}f}  '
-            return_string += '\n'
+                    return_string += f'{d: >{fl}.{dl}f}  '
+
             if i == options.max_rows // 2 and len(self) > options.max_rows:
                 for j, fl in enumerate(long_len):
                     return_string += f'{"...": >{str(fl)}}'
-                return_string += '\n'
+            return_string += '\n'
         return return_string
 
     def _repr_html_(self) -> str:
@@ -758,10 +795,11 @@ class DataFrame(object):
         Column Selection can be a mix of column names and integers, a boolean
         Parameters
         ----------
-        value
+        value : A tuple consisting of both a row and a column selection
 
         Returns
         -------
+        A new DataFrame
 
         """
         utils.validate_selection_size(value)
@@ -889,9 +927,9 @@ class DataFrame(object):
         include_final: List[str]
         current_dtypes = set(self._data.keys())
         if arg_name == 'include':
-            include_final = [dt for dt in clude_final if dt in current_dtypes]
+            include_final = [dt for dt in current_dtypes if dt in clude_final]
         else:
-            include_final = [dt for dt in clude_final if dt not in current_dtypes]
+            include_final = [dt for dt in current_dtypes if dt not in clude_final]
 
         new_data: Dict[str, ndarray] = {dtype: arr.copy('F')
                                         for dtype, arr in self._data.items()
@@ -923,7 +961,7 @@ class DataFrame(object):
         return df_new
 
     def _do_eval(self, op_string: str, other: Any) -> Tuple[Dict[str, List[ndarray]], ColInfoT]:
-        data_dict: Dict[str, List[ndarray]] = {'b': [], 'i': [], 'f': [], 'O': []}
+        data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         new_column_info: ColInfoT = {}
         kind_shape: Dict[str, Tuple[str, int]] = {}
         arr_res: ndarray
@@ -935,8 +973,14 @@ class DataFrame(object):
         order: int
 
         for old_kind, arr in self._data.items():
-            with np.errstate(invalid='ignore'):
-                arr_res = eval(f"{'arr'} .{op_string}({'other'})")
+            with np.errstate(invalid='ignore', divide='ignore'):
+                # will have to do custom cython function here for add,
+                # radd, gt, ge, lt, le for object array
+                if old_kind == 'O' and op_string in stat.funcs_str:
+                    func = stat.funcs_str[op_string]
+                    arr_res = func(arr, other)
+                else:
+                    arr_res = eval(f"{'arr'} .{op_string}({'other'})")
             new_kind = arr_res.dtype.kind
 
             cur_len = utils.get_arr_length(data_dict.get(new_kind, []))
@@ -951,15 +995,8 @@ class DataFrame(object):
 
     def _op(self, other, op_string):
         if isinstance(other, (int, float, bool)):
-            if self._is_numeric_or_bool():
+            if self._is_numeric_or_bool() or op_string in ['__mul__', '__rmul__']:
                 dd, ncd = self._do_eval(op_string, other)
-            elif self._is_string():
-                if op_string in ['__mul__', '__rmul__']:
-                    dd, ncd = self._do_eval(op_string, other)
-                else:
-                    raise TypeError('DataFrames consisting of all strings '
-                                    'work only with the multiplication '
-                                    'operator with numerics')
             else:
                 raise TypeError('You have a mix of numeric and string data '
                                 'types. Operation is ambiguous.')
@@ -979,8 +1016,13 @@ class DataFrame(object):
         else:
             raise TypeError('other must be int, float, or DataFrame')
 
-        new_data = {dt: np.concatenate(arrs, axis=1)
-                    for dt, arrs in dd.items() if arrs}
+        new_data: Dict[str, ndarray] = {}
+        for dt, arrs in dd.items():
+            if len(arrs) == 1:
+                new_data[dt] = arrs[0]
+            else:
+                new_data[dt] = np.concatenate(arrs, axis=1)
+
         return self._construct_from_new(new_data, ncd, self._columns.copy())
 
     def __add__(self, other):
