@@ -6,16 +6,15 @@ from dexplo._libs import validate_arrays as va
 
 _DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str'}
 _KIND = {'int': 'i', 'float': 'f', 'bool': 'b', 'str': 'O'}
-_KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'],
-              'str': ['O'], 'number': ['i', 'f']}
+_KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'], 'str': ['O'], 'number': ['i', 'f']}
 _DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'O'}
 _KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'O': 'O'}
 _NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'O': 'O'}
 
 _AXIS = {'rows': 0, 'columns': 1}
 _NON_AGG_FUNCS = {'cumsum', 'cummin', 'cummax'}
-_COLUMN_STACK_FUNCS = {'cumsum', 'cummin', 'cummax', 'mean',
-                       'median', 'var', 'std', 'argmax', 'argmin', 'quantile'}
+_COLUMN_STACK_FUNCS = {'cumsum', 'cummin', 'cummax', 'mean', 'median', 'var', 'std',
+                       'argmax', 'argmin', 'quantile', 'nunique'}
 
 ColumnSelection = Union[int, str, slice, List[Union[str, int]]]
 RowSelection = Union[int, slice, List[int], 'DataFrame']

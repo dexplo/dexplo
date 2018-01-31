@@ -249,7 +249,8 @@ class DataFrame(object):
                 first_len: int = len(arr)
             elif len(arr) != first_len:
                 raise ValueError('All columns must be the same length')
-        self._concat_arrays(data_dict)
+
+        self._data = self._concat_arrays(data_dict)
 
     def _validate_data_from_array(self, data: ndarray) -> int:
         """
@@ -323,20 +324,22 @@ class DataFrame(object):
             loc: int = utils.get_num_cols(data_dict.get(kind, []))
             data_dict[kind].append(arr)
             self._column_info[col] = utils.Column(kind, loc, i)
-        # use utils.concat_stat_arrays?
-        self._concat_arrays(data_dict)
 
-    def _concat_arrays(self, data_dict: Dict[str, List[ndarray]]):
+        self._data = self._concat_arrays(data_dict)
+
+    def _concat_arrays(self, data_dict: Dict[str, List[ndarray]]) -> Dict[str, ndarray]:
         """
         Concatenates the lists for each kind into a single array
         """
+        new_data: Dict[str, ndarray] = {}
         for dtype, arrs in data_dict.items():
             if arrs:
                 if len(arrs) == 1:
-                    self._data[dtype] = arrs[0][:, np.newaxis]
+                    new_data[dtype] = arrs[0][:, np.newaxis]
                 else:
                     arrs = np.column_stack(arrs)
-                    self._data[dtype] = np.asfortranarray(arrs)
+                    new_data[dtype] = np.asfortranarray(arrs)
+        return new_data
 
     @property
     def values(self) -> ndarray:
@@ -1875,37 +1878,85 @@ class DataFrame(object):
         return self._construct_from_new(new_data, new_column_info, self._columns.copy())
 
     def quantile(self, axis: str = 'rows', q: float = 0.5):
+        """
+        Computes the quantile of each numeric/boolean column
+
+        Parameters
+        ----------
+        axis : 'rows' or 'columns'
+        q : a float between 0 and 1
+
+        Returns
+        -------
+        A DataFrame of the quantile for each column/row
+        """
         if not utils.is_number(q):
             raise TypeError('`q` must be a number between 0 and 1')
         if q < 0 or q > 1:
             raise ValueError('`q` must be between 0 and 1')
         return self._stat_funcs('quantile', axis, q=q)
 
-    def describe(self):
-        df = self.select_dtypes('number')
-        num_cols = df.shape[1]
-        new_data = {'Column Name': df._columns.astype('O'),
-                    'count': np.empty(num_cols, dtype=np.int64),
-                    'mean': np.empty(num_cols, dtype=np.float64),
-                    'std': np.empty(num_cols, dtype=np.float64),
-                    'min': np.empty(num_cols, dtype=np.float64),
-                    '25%': np.empty(num_cols, dtype=np.float64),
-                    '50%': np.empty(num_cols, dtype=np.float64),
-                    '75%': np.empty(num_cols, dtype=np.float64),
-                    'max': np.empty(num_cols, dtype=np.float64)}
-        new_columns = np.array(['Column Name', 'count', 'mean', 'std', 'min',
-                                '25%', '50%', '75%', 'max'])
-        for i, col in enumerate(df._columns):
-            arr = df._data[col]
-            kind = arr.dtype.kind
-            for name in new_columns[1:]:
-                func = stat.funcs[kind][1].get(name)
-                if func is not None:
-                    new_data[name][i] = func(arr)
-                else:
-                    new_data[name][i] = -999
+    def _get_dtype_list(self, array=False):
+        dtypes = [utils.convert_kind_to_dtype(self._column_info[col].dtype)
+                  for col in self._columns]
+        if array:
+            return np.array(dtypes, dtype='O')
+        return dtypes
 
-        return self._construct_from_new(new_data, new_columns)
+    def describe(self, percentiles=[.25, .5, .75], summary_type='numeric'):
+        if summary_type == 'numeric':
+            df = self.select_dtypes('number')
+        elif summary_type == 'non-numeric':
+            df = self.select_dtypes(['str', 'bool'])
+        else:
+            raise ValueError('`summary_type` must be either "numeric" or "non-numeric"')
+        data_dict = defaultdict(list)
+        new_column_info = {}
+        new_columns = []
+
+        if summary_type == 'numeric':
+
+            data_dict['O'].append(df._columns.copy('F'))
+            new_column_info['Column Name'] = utils.Column('O', 0, 0)
+            new_columns.append('Column Name')
+
+            dtypes = df._get_dtype_list(True)
+            data_dict['O'].append(dtypes)
+            new_column_info['Data Type'] = utils.Column('O', 1, 1)
+            new_columns.append('Data Type')
+
+            funcs = [('count', ('i', {})),
+                     ('mean', ('f', {})),
+                     ('std', ('f', {})),
+                     ('min', ('f', {}))]
+
+            for perc in percentiles:
+                funcs.append(('quantile', ('f', {'q': perc})))
+
+            funcs.append(('max', ('f', {})))
+
+            order = 1
+            for func_name, (dtype, kwargs) in funcs:
+                loc = len(data_dict[dtype])
+                order += 1
+                value = getattr(df, func_name)(**kwargs).values[0]
+                data_dict[dtype].append(value)
+                if func_name == 'quantile':
+                    name = f"{kwargs['q'] * 100: .2g}%"
+                else:
+                    name = func_name
+                new_column_info[name] = utils.Column(dtype, loc, order)
+                new_columns.append(name)
+
+            loc = len(data_dict['f'])
+            data_dict['f'].append(df.isna().mean().values[0])
+            new_column_info['Null %'] = utils.Column('f', loc, order + 1)
+            new_columns.append('Null %')
+
+
+            new_data = df._concat_arrays(data_dict)
+
+        return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def dropna(self, axis='rows', how='any', thresh=None, subset=None):
         """
@@ -2024,8 +2075,9 @@ class DataFrame(object):
 
     def unique(self, col):
         self._validate_column_name(col)
-        arr = self._get_col_array(col)
-        kind = arr.dtype.kind
+        kind, loc, _ = self._column_info[col].values
+        arr = self._data[kind][:, loc]
+
         if kind == 'i':
             amin, amax = _math.min_max_int(arr)
             if amax - amin < 10_000_000:
@@ -2036,7 +2088,10 @@ class DataFrame(object):
             return _math.unique_float(arr)
         elif kind == 'b':
             return _math.unique_bool(arr)
-        return _math.unique_object(arr)
+        return _math.unique_str(arr)
+
+    def nunique(self, axis='rows', count_na=False):
+        return self._stat_funcs('nunique', axis, count_na=count_na)
 
     def value_counts(self, col):
         self._validate_column_name(col)

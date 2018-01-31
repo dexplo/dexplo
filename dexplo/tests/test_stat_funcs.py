@@ -723,3 +723,62 @@ class TestFrameConstructor(object):
 
         with pytest.raises(TypeError):
             df.select_dtypes('str').corr()
+
+    def test_quantile(self):
+        data = {'a': [0, 0, 5, 9, 3, 4, 5, 1],
+                'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
+                'c': [''] + list('bgggzgh'),
+                'd': [False, False, True, False] * 2,
+                'e': [0, 20, 30, 4, 5, 6, 7, 8],
+                'f': [0., 3, 3, 3, 11, 4, 5, 1],
+                'g': ['', None, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
+                'h': [0, 4, 5, 6, 7, 8, 9, 0],
+                'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
+                'j': np.zeros(8, dtype='int'),
+                'k': np.ones(8) - 1,
+                'l': [np.nan] * 8}
+
+        df = de.DataFrame(data)
+        df1 = df.quantile(q=.5)
+        df2 = de.DataFrame({'a': [3.5],
+                            'b': [3.0],
+                            'd': [0.0],
+                            'e': [6.5],
+                            'f': [3.0],
+                            'h': [5.5],
+                            'i': [4.5],
+                            'j': [0.0],
+                            'k': [0.0],
+                            'l': [nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.quantile(q=.8)
+        df2 = de.DataFrame({'a': [5.0],
+                            'b': [8.0],
+                            'd': [0.6],
+                            'e': [15.2],
+                            'f': [4.6],
+                            'h': [7.6],
+                            'i': [6.6],
+                            'j': [0.0],
+                            'k': [0.0],
+                            'l': [nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.select_dtypes('int').quantile(q=.2)
+        df2 = de.DataFrame({'a': [0.4],
+                            'e': [4.4],
+                            'h': [1.6],
+                            'i': [2.4],
+                            'j': [0.0]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.quantile('columns', q=.5)
+        df2 = de.DataFrame({'quantile': [0.0, 1.512344353, 5.0, 4.0, 3.5, 3.0, 2.0, 1.0]})
+        assert_frame_equal(df1, df2)
+
+        with pytest.raises(TypeError):
+            df.quantile(q='asd')
+
+        with pytest.raises(ValueError):
+            df.quantile(q=1.1)

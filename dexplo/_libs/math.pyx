@@ -124,7 +124,31 @@ def min_max_float(ndarray[np.float64_t] a):
             high = a[i]
     return low, high
 
-def unique_object(ndarray[object] a):
+
+def min_max_int2(ndarray[np.int64_t, ndim=2] a, axis):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.int64_t] lows
+    cdef ndarray[np.int64_t] highs
+    cdef np.int64_t low, high
+
+    if axis == 0:
+        lows = np.empty(nc, dtype='int64')
+        highs = np.empty(nc, dtype='int64')
+        for i in range(nc):
+            low = a[0, i]
+            high = a[0, i]
+            for j in range(nr):
+                if a[j, i] < low:
+                    low = a[j, i]
+                if a[j, i] > high:
+                    high = a[j, i]
+            lows[i] = low
+            highs[i] = high
+    return lows, highs
+
+def unique_str(ndarray[object] a):
     cdef int i, len_before
     cdef int n = len(a)
     cdef set s = set()
@@ -181,6 +205,194 @@ def unique_bounded(ndarray[np.int64_t] a, long amin):
             unique[a[i] - amin] = True
             result.append(a[i])
     return np.array(result)
+
+def nunique_str(ndarray[object, ndim=2] a, axis, count_na=False, **kwargs):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef set s
+    cdef ndarray[np.int64_t] result
+
+    if axis == 0:
+        result = np.empty(nc, dtype='int64')
+        if count_na:
+            for i in range(nc):
+                s = set()
+                for j in range(nr):
+                    s.add(a[j, i])
+                result[i] = len(s)
+        else:
+            for i in range(nc):
+                s = set()
+                for j in range(nr):
+                    if a[j, i] is not nan:
+                        s.add(a[j, i])
+                result[i] = len(s)
+
+    if axis == 1:
+        result = np.empty(nr, dtype='int64')
+        if count_na:
+            for i in range(nr):
+                s = set()
+                for j in range(nc):
+                    s.add(a[i, j])
+                result[i] = len(s)
+        else:
+            for i in range(nr):
+                s = set()
+                for j in range(nc):
+                    if a[i, j] is not nan:
+                        s.add(a[i, j])
+                result[i] = len(s)
+
+    return result
+
+def nunique_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef set s = set()
+    cdef ndarray[np.int64_t] result
+
+    lows, highs = min_max_int2(a, axis)
+    if (highs - lows < 10_000_000).all():
+        return nunique_int_bounded(a, axis, lows, highs)
+
+    if axis == 0:
+        result = np.empty(nc, dtype='int64')
+        for i in range(nc):
+            s = set()
+            for j in range(nr):
+                s.add(a[j, i])
+            result[i] = len(s)
+    else:
+        result = np.empty(nr, dtype='int64')
+        for i in range(nr):
+            s = set()
+            for j in range(nc):
+                s.add(a[i, j])
+            result[i] = len(s)
+
+    return result
+
+def nunique_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, **kwargs):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.uint8_t, cast=True] unique
+    cdef list result
+    cdef ndarray[np.int64_t] final_result
+
+    if axis == 0:
+        final_result = np.empty(nc, dtype='int64')
+        for i in range(nc):
+            result = []
+            unique = np.zeros(2, dtype=bool)
+            for j in range(nr):
+                if not unique[a[j, i]]:
+                    unique[a[j, i]] = True
+                    result.append(a[j, i])
+                if len(result) == 2:
+                    break
+            final_result[i] = len(result)
+    else:
+        final_result = np.empty(nr, dtype='int64')
+        for i in range(nr):
+            result = []
+            unique = np.zeros(2, dtype=bool)
+            for j in range(nc):
+                if not unique[a[i, j]]:
+                    unique[a[i, j]] = True
+                    result.append(a[i, j])
+                if len(result) == 2:
+                    break
+            final_result[i] = len(result)
+
+    return final_result
+
+def nunique_float(ndarray[np.float64_t, ndim=2] a, axis, count_na=False, **kwargs):
+    cdef int i, j, ct_nan
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef set s
+    cdef ndarray[np.int64_t] result
+
+    if axis == 0:
+        result = np.empty(nc, dtype='int64')
+        if count_na:
+            for i in range(nc):
+                s = set()
+                ct_nan = 0
+                for j in range(nr):
+                    if isnan(a[j, i]):
+                        ct_nan = 1
+                    else:
+                        s.add(a[j, i])
+                result[i] = len(s) + ct_nan
+        else:
+            for i in range(nc):
+                s = set()
+                for j in range(nr):
+                    if not isnan(a[j, i]):
+                        s.add(a[j, i])
+                result[i] = len(s)
+
+    if axis == 1:
+        result = np.empty(nr, dtype='int64')
+        if count_na:
+            for i in range(nr):
+                s = set()
+                ct_nan = 0
+                for j in range(nc):
+                    if isnan(a[j, i]):
+                        ct_nan = 1
+                    else:
+                        s.add(a[i, j])
+                result[i] = len(s) + ct_nan
+        else:
+            for i in range(nr):
+                s = set()
+                for j in range(nc):
+                    if not isnan(a[i, j]):
+                        s.add(a[i, j])
+                result[i] = len(s)
+
+    return result
+
+def nunique_int_bounded(ndarray[np.int64_t, ndim=2] a, axis,
+                        ndarray[np.int64_t] lows, ndarray[np.int64_t] highs,  **kwargs):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.uint8_t, cast=True] unique
+    cdef np.int64_t count, amin, rng
+    cdef ndarray[np.int64_t] result
+
+    if axis == 0:
+        result = np.empty(nc, dtype='int64')
+        for i in range(nc):
+            count = 0
+            amin = lows[i]
+            rng = highs[i] - lows[i] + 1
+            unique = np.zeros(rng, dtype=bool)
+            for j in range(nr):
+                if not unique[a[j, i] - amin]:
+                    unique[a[j, i] - amin] = True
+                    count += 1
+            result[i] = count
+    else:
+        result = np.empty(nr, dtype='int64')
+        for i in range(nr):
+            count = 0
+            amin = lows[i]
+            rng = highs[i] - lows[i] + 1
+            unique = np.zeros(rng, dtype=bool)
+            for j in range(nc):
+                if not unique[a[i, j] - amin]:
+                    unique[a[i, j] - amin] = True
+                    count += 1
+            result[i] = count
+    return result
 
 def sum_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     cdef long *arr = <long*> a.data
