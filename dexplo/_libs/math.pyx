@@ -7,7 +7,7 @@ from numpy import nan
 from collections import defaultdict
 import cython
 from cpython cimport dict, set, list, tuple
-from libc.math cimport isnan, sqrt
+from libc.math cimport isnan, sqrt, floor, ceil
 
 try:
     import bottleneck as bn
@@ -1845,7 +1845,42 @@ def isna_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.uint8_t, cast=True] h
             b[j, i] = isnan(arr[i * nr + j])
     return b
 
-def cov(ndarray[double] x, ndarray[double] y):
+def cov_float(ndarray[double] x, ndarray[double] y):
+    cdef int i, j = 0
+    cdef int n = len(x)
+    cdef int ct = 0
+    if (n < 2):
+        return np.nan
+    cdef double kx, ky
+    cdef double Ex = 0
+    cdef double Ey = 0
+    cdef double Exy = 0
+    cdef double x_diff, y_diff
+
+    kx = x[j]
+    ky = y[j]
+    Ex = Ey = Exy = 0
+    while (isnan(kx) or isnan(ky)) and j < n - 1:
+        j += 1
+        if isnan(kx):
+            kx = x[j]
+        if isnan(ky):
+            ky = y[j]
+
+    for i in range(j, n):
+        if isnan(x[i]) or isnan(y[i]):
+            continue
+        ct += 1
+        x_diff = x[i] - kx
+        y_diff = y[i] - ky
+        Ex += x_diff
+        Ey += y_diff
+        Exy += x_diff * y_diff
+    if ct < 2:
+        return nan
+    return (Exy - Ex * Ey / ct) / (ct - 1)
+
+def cov_int(ndarray[np.int64_t] x, ndarray[np.int64_t] y):
     cdef int i
     cdef int n = len(x)
     cdef int ct = 0
@@ -1856,27 +1891,23 @@ def cov(ndarray[double] x, ndarray[double] y):
     cdef double Ey = 0
     cdef double Exy = 0
     cdef double x_diff, y_diff
-    cdef double cov
 
     kx = x[0]
     ky = y[0]
     Ex = Ey = Exy = 0
     for i in range(n):
-        if isnan(x[i]) or isnan(y[i]):
-            continue
         ct += 1
         x_diff = x[i] - kx
         y_diff = y[i] - ky
         Ex += x_diff
         Ey += y_diff
         Exy += x_diff * y_diff
-    if ct == 0:
+    if ct < 2:
         return nan
-    cov = (Exy - Ex * Ey / ct) / (ct - 1)
-    return cov
+    return (Exy - Ex * Ey / ct) / (ct - 1)
 
-def corr(ndarray[double] x, ndarray[double] y):
-    cdef int i
+def corr_float(ndarray[double] x, ndarray[double] y):
+    cdef int i, j = 0
     cdef int n = len(x)
     cdef int ct = 0
     if (n < 2):
@@ -1885,14 +1916,22 @@ def corr(ndarray[double] x, ndarray[double] y):
     cdef double Ex = 0
     cdef double Ey = 0
     cdef double Exy = 0
-    
+
     cdef double Ex2 = 0
     cdef double Ey2 = 0
     cdef double x_diff, y_diff
     cdef double cov, stdx, stdy
-    kx = x[0]
-    ky = y[0]
+
+    kx = x[j]
+    ky = y[j]
     Ex = Ey = Exy = 0
+    while (isnan(kx) or isnan(ky)) and j < n - 1:
+        j += 1
+        if isnan(kx):
+            kx = x[j]
+        if isnan(ky):
+            ky = y[j]
+
     for i in range(n):
         if isnan(x[i]) or isnan(y[i]):
             continue
@@ -1902,7 +1941,7 @@ def corr(ndarray[double] x, ndarray[double] y):
         Ex += x_diff
         Ey += y_diff
         Exy += x_diff * y_diff
-        
+
         Ex2 += x_diff ** 2
         Ey2 += y_diff ** 2
     if ct < 2:
@@ -1911,3 +1950,89 @@ def corr(ndarray[double] x, ndarray[double] y):
     stdx = (Ex2 - (Ex * Ex) / ct)/(ct - 1)
     stdy = (Ey2 - (Ey * Ey) / ct)/(ct - 1)
     return cov / (np.sqrt(stdx) * np.sqrt(stdy))
+
+def corr_int(ndarray[np.int64_t] x, ndarray[np.int64_t] y):
+    cdef int i
+    cdef int n = len(x)
+    cdef int ct = 0
+    if (n < 2):
+        return np.nan
+    cdef double kx, ky
+    cdef double Ex = 0
+    cdef double Ey = 0
+    cdef double Exy = 0
+
+    cdef double Ex2 = 0
+    cdef double Ey2 = 0
+    cdef double x_diff, y_diff
+    cdef double cov, stdx, stdy
+    kx = x[0]
+    ky = y[0]
+    Ex = Ey = Exy = 0
+    for i in range(n):
+        ct += 1
+        x_diff = x[i] - kx
+        y_diff = y[i] - ky
+        Ex += x_diff
+        Ey += y_diff
+        Exy += x_diff * y_diff
+
+        Ex2 += x_diff ** 2
+        Ey2 += y_diff ** 2
+    if ct < 2:
+        return np.nan
+    cov = (Exy - Ex * Ey / ct) / (ct - 1)
+    stdx = (Ex2 - (Ex * Ex) / ct)/(ct - 1)
+    stdy = (Ey2 - (Ey * Ey) / ct)/(ct - 1)
+    return cov / (np.sqrt(stdx) * np.sqrt(stdy))
+
+def get_quantile_float(ndarray[np.float64_t] a, double percent):
+
+    cdef double k = (len(a) - 1) * percent
+    cdef int f, c
+    cdef double d0, d1
+
+    f = <int> floor(k)
+    c = <int> ceil(k)
+    if f == c:
+        return a[f]
+    d0 = a[f] * (c - k)
+    d1 = a[c] * (k - f)
+    return d0 + d1
+
+def quantile_float(ndarray[np.float64_t, ndim=2] a, axis, double q, ndarray[np.uint8_t, cast=True] hasnans):
+    cdef int i, n
+    cdef ndarray[np.int64_t] count
+    cdef ndarray[np.float64_t] b
+
+    count = (~np.isnan(a)).sum(axis)
+    if count.sum() == a.size:
+        return np.percentile(a, q * 100, axis)
+
+    a = np.sort(a, axis=axis)
+    n = len(count)
+    b = np.empty(n, dtype='float64')
+    if axis == 0:
+        for i in range(n):
+            if count[i] == 0:
+                b[i] = nan
+            elif count[i] == 1:
+                b[i] = a[0, i]
+            else:
+                b[i] = get_quantile_float(a[:count[i], i], q)
+    else:
+        for i in range(n):
+            if count[i] == 0:
+                b[i] = nan
+            elif count[i] == 1:
+                b[i] = a[i, 0]
+            else:
+                b[i] = get_quantile_float(a[i, :count[i]], q)
+
+    return b
+
+def quantile_int(ndarray[np.int64_t, ndim=2] a, axis, double q, ndarray[np.uint8_t, cast=True] hasnans):
+    return np.percentile(a, q * 100, axis)
+
+def quantile_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, double q, ndarray[np.uint8_t, cast=True] hasnans):
+    return np.percentile(a, q * 100, axis)

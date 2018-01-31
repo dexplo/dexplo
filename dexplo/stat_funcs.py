@@ -1,5 +1,11 @@
 import dexplo._libs.math as m
 import dexplo.math_columns as mc
+import numpy as np
+
+
+def _nanpercentile(a, q, axis, **kwargs):
+    return np.nanpercentile(a, q, axis)
+
 
 funcs = {'i': {'min': m.min_int,
                'max': m.max_int,
@@ -15,7 +21,8 @@ funcs = {'i': {'min': m.min_int,
                'count': m.count_int,
                'cummin': m.cummin_int,
                'cummax': m.cummax_int,
-               'cumsum': m.cumsum_int},
+               'cumsum': m.cumsum_int,
+               'quantile': m.quantile_int},
 
          'b': {'min': m.min_bool,
                'max': m.max_bool,
@@ -31,7 +38,8 @@ funcs = {'i': {'min': m.min_int,
                'count': m.count_bool,
                'cummin': m.cummin_bool,
                'cummax': m.cummax_bool,
-               'cumsum': m.cumsum_bool},
+               'cumsum': m.cumsum_bool,
+               'quantile': m.quantile_bool},
 
          'f': {'min': m.min_float,
                'max': m.max_float,
@@ -47,7 +55,8 @@ funcs = {'i': {'min': m.min_int,
                'count': m.count_float,
                'cummin': m.cummin_float,
                'cummax': m.cummax_float,
-               'cumsum': m.cumsum_float},
+               'cumsum': m.cumsum_float,
+               'quantile': m.quantile_float},
 
          'O': {'min': m.min_str,
                'max': m.max_str,

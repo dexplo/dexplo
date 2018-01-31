@@ -71,9 +71,9 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] argmax
 - [x] argmin
 - [x] clip
-- [ ] corr
+- [x] corr
 - [x] count
-- [ ] cov
+- [x] cov
 - [x] cummax
 - [x] cummin
 - [ ] cumprod
@@ -86,7 +86,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] mode
 - [ ] nlargest
 - [ ] nsmallest
-- [ ] quantile
+- [x] quantile
 - [ ] rank
 - [x] std
 - [x] sum

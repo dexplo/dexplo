@@ -15,7 +15,7 @@ _NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'O': 'O'}
 _AXIS = {'rows': 0, 'columns': 1}
 _NON_AGG_FUNCS = {'cumsum', 'cummin', 'cummax'}
 _COLUMN_STACK_FUNCS = {'cumsum', 'cummin', 'cummax', 'mean',
-                       'median', 'var', 'std', 'argmax', 'argmin'}
+                       'median', 'var', 'std', 'argmax', 'argmin', 'quantile'}
 
 ColumnSelection = Union[int, str, slice, List[Union[str, int]]]
 RowSelection = Union[int, slice, List[int], 'DataFrame']

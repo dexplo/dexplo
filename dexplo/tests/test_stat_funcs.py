@@ -617,3 +617,109 @@ class TestFrameConstructor(object):
                            'f': [nan, 10, 4, nan],
                            'g': ['', None, 'ad', nan],
                            'h': [nan] * 4})
+
+        df1 = df.dropna(thresh=.5)
+        df2 = df.copy()
+        assert_frame_equal(df1, df2)
+
+        df1 = df.dropna(thresh=.51)
+        df2 = df[:3, :]
+        assert_frame_equal(df1, df2)
+
+        df1 = df.dropna(thresh=5)
+        df2 = df[:3, :]
+        assert_frame_equal(df1, df2)
+
+        df1 = df.dropna(thresh=6)
+        df2 = df[1:3, :]
+        assert_frame_equal(df1, df2)
+
+        df1 = df.dropna('columns', thresh=.75)
+        df2 = df[:, ['a', 'c', 'd', 'e']]
+        assert_frame_equal(df1, df2)
+
+        df1 = df.dropna(subset=['a', 'd'])
+        df2 = df.copy()
+        assert_frame_equal(df1, df2)
+
+        df1 = df.dropna(subset=['a', 'd', 'f'])
+        df2 = df[[1, 2], :]
+        assert_frame_equal(df1, df2)
+
+        df1 = df.dropna(subset=['a', 'd', 'f', 'c'], thresh=.51)
+        df2 = df[1:, :]
+        assert_frame_equal(df1, df2)
+
+        df1 = df.dropna('columns', subset=[1, 2], thresh=2)
+        df2 = df[:, ['a', 'c', 'd', 'e', 'f']]
+        assert_frame_equal(df1, df2)
+
+    def test_cov(self):
+        df = de.DataFrame({'a': [0, 0, 5, 1],
+                           'b': [0, 1.5, nan, nan],
+                           'c': [nan, 'g', 'b', 'asdf'],
+                           'd': [False, False, True, True],
+                           'e': [90, 20, 30, 1],
+                           'f': [nan, 10, 4, nan],
+                           'g': ['', None, 'ad', nan],
+                           'h': [nan] * 4})
+        df1 = df.cov()
+        data = {'Column Name': ['a', 'b', 'd', 'e', 'f', 'h'],
+                'a': [5.666666666666667, 0.0, 1.0, -20.166666666666668, -15.0, nan],
+                'b': [0.0, 1.125, 0.0, -52.5, nan, nan],
+                'd': [1.0, 0.0, 0.3333333333333333, -13.166666666666666, -3.0, nan],
+                'e': [-20.166666666666668,
+                      -52.5,
+                      -13.166666666666666,
+                      1476.9166666666667,
+                      -30.0,
+                      nan],
+                'f': [-15.0, nan, -3.0, -30.0, 18.0, nan],
+                'h': [nan, nan, nan, nan, nan, nan]}
+        df2 = de.DataFrame(data)
+        assert_frame_equal(df1, df2)
+
+        df1 = df.select_dtypes('int').cov()
+        data = {'Column Name': ['a', 'e'],
+                'a': [5.666666666666667, -20.166666666666668],
+                'e': [-20.166666666666668, 1476.9166666666667]}
+        df2 = de.DataFrame(data)
+        assert_frame_equal(df1, df2)
+
+        with pytest.raises(TypeError):
+            df.select_dtypes('str').cov()
+
+    def test_corr(self):
+        df = de.DataFrame({'a': [0, 0, 5, 1],
+                           'b': [0, 1.5, nan, nan],
+                           'c': [nan, 'g', 'b', 'asdf'],
+                           'd': [False, False, True, True],
+                           'e': [90, 20, 30, 1],
+                           'f': [nan, 10, 4, nan],
+                           'g': ['', None, 'ad', nan],
+                           'h': [nan] * 4})
+        df1 = df.corr()
+        data = {'Column Name': ['a', 'b', 'd', 'e', 'f', 'h'],
+                'a': [1.0, nan, 0.7276068751089989, -0.2204409585872243, -1.0, nan],
+                'b': [nan, 1.0000000000000002, nan, -1.0, nan, nan],
+                'd': [0.7276068751089989, nan, 1.0, -0.5934149352143404, -1.0, nan],
+                'e': [-0.2204409585872243,
+                      -1.0,
+                      -0.5934149352143404,
+                      1.0000000000000002,
+                      -1.0,
+                      nan],
+                'f': [-1.0, nan, -1.0, -1.0, 1.0000000000000002, nan],
+                'h': [nan, nan, nan, nan, nan, nan]}
+        df2 = de.DataFrame(data)
+        assert_frame_equal(df1, df2)
+
+        df1 = df.select_dtypes('int').corr()
+        data = {'Column Name': ['a', 'e'],
+                'a': [1.0, -0.2204409585872243],
+                'e': [-0.2204409585872243, 1.]}
+        df2 = de.DataFrame(data)
+        assert_frame_equal(df1, df2)
+
+        with pytest.raises(TypeError):
+            df.select_dtypes('str').corr()
