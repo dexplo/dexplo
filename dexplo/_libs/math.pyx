@@ -166,6 +166,11 @@ def unique_int(ndarray[np.int64_t] a):
     cdef int n = len(a)
     cdef set s = set()
     cdef list l = []
+
+    low, high = min_max_int(a)
+    if high - low < 10_000_000:
+        return unique_int_bounded(a, low, high)
+
     for i in range(n):
         len_before = len(s)
         s.add(a[i])
@@ -192,20 +197,29 @@ def unique_float(ndarray[double] a):
     cdef list l = []
     for i in range(n):
         len_before = len(s)
-        s.add(a[i])
+        if isnan(a[i]):
+            s.add(np.nan)
+        else:
+            s.add(a[i])
         if len(s) > len_before:
             l.append(a[i])
     return np.array(l, dtype=np.float64)
 
-def unique_bounded(ndarray[np.int64_t] a, long amin):
-    cdef int i, n = len(a)
-    cdef ndarray[np.uint8_t, cast=True] unique = np.zeros(n, dtype=bool)
+def unique_int_bounded(ndarray[np.int64_t] a, np.int64_t low, np.int64_t high):
+    cdef int i
+    cdef int n = len(a)
+    cdef ndarray[np.uint8_t, cast=True] unique
+    cdef np.int64_t rng
     cdef list result = []
+
+    rng = high - low + 1
+    unique = np.zeros(rng, dtype='bool')
+
     for i in range(n):
-        if not unique[a[i] - amin]:
-            unique[a[i] - amin] = True
+        if not unique[a[i] - low]:
+            unique[a[i] - low] = True
             result.append(a[i])
-    return np.array(result)
+    return np.array(result, dtype='int64')
 
 def nunique_str(ndarray[object, ndim=2] a, axis, count_na=False, **kwargs):
     cdef int i, j, ct_nan

@@ -78,7 +78,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] cummin
 - [ ] cumprod
 - [x] cumsum
-- [ ] describe
+- [x] describe
 - [x] max
 - [x] min
 - [x] median
@@ -91,8 +91,8 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] std
 - [x] sum
 - [x] var
-- [ ] unique
-- [ ] nunique
+- [x] unique
+- [x] nunique
 
 **Selection**
 

@@ -19,7 +19,7 @@ DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
 ColumnT = Optional[Union[List[str], ndarray]]
 ColInfoT = Dict[str, utils.Column]
 
-IntStr = TypeVar('IntStr', int, float)
+IntStr = TypeVar('IntStr', int, str)
 IntNone = TypeVar('IntNone', int, None)
 ListIntNone = List[IntNone]
 
@@ -1691,7 +1691,10 @@ class DataFrame(object):
             if utils.is_column_stack_func(name):
                 arr = self._values_raw(good_dtypes)
                 kind = arr.dtype.kind
-                hasnans = self._hasnans_dtype(kind)
+                if kind in 'fO':
+                    hasnans = self._hasnans_dtype(kind)
+                else:
+                    hasnans = None
                 kwargs.update({'hasnans': hasnans})
                 func = stat.funcs[kind][name]
                 result = self._get_stat_func_result(func, arr, 1, kwargs)
@@ -1907,6 +1910,10 @@ class DataFrame(object):
         return self._hasnans.get(kind, hasnans)
 
     def isna(self) -> 'DataFrame':
+        """
+        Returns a DataFrame of booleans the same size as the original indicating whether or not
+        each value is NaN or not.
+        """
         data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         kind_shape: Dict[str, int] = OrderedDict()
         total_shape: int = 0
@@ -1956,8 +1963,22 @@ class DataFrame(object):
                   for col in self._columns]
         return np.array(dtypes, dtype='O')
 
+    def _null_pct(self):
+        return self.isna().mean()
+
     def describe(self, percentiles: List[float] = [.25, .5, .75],
                  summary_type: str = 'numeric') -> 'DataFrame':
+        """
+        Provides several summary statistics for each column
+        Parameters
+        ----------
+        percentiles
+        summary_type
+
+        Returns
+        -------
+
+        """
         if summary_type == 'numeric':
             df = self.select_dtypes('number')
         elif summary_type == 'non-numeric':
@@ -1980,6 +2001,7 @@ class DataFrame(object):
             new_columns.append('Data Type')
 
             funcs: List[Tuple[str, Tuple[str, Dict]]] = [('count', ('i', {})),
+                                                         ('_null_pct', ('f', {})),
                                                          ('mean', ('f', {})),
                                                          ('std', ('f', {})),
                                                          ('min', ('f', {}))]
@@ -1989,29 +2011,28 @@ class DataFrame(object):
 
             funcs.append(('max', ('f', {})))
 
+            change_name: Dict[str, Callable] = {'_null_pct': lambda x: 'null %',
+                                                'quantile': lambda x: f"{x['q'] * 100:.2g}%"}
+
             order: int = 1
             for func_name, (dtype, kwargs) in funcs:
                 loc: int = len(data_dict[dtype])
                 order += 1
                 value: ndarray = getattr(df, func_name)(**kwargs).values[0]
                 data_dict[dtype].append(value)
-                if func_name == 'quantile':
-                    name = f"{kwargs['q'] * 100: .2g}%"
-                else:
-                    name = func_name
-                new_column_info[name] = utils.Column(dtype, loc, order)  # type: str, int, int
+                name = change_name.get(func_name, lambda x: func_name)(kwargs)
+                new_column_info[name] = utils.Column(dtype, loc, order)
                 new_columns.append(name)
-
-            loc = len(data_dict['f'])
-            data_dict['f'].append(df.isna().mean().values[0])
-            new_column_info['Null %'] = utils.Column('f', loc, order + 1)
-            new_columns.append('Null %')
 
             new_data: Dict[str, ndarray] = df._concat_arrays(data_dict)
 
+        else:
+            raise NotImplementedError('non-numeric summary not available yet')
+
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def dropna(self, axis='rows', how='any', thresh=None, subset=None):
+    def dropna(self, axis: str = 'rows', how: str = 'any', thresh: Union[int, float] = None,
+               subset: List[IntStr] = None) -> 'DataFrame':
         """
         Drops rows/columns if there is 1 or more missing value for that row/column
         Change `how` to 'all' to only drop rows/columns when all values are missing
@@ -2024,9 +2045,12 @@ class DataFrame(object):
         axis : 'rows' or 'columns' - rows will drop rows, columns will drop columns
         how : 'any' or 'all'
         thresh : A float between 0 and 1 or an integer
+        subset : A list of columns or rows to limit your search for NaNs. Only this subset will be
+            considered.
 
         """
         axis = utils.swap_axis_name(axis)
+        df: 'DataFrame'
         if subset is not None:
             if axis == 'rows':
                 df = self[subset, :]
@@ -2056,34 +2080,42 @@ class DataFrame(object):
         return self[criteria, :]
 
     def cov(self):
+        """
+        Computes the covariance between each column.
+
+        Returns
+        -------
+        An n x n DataFrame where n is the number of columns
+        """
         if self._is_string():
             raise TypeError('DataFrame consists only of strings. Must have int, float, '
                             'or bool columns')
 
         x: ndarray = self._values_number()
         if x.dtype.kind == 'i':
-            x0 = x[0]
-            x_diff = x - x[0]
-            Exy = (x_diff.T @ x_diff)
-            Ex = x_diff.sum(0)[np.newaxis, :]
-            ExEy = Ex.T @ Ex
-            count = len(x)
-            cov = (Exy - ExEy / count) / (count - 1)
-        else:
-            x0: ndarray = _math.get_first_non_nan(x)
+            x0: ndarray = x[0]
             x_diff: ndarray = x - x0
-            x_not_nan = (~np.isnan(x)).astype(int)
+            Exy: ndarray = (x_diff.T @ x_diff)
+            Ex: ndarray = x_diff.sum(0)[np.newaxis, :]
+            ExEy: ndarray = Ex.T @ Ex
+            counts: Union[int, ndarray] = len(x)
+        else:
+            x0 = _math.get_first_non_nan(x)
+            x_diff = x - x0
+            x_not_nan: ndarray = (~np.isnan(x)).astype(int)
 
-            x_diff_0 = np.nan_to_num(x_diff)
+            x_diff_0: ndarray = np.nan_to_num(x_diff)
             counts = (x_not_nan.T @ x_not_nan)
             Exy = (x_diff_0.T @ x_diff_0)
-            x_sum = (x_diff_0.T @ x_not_nan)
-            ExEy = x_sum * x_sum.T
-            cov = (Exy - ExEy / counts) / (counts - 1)
+            Ex = (x_diff_0.T @ x_not_nan)
+            ExEy = Ex * Ex.T
 
-        new_data = {'f': np.asfortranarray(cov)}
-        new_column_info = {'Column Name': utils.Column('O', 0, 0)}
-        new_columns = np.empty(x.shape[1] + 1, dtype='O')
+        with np.errstate(invalid='ignore'):
+            cov: ndarray = (Exy - ExEy / counts) / (counts - 1)
+
+        new_data: Dict[str, ndarray] = {'f': np.asfortranarray(cov)}
+        new_column_info: ColInfoT = {'Column Name': utils.Column('O', 0, 0)}
+        new_columns: ndarray = np.empty(x.shape[1] + 1, dtype='O')
         new_columns[0] = 'Column Name'
 
         i: int = 0
@@ -2099,31 +2131,49 @@ class DataFrame(object):
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def corr(self):
+        """
+        Computes the correlation between each column. Only does pearson correlation for now.
+
+        Returns
+        -------
+        An n x n DataFrame where n is the number of columns
+        """
         if self._is_string():
             raise TypeError('DataFrame consists only of strings. Must have int, float, '
                             'or bool columns')
 
         x: ndarray = self._values_number()
-        x0: ndarray = _math.get_first_non_nan(x)
+        if x.dtype.kind == 'i':
+            x0: ndarray = x[0]
+            x_diff: ndarray = x - x0
+            Exy: ndarray = (x_diff.T @ x_diff)
+            Ex: ndarray = x_diff.sum(0)[np.newaxis, :]
+            ExEy: ndarray = Ex.T @ Ex
+            counts: Union[int, ndarray] = len(x)
+            Ex2: ndarray = (x_diff ** 2).sum(0)
 
-        x_diff: ndarray = x - x0
-        x_not_nan = (~np.isnan(x)).astype(int)
+        else:
+            x0 = _math.get_first_non_nan(x)
+            x_diff = x - x0
+            x_not_nan: ndarray = (~np.isnan(x)).astype(int)
 
-        x_diff_0 = np.nan_to_num(x_diff)
-        counts = (x_not_nan.T @ x_not_nan)
-        Exy = (x_diff_0.T @ x_diff_0)
-        Ex = (x_diff_0.T @ x_not_nan)
-        Ex2 = (x_diff_0.T ** 2 @ x_not_nan)
-        ExEy = Ex * Ex.T
-        stdx = (Ex2 - Ex ** 2 / counts) / (counts - 1)
-        cov = (Exy - ExEy / counts) / (counts - 1)
+            # get index of first non nan too and check for nan here
+            x_diff_0: ndarray = np.nan_to_num(x_diff)
+            counts = (x_not_nan.T @ x_not_nan)
+            Exy = (x_diff_0.T @ x_diff_0)
+            Ex = (x_diff_0.T @ x_not_nan)
+            ExEy = Ex * Ex.T
+            Ex2 = (x_diff_0.T ** 2 @ x_not_nan)
 
-        stdxy = stdx * stdx.T
-        corr = cov / np.sqrt(stdxy)
+        with np.errstate(invalid='ignore'):
+            cov: ndarray = (Exy - ExEy / counts) / (counts - 1)
+            stdx: ndarray = (Ex2 - Ex ** 2 / counts) / (counts - 1)
+            stdxy: ndarray = stdx * stdx.T
+            corr: ndarray = cov / np.sqrt(stdxy)
 
-        new_data = {'f': np.asfortranarray(corr)}
-        new_column_info = {'Column Name': utils.Column('O', 0, 0)}
-        new_columns = np.empty(x.shape[1] + 1, dtype='O')
+        new_data: Dict[str, ndarray] = {'f': np.asfortranarray(corr)}
+        new_column_info: ColInfoT = {'Column Name': utils.Column('O', 0, 0)}
+        new_columns: ndarray = np.empty(x.shape[1] + 1, dtype='O')
         new_columns[0] = 'Column Name'
 
         i: int = 0
@@ -2139,16 +2189,23 @@ class DataFrame(object):
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def unique(self, col: str) -> ndarray:
+        """
+        Finds the unique elements of a single column in the order that they appeared
+
+        Parameters
+        ----------
+        col : Name of column as a string
+
+        Returns
+        -------
+        A one dimensional NumPy array
+        """
         self._validate_column_name(col)
         kind, loc, _ = self._column_info[col].values  # type: str, int, int
         arr: ndarray = self._data[kind][:, loc]
 
         if kind == 'i':
-            amin, amax = _math.min_max_int(arr)  # type: int, int
-            if amax - amin < 10_000_000:
-                return _math.unique_bounded(arr, amin)
-            else:
-                return _math.unique_int(arr)
+            return _math.unique_int(arr)
         elif kind == 'f':
             return _math.unique_float(arr)
         elif kind == 'b':
@@ -2156,6 +2213,19 @@ class DataFrame(object):
         return _math.unique_str(arr)
 
     def nunique(self, axis: str = 'rows', count_na: bool = False) -> 'DataFrame':
+        """
+        Counts the number of unique elements for each column/row
+
+        Parameters
+        ----------
+        axis : 'rows' or 'columns'
+        count_na : bool - When True, NaN will be counted at most once for each row/column.
+                            When False, NaNs will be ignored.
+
+        Returns
+        -------
+        A one column/row DataFrame
+        """
         return self._stat_funcs('nunique', axis, count_na=count_na)
 
     def value_counts(self, col):
