@@ -2061,17 +2061,25 @@ class DataFrame(object):
                             'or bool columns')
 
         x: ndarray = self._values_number()
-        x0: ndarray = _math.get_first_non_nan(x)
+        if x.dtype.kind == 'i':
+            x0 = x[0]
+            x_diff = x - x[0]
+            Exy = (x_diff.T @ x_diff)
+            Ex = x_diff.sum(0)[np.newaxis, :]
+            ExEy = Ex.T @ Ex
+            count = len(x)
+            cov = (Exy - ExEy / count) / (count - 1)
+        else:
+            x0: ndarray = _math.get_first_non_nan(x)
+            x_diff: ndarray = x - x0
+            x_not_nan = (~np.isnan(x)).astype(int)
 
-        x_diff: ndarray = x - x0
-        x_not_nan = (~np.isnan(x)).astype(int)
-
-        x_diff_0 = np.nan_to_num(x_diff)
-        counts = (x_not_nan.T @ x_not_nan)
-        Exy = (x_diff_0.T @ x_diff_0)
-        x_sum = (x_diff_0.T @ x_not_nan)
-        ExEy = x_sum * x_sum.T
-        cov = (Exy - ExEy / counts) / (counts - 1)
+            x_diff_0 = np.nan_to_num(x_diff)
+            counts = (x_not_nan.T @ x_not_nan)
+            Exy = (x_diff_0.T @ x_diff_0)
+            x_sum = (x_diff_0.T @ x_not_nan)
+            ExEy = x_sum * x_sum.T
+            cov = (Exy - ExEy / counts) / (counts - 1)
 
         new_data = {'f': np.asfortranarray(cov)}
         new_column_info = {'Column Name': utils.Column('O', 0, 0)}
@@ -2104,16 +2112,16 @@ class DataFrame(object):
         x_diff_0 = np.nan_to_num(x_diff)
         counts = (x_not_nan.T @ x_not_nan)
         Exy = (x_diff_0.T @ x_diff_0)
-        x_sum = (x_diff_0.T @ x_not_nan)
-        x_sum2 = (x_diff_0.T ** 2 @ x_not_nan)
-        ExEy = x_sum * x_sum.T
-        Ex2Ey2 = x_sum2 * x_sum2.T
+        Ex = (x_diff_0.T @ x_not_nan)
+        Ex2 = (x_diff_0.T ** 2 @ x_not_nan)
+        ExEy = Ex * Ex.T
+        stdx = (Ex2 - Ex ** 2 / counts) / (counts - 1)
         cov = (Exy - ExEy / counts) / (counts - 1)
 
-        stdx = (Ex2 - (Ex * Ex) / ct) / (ct - 1)
-        stdy = (Ey2 - (Ey * Ey) / ct) / (ct - 1)
+        stdxy = stdx * stdx.T
+        corr = cov / np.sqrt(stdxy)
 
-        new_data = {'f': np.asfortranarray(cov)}
+        new_data = {'f': np.asfortranarray(corr)}
         new_column_info = {'Column Name': utils.Column('O', 0, 0)}
         new_columns = np.empty(x.shape[1] + 1, dtype='O')
         new_columns[0] = 'Column Name'
@@ -2128,51 +2136,6 @@ class DataFrame(object):
             new_columns[i + 1] = col
             i += 1
         new_data['O'] = np.asfortranarray(new_columns[1:])[:, np.newaxis]
-        return self._construct_from_new(new_data, new_column_info, new_columns)
-
-    def corr(self, method: str = 'pearson', min_periods=1) -> 'DataFrame':
-        """
-        Get correlation between two columns
-        """
-        if self._is_string():
-            raise TypeError('DataFrame consists only of strings. Must have int, float, '
-                            'or bool columns')
-
-        values = self._values_number()
-        n = values.shape[1]
-        corr_final = np.empty((n, n), dtype=np.float64)
-        # np.fill_diagonal(corr_final, 1)
-
-        for i in range(n):
-            for j in range(i, n):
-                v1 = values[:, i]
-                v2 = values[:, j]
-                kind1, kind2 = v1.dtype.kind, v2.dtype.kind
-
-                with np.errstate(invalid='ignore'):
-                    if kind1 == 'f' and kind2 == 'f':
-                        curr_corr = _math.corr_float(v1, v2)
-                    else:
-                        curr_corr = _math.corr_int(v1, v2)
-
-                corr_final[i, j] = curr_corr
-                corr_final[j, i] = curr_corr
-
-        new_data = {'f': np.asfortranarray(corr_final)}
-        new_column_info = {'Column Name': utils.Column('O', 0, 0)}
-        new_columns = np.empty(values.shape[1] + 1, dtype='O')
-        new_columns[0] = 'Column Name'
-
-        i: int = 0
-        col: str
-        for col in self._columns:
-            dtype, loc, order = self._column_info[col].values  # type: str, int, int
-            if dtype not in 'ifb':
-                continue
-            new_column_info[col] = utils.Column('f', i, i + 1)
-            new_columns[i + 1] = col
-            i += 1
-        new_data['O'] = np.asfortranarray(new_columns)[:, np.newaxis]
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def unique(self, col: str) -> ndarray:

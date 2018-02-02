@@ -516,15 +516,13 @@ def max_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     cdef ndarray[np.int64_t] amax
     
     if axis ==0:
-        amax = np.empty(nc, dtype=np.int64)
-        amax.fill(MIN_INT)
+        amax = np.full(nc, MIN_INT, dtype=np.int64)
         for i in range(nc):
             for j in range(nr):
                 if arr[i * nr + j] > amax[i]:
                     amax[i] = arr[i * nr + j]
     else:
-        amax = np.empty(nr, dtype=np.int64)
-        amax.fill(MIN_INT)
+        amax = np.full(nr, MIN_INT, dtype=np.int64)
         for i in range(nc):
             for j in range(nr):
                 if arr[i * nr + j] > amax[j]:
@@ -539,15 +537,13 @@ def min_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     cdef ndarray[np.int64_t] amin
 
     if axis == 0:
-        amin = np.empty(nc, dtype=np.int64)
-        amin.fill(MAX_INT)
+        amin = np.full(nc, MAX_INT, dtype=np.int64)
         for i in range(nc):
             for j in range(nr):
                 if arr[i * nr + j] < amin[i]:
                     amin[i] = arr[i * nr + j]
     else:
-        amin = np.empty(nr, dtype=np.int64)
-        amin.fill(MAX_INT)
+        amin = np.full(nr, MAX_INT, dtype=np.int64)
         for i in range(nc):
             for j in range(nr):
                 if arr[i * nr + j] < amin[j]:
@@ -608,8 +604,7 @@ def max_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     cdef ndarray[np.float64_t] amax
 
     if axis == 0:
-        amax = np.empty(nc, dtype=np.float64)
-        amax.fill(nan)
+        amax = np.full(nc, nan, dtype=np.float64)
         for i in range(nc):
             if hasnans[i] is None or hasnans[i] == True:
                 k = 0
@@ -626,8 +621,7 @@ def max_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                     if arr[i * nr + j] > amax[i]:
                         amax[i] = arr[i * nr + j]
     else:
-        amax = np.empty(nr, dtype=np.float64)
-        amax.fill(nan)
+        amax = np.full(nr, nan, dtype=np.float64)
         if hasnans.sum() > 0:
             for i in range(nr):
                 k = 0
@@ -653,8 +647,7 @@ def min_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     cdef ndarray[np.float64_t] amin
 
     if axis == 0:
-        amin = np.empty(nc, dtype=np.float64)
-        amin.fill(nan)
+        amin = np.full(nc, nan, dtype=np.float64)
         for i in range(nc):
             if hasnans[i] is None or hasnans[i] == True:
                 k = 0
@@ -671,8 +664,7 @@ def min_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                     if arr[i * nr + j] < amin[i]:
                         amin[i] = arr[i * nr + j]
     else:
-        amin = np.empty(nr, dtype=np.float64)
-        amin.fill(nan)
+        amin = np.full(nr, nan, dtype=np.float64)
         if hasnans.sum() > 0:
             for i in range(nr):
                 k = 0
@@ -697,8 +689,7 @@ def max_str(ndarray[object, ndim=2] a, axis, hasnans):
     cdef ndarray[object] amax
 
     if axis == 0:
-        amax = np.empty(nc, dtype='O')
-        amax.fill(nan)
+        amax = np.full(nc, nan, dtype='O')
         for i in range(nc):
             if hasnans[i] is None or hasnans[i] == True:
                 k = 0
@@ -715,8 +706,7 @@ def max_str(ndarray[object, ndim=2] a, axis, hasnans):
                     if a[j, i] > amax[i]:
                         amax[i] = a[j, i]
     else:
-        amax = np.empty(nr, dtype='O')
-        amax.fill(nan)
+        amax = np.full(nr, nan, dtype='O')
         if hasnans.sum() > 0:
             for i in range(nr):
                 k = 0
@@ -741,8 +731,7 @@ def min_str(ndarray[object, ndim=2] a, axis, hasnans):
     cdef ndarray[object] amin
 
     if axis == 0:
-        amin = np.empty(nc, dtype='O')
-        amin.fill(nan)
+        amin = np.full(nc, nan, dtype='O')
         for i in range(nc):
             if hasnans[i] is None or hasnans[i] == True:
                 k = 0
@@ -759,8 +748,7 @@ def min_str(ndarray[object, ndim=2] a, axis, hasnans):
                     if a[j, i] < amin[i]:
                         amin[i] = a[j, i]
     else:
-        amin = np.empty(nr, dtype='O')
-        amin.fill(nan)
+        amin = np.full(nr, nan, dtype='O')
         if hasnans.sum() > 0:
             for i in range(nr):
                 k = 0
@@ -1497,20 +1485,16 @@ def argmin_str(ndarray[object, ndim=2] a, axis, hasnans):
 
 def count_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
     if axis == 0:
-        result = np.empty(a.shape[1], dtype=np.int64)
-        result.fill(a.shape[0])
+        result = np.full(a.shape[1], a.shape[0], dtype=np.int64)
     else:
-        result = np.empty(a.shape[0], dtype=np.int64)
-        result.fill(a.shape[1])
+        result = np.full(a.shape[0], a.shape[1], dtype=np.int64)
     return result
 
 def count_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, hasnans):
     if axis == 0:
-        result = np.empty(a.shape[1], dtype=np.int64)
-        result.fill(a.shape[0])
+        result = np.full(a.shape[1], a.shape[0], dtype=np.int64)
     else:
-        result = np.empty(a.shape[0], dtype=np.int64)
-        result.fill(a.shape[1])
+        result = np.full(a.shape[0], a.shape[1], dtype=np.int64)
     return result
 
 def count_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
@@ -2005,9 +1989,8 @@ def cumsum_str(ndarray[object, ndim=2] a, axis, hasnans):
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef str cur_total
-    cdef ndarray[object, ndim=2] total = np.empty((nr, nc), dtype='O')
-    total.fill(nan)
-    
+    cdef ndarray[object, ndim=2] total = np.full((nr, nc), nan, dtype='O')
+
     if axis == 0:
         for i in range(nc):
             k = 0
@@ -2073,154 +2056,14 @@ def get_first_non_nan(ndarray[np.float64_t, ndim=2] a):
     cdef int i, j
     cdef int nr = a.shape[0]
     cdef int nc = a.shape[1]
-    cdef ndarray[np.float64_t] result = np.empty(nc, dtype='float64')
+    cdef ndarray[np.float64_t] result = np.full(nc, nan)
+
     for i in range(nc):
         for j in range(nr):
             if not isnan(a[j, i]):
                 result[i] = a[j, i]
                 break
     return result
-
-def cov_float(ndarray[double] x, ndarray[double] y):
-    cdef int i, j = 0
-    cdef int n = len(x)
-    cdef int ct = 0
-    if (n < 2):
-        return np.nan
-    cdef double kx, ky
-    cdef double Ex = 0
-    cdef double Ey = 0
-    cdef double Exy = 0
-    cdef double x_diff, y_diff
-
-    kx = x[j]
-    ky = y[j]
-    Ex = Ey = Exy = 0
-    while (isnan(kx) or isnan(ky)) and j < n - 1:
-        j += 1
-        if isnan(kx):
-            kx = x[j]
-        if isnan(ky):
-            ky = y[j]
-
-    for i in range(j, n):
-        if isnan(x[i]) or isnan(y[i]):
-            continue
-        ct += 1
-        x_diff = x[i] - kx
-        y_diff = y[i] - ky
-        Ex += x_diff
-        Ey += y_diff
-        Exy += x_diff * y_diff
-    if ct < 2:
-        return nan
-    return (Exy - Ex * Ey / ct) / (ct - 1)
-
-def cov_int(ndarray[np.int64_t] x, ndarray[np.int64_t] y):
-    cdef int i
-    cdef int n = len(x)
-    cdef int ct = 0
-    if (n < 2):
-        return np.nan
-    cdef double kx, ky
-    cdef double Ex = 0
-    cdef double Ey = 0
-    cdef double Exy = 0
-    cdef double x_diff, y_diff
-
-    kx = x[0]
-    ky = y[0]
-    Ex = Ey = Exy = 0
-    for i in range(n):
-        ct += 1
-        x_diff = x[i] - kx
-        y_diff = y[i] - ky
-        Ex += x_diff
-        Ey += y_diff
-        Exy += x_diff * y_diff
-    if ct < 2:
-        return nan
-    return (Exy - Ex * Ey / ct) / (ct - 1)
-
-def corr_float(ndarray[double] x, ndarray[double] y):
-    cdef int i, j = 0
-    cdef int n = len(x)
-    cdef int ct = 0
-    if (n < 2):
-        return np.nan
-    cdef double kx, ky
-    cdef double Ex = 0
-    cdef double Ey = 0
-    cdef double Exy = 0
-
-    cdef double Ex2 = 0
-    cdef double Ey2 = 0
-    cdef double x_diff, y_diff
-    cdef double cov, stdx, stdy
-
-    kx = x[j]
-    ky = y[j]
-    Ex = Ey = Exy = 0
-    while (isnan(kx) or isnan(ky)) and j < n - 1:
-        j += 1
-        if isnan(kx):
-            kx = x[j]
-        if isnan(ky):
-            ky = y[j]
-
-    for i in range(n):
-        if isnan(x[i]) or isnan(y[i]):
-            continue
-        ct += 1
-        x_diff = x[i] - kx
-        y_diff = y[i] - ky
-        Ex += x_diff
-        Ey += y_diff
-        Exy += x_diff * y_diff
-
-        Ex2 += x_diff ** 2
-        Ey2 += y_diff ** 2
-    if ct < 2:
-        return np.nan
-    cov = (Exy - Ex * Ey / ct) / (ct - 1)
-    stdx = (Ex2 - (Ex * Ex) / ct)/(ct - 1)
-    stdy = (Ey2 - (Ey * Ey) / ct)/(ct - 1)
-    return cov / (np.sqrt(stdx) * np.sqrt(stdy))
-
-def corr_int(ndarray[np.int64_t] x, ndarray[np.int64_t] y):
-    cdef int i
-    cdef int n = len(x)
-    cdef int ct = 0
-    if (n < 2):
-        return np.nan
-    cdef double kx, ky
-    cdef double Ex = 0
-    cdef double Ey = 0
-    cdef double Exy = 0
-
-    cdef double Ex2 = 0
-    cdef double Ey2 = 0
-    cdef double x_diff, y_diff
-    cdef double cov, stdx, stdy
-    kx = x[0]
-    ky = y[0]
-    Ex = Ey = Exy = 0
-    for i in range(n):
-        ct += 1
-        x_diff = x[i] - kx
-        y_diff = y[i] - ky
-        Ex += x_diff
-        Ey += y_diff
-        Exy += x_diff * y_diff
-
-        Ex2 += x_diff ** 2
-        Ey2 += y_diff ** 2
-    if ct < 2:
-        return np.nan
-    cov = (Exy - Ex * Ey / ct) / (ct - 1)
-    stdx = (Ex2 - (Ex * Ex) / ct)/(ct - 1)
-    stdy = (Ey2 - (Ey * Ey) / ct)/(ct - 1)
-    return cov / (np.sqrt(stdx) * np.sqrt(stdy))
 
 def get_quantile_float(ndarray[np.float64_t] a, double percent):
 
