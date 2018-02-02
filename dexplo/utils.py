@@ -1,5 +1,5 @@
 import decimal
-from typing import List, Dict, Set, Any, Optional, Union
+from typing import List, Dict, Set, Any, Optional, Union, Tuple
 import numpy as np
 from numpy import ndarray
 from dexplo._libs import validate_arrays as va
@@ -22,16 +22,16 @@ RowSelection = Union[int, slice, List[int], 'DataFrame']
 
 class Column:
 
-    def __init__(self, dtype='', loc=-1, order=-1):
+    def __init__(self, dtype: str = '', loc: int = -1, order: int = -1) -> None:
         self.dtype = dtype
         self.loc = loc
         self.order = order
 
     @property
-    def values(self):
+    def values(self) -> Tuple[str, int, int]:
         return self.dtype, self.loc, self.order
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'dtype={self.dtype}, loc={self.loc}, order={self.order}'
 
 
@@ -209,7 +209,7 @@ def validate_selection_size(key: Any) -> None:
                          'and one column selection')
 
 
-def check_set_value_type(dtype: str, good_dtypes: List[str], name: str) -> None:
+def check_set_value_type(dtype: str, good_dtypes: str, name: str) -> None:
     if dtype not in good_dtypes:
             raise TypeError(f'Cannot assign {name} to column of '
                             f'type {_DT[dtype]}')
@@ -238,7 +238,7 @@ def convert_dtype_to_kind(dtype: str) -> str:
     return _KIND[dtype]
 
 
-def get_kind_from_scalar(s: Any) -> Union[str, bool]:
+def get_kind_from_scalar(s: Any) -> str:
     if isinstance(s, bool):
         return 'b'
     elif isinstance(s, (int, np.integer)):
@@ -248,7 +248,7 @@ def get_kind_from_scalar(s: Any) -> Union[str, bool]:
     elif isinstance(s, (str, bytes)):
         return 'O'
     else:
-        return False
+        return ''
 
 
 def validate_array_size(arr: ndarray, num_rows: int) -> None:
@@ -265,7 +265,7 @@ def validate_multiple_string_cols(arr: ndarray) -> ndarray:
     return np.column_stack(arrays)
 
 
-def get_selection_object(rs: RowSelection, cs: ColumnSelection):
+def get_selection_object(rs: RowSelection, cs: ColumnSelection) -> Any:
     is_row_list = isinstance(rs, (list, np.ndarray))
     is_col_list = isinstance(cs, (list, np.ndarray))
     if is_row_list and is_col_list:

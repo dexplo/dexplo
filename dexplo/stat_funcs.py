@@ -1,9 +1,11 @@
 import dexplo._libs.math as m
 import dexplo.math_columns as mc
 import numpy as np
+from numpy import ndarray
+from typing import Any
 
 
-def _nanpercentile(a, q, axis, **kwargs):
+def _nanpercentile(a: ndarray, q: float, axis: int, **kwargs: Any) -> ndarray:
     return np.nanpercentile(a, q, axis)
 
 

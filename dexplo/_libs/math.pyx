@@ -8,6 +8,7 @@ from collections import defaultdict
 import cython
 from cpython cimport dict, set, list, tuple
 from libc.math cimport isnan, sqrt, floor, ceil
+import cmath
 
 try:
     import bottleneck as bn
@@ -207,7 +208,7 @@ def unique_bounded(ndarray[np.int64_t] a, long amin):
     return np.array(result)
 
 def nunique_str(ndarray[object, ndim=2] a, axis, count_na=False, **kwargs):
-    cdef int i, j
+    cdef int i, j, ct_nan
     cdef int nr = a.shape[0]
     cdef int nc = a.shape[1]
     cdef set s
@@ -218,14 +219,18 @@ def nunique_str(ndarray[object, ndim=2] a, axis, count_na=False, **kwargs):
         if count_na:
             for i in range(nc):
                 s = set()
+                ct_nan = 0
                 for j in range(nr):
-                    s.add(a[j, i])
-                result[i] = len(s)
+                    if isinstance(a[j, i], (float, np.floating)) and np.isnan(a[j, i]):
+                        ct_nan = 1
+                    else:
+                        s.add(a[j, i])
+                result[i] = len(s) + ct_nan
         else:
             for i in range(nc):
                 s = set()
                 for j in range(nr):
-                    if a[j, i] is not nan:
+                    if not(isinstance(a[j, i], (float, np.floating)) and np.isnan(a[j, i])):
                         s.add(a[j, i])
                 result[i] = len(s)
 
@@ -234,14 +239,18 @@ def nunique_str(ndarray[object, ndim=2] a, axis, count_na=False, **kwargs):
         if count_na:
             for i in range(nr):
                 s = set()
+                ct_nan = 0
                 for j in range(nc):
-                    s.add(a[i, j])
-                result[i] = len(s)
+                    if isinstance(a[i, j], (float, np.floating)) and np.isnan(a[i, j]):
+                        ct_nan = 1
+                    else:
+                        s.add(a[i, j])
+                result[i] = len(s) + ct_nan
         else:
             for i in range(nr):
                 s = set()
                 for j in range(nc):
-                    if a[i, j] is not nan:
+                    if not(isinstance(a[i, j], (float, np.floating)) and np.isnan(a[i, j])):
                         s.add(a[i, j])
                 result[i] = len(s)
 
@@ -777,12 +786,14 @@ def mean_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     cdef ndarray[np.int64_t] total
 
     if axis == 0:
+        #return a.mean(0)
         total = np.zeros(nc, dtype=np.int64)
         for i in range(nc):
             for j in range(nr):
                 total[i] += arr[i * nr + j]
         return total / nr
     else:
+        #return a.mean(1)
         total = np.zeros(nr, dtype=np.int64)
         for i in range(nc):
             for j in range(nr):
@@ -809,6 +820,8 @@ def mean_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, **kwargs):
                 total[j] += arr[i * nr + j]
         return total / nc
 
+@cython.wraparound(False)
+@cython.boundscheck(False)
 def mean_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     cdef double *arr = <double*> a.data
     cdef int i, j
@@ -831,10 +844,9 @@ def mean_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                 else:
                     total[i] = nan
             else:
-                for i in range(nc):
-                    for j in range(nr):
-                        total[i] += arr[i * nr + j]
-                    total[i] = total[i] / nc
+                for j in range(nr):
+                    total[i] += arr[i * nr + j]
+                total[i] = total[i] / nr
     else:
         total = np.zeros(nr, dtype=np.float64)
         for i in range(nr):
@@ -1485,7 +1497,7 @@ def argmin_str(ndarray[object, ndim=2] a, axis, hasnans):
 
 def count_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
     if axis == 0:
-        result = np.empty(a.shape[0], dtype=np.int64)
+        result = np.empty(a.shape[1], dtype=np.int64)
         result.fill(a.shape[0])
     else:
         result = np.empty(a.shape[0], dtype=np.int64)
@@ -1494,7 +1506,7 @@ def count_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
 
 def count_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, hasnans):
     if axis == 0:
-        result = np.empty(a.shape[0], dtype=np.int64)
+        result = np.empty(a.shape[1], dtype=np.int64)
         result.fill(a.shape[0])
     else:
         result = np.empty(a.shape[0], dtype=np.int64)
@@ -2056,6 +2068,18 @@ def isna_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.uint8_t, cast=True] h
         for j in range(nr):
             b[j, i] = isnan(arr[i * nr + j])
     return b
+
+def get_first_non_nan(ndarray[np.float64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.float64_t] result = np.empty(nc, dtype='float64')
+    for i in range(nc):
+        for j in range(nr):
+            if not isnan(a[j, i]):
+                result[i] = a[j, i]
+                break
+    return result
 
 def cov_float(ndarray[double] x, ndarray[double] y):
     cdef int i, j = 0
