@@ -1,6 +1,20 @@
 from setuptools import setup, find_packages, Extension
+from setuptools.command.build_ext import build_ext
 import glob
-import numpy as np
+
+
+class CustomBuildExtCommand(build_ext):
+    """build_ext command for use when numpy headers are needed."""
+    def run(self):
+
+        # Import numpy here, only when headers are needed
+        import numpy
+
+        # Add numpy headers to include_dirs
+        self.include_dirs.append(numpy.get_include())
+
+        # Call original build_ext command
+        build_ext.run(self)
 
 
 try:
@@ -24,7 +38,8 @@ def readme():
 
 
 setup(name='dexplo',
-      version='0.0.3',
+      cmdclass = {'build_ext': CustomBuildExtCommand},
+      version='0.0.6',
       description='A library for data exploration comparible to pandas. '
                   'No Series, No hierarchical indexing, only one indexer [ ]',
       long_description=readme(),
@@ -42,5 +57,5 @@ setup(name='dexplo',
       packages=find_packages(exclude=['docs', 'stubs']),
       install_requires=['numpy'],
       python_requires='>=3.6',
-      include_dirs=[np.get_include()],
+      # include_dirs=[np.get_include()],
       ext_modules=extensions)

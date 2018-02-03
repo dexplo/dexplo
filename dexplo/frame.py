@@ -104,7 +104,7 @@ class DataFrame(object):
             self._initialize_data_from_dict(data)
 
         elif isinstance(data, ndarray):
-            num_cols: int = self._validate_data_from_array(data)
+            num_cols: int = utils.validate_array_type_and_dim(data)
             self._initialize_columns_from_array(columns, num_cols)
 
             if data.dtype.kind == 'O':
@@ -238,12 +238,12 @@ class DataFrame(object):
         """
         data_dict: Dict[str, List[ndarray]] = {'f': [], 'i': [], 'b': [], 'O': []}
         for i, (col, values) in enumerate(data.items()):
-            if not isinstance(values, (list, ndarray)):
-                raise TypeError('Values of dictionary must be an array or a list')
             if isinstance(values, list):
                 arr: ndarray = utils.convert_list_to_single_arr(values)
-            else:
+            elif isinstance(values, ndarray):
                 arr = values
+            else:
+                raise TypeError('Values of dictionary must be an array or a list')
             arr = utils.maybe_convert_1d_array(arr, col)
             kind: str = arr.dtype.kind
             loc: int = len(data_dict.get(kind, []))
@@ -256,28 +256,6 @@ class DataFrame(object):
                 raise ValueError('All columns must be the same length')
 
         self._data = self._concat_arrays(data_dict)
-
-    def _validate_data_from_array(self, data: ndarray) -> int:
-        """
-        Called when array is passed to `data` parameter in DataFrame constructor.
-        Validates that the array is of a specific type and either 1 or 2 dimensions
-
-        Parameters
-        ----------
-        data: Array
-
-        Returns
-        -------
-        The number of columns as an integer
-        """
-        if data.dtype.kind not in 'bifSUO':
-            raise TypeError('Array must be of type boolean, integer, float, string, or unicode')
-        if data.ndim == 1:
-            return 1
-        elif data.ndim == 2:
-            return data.shape[1]
-        else:
-            raise ValueError('Array must be either one or two dimensions')
 
     def _initialize_data_from_array(self, data: ndarray) -> None:
         """
@@ -322,11 +300,11 @@ class DataFrame(object):
         if data.ndim == 1:
             data = data[:, np.newaxis]
 
-        data_dict: Dict[str, List[ndarray]] = {'f': [], 'i': [], 'b': [], 'O': []}
+        data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         for i, col in enumerate(self._columns):
             arr: ndarray = va.maybe_convert_object_array(data[:, i], col)
             kind: str = arr.dtype.kind
-            loc: int = utils.get_num_cols(data_dict.get(kind, []))
+            loc: int = len(data_dict[kind])
             data_dict[kind].append(arr)
             self._column_info[col] = utils.Column(kind, loc, i)
 
@@ -547,6 +525,9 @@ class DataFrame(object):
                     d = 'NaN'
                 if isinstance(d, bool):
                     d = str(d)
+                if d is None:
+                    d = 'None'
+
                 if isinstance(d, str):
                     cur_str = d
                     if len(cur_str) > options.max_colwidth:
@@ -579,6 +560,9 @@ class DataFrame(object):
                                                 decimal_len)):
                 if str(d[i]) == 'nan':
                     d[i] = 'NaN'
+                if d[i] is None:
+                    d[i] = 'None'
+
                 ts = '<th>' if j * i == 0 else '<td>'
                 te = '</th>' if j * i == 0 else '</td>'
                 if isinstance(d[i], bool):
@@ -1241,7 +1225,7 @@ class DataFrame(object):
         if numpy_dtype == 'O':
             nulls: ndarray = np.isnan(col_data)
             col_data = col_data.astype('U').astype('O')
-            col_data[nulls] = nan
+            col_data[nulls] = None
         else:
             col_data = col_data.astype(numpy_dtype)
         self._remove_column(column)
@@ -1335,24 +1319,23 @@ class DataFrame(object):
             utils.check_set_value_type(dtype, 'b', 'bool')
         elif isinstance(value, (int, np.integer)):
             utils.check_set_value_type(dtype, 'if', 'int')
-        elif value is nan:
-            if dtype in 'ib':
-                self._astype_internal(col_name, 'float64')
-                dtype = 'f'
-                loc = -1
         elif isinstance(value, (float, np.floating)):
-            utils.check_set_value_type(dtype, 'if', 'float')
-            if dtype == 'i':
-                self._astype_internal(col_name, 'float64')
-                dtype = 'f'
-                loc = -1
+            if np.isnan(value):
+                if dtype in 'ib':
+                    self._astype_internal(col_name, 'float64')
+                    dtype = 'f'
+                    loc = -1
+            else:
+                utils.check_set_value_type(dtype, 'if', 'float')
+                if dtype == 'i':
+                    self._astype_internal(col_name, 'float64')
+                    dtype = 'f'
+                    loc = -1
         elif isinstance(value, str):
             utils.check_set_value_type(dtype, 'O', 'str')
-        elif isinstance(value, bytes):
-            value = value.decode()
-            utils.check_set_value_type(dtype, 'O', 'bytes')
+        elif value is None:
+            utils.check_set_value_type(dtype, 'O', 'None')
         else:
-            # Cannot set with None. Must use nan for missing value
             raise TypeError(f'Type {type(value).__name__} not able to be assigned')
         self._data[dtype][rs, loc] = value
 
@@ -1397,9 +1380,8 @@ class DataFrame(object):
                 self._data[dtype][rs, loc] = value
         # not scalar
         else:
-            num_rows_to_set, num_cols_to_set = self._get_num_rows_cols_to_set(rs,
-                                                                              cs)  # type: int, int
-            single_row: bool = utils.is_one_row(num_rows_to_set, num_cols_to_set)
+            nrows_to_set, ncols_to_set = self._get_nrows_cols_to_set(rs, cs)  # type: int, int
+            single_row: bool = utils.is_one_row(nrows_to_set, ncols_to_set)
 
             arrs: List[ndarray]
             if isinstance(value, list):
@@ -1414,7 +1396,7 @@ class DataFrame(object):
             else:
                 raise TypeError('Must use a scalar, a list, an array, or a '
                                 'DataFrame when setting new values')
-            self._validate_set_array_shape(num_rows_to_set, num_cols_to_set, arrs)
+            self._validate_set_array_shape(nrows_to_set, ncols_to_set, arrs)
             # need to check for object nan compatibility
             kinds, other_kinds = self._get_kinds(cs, arrs)  # type: List[str], List[str]
             all_nans: List[bool] = utils.check_all_nans(arrs)
@@ -1425,7 +1407,7 @@ class DataFrame(object):
                 arrs = [arr[0] for arr in arrs]
             self._setitem_other_cols(rs, cs, arrs, kinds, other_kinds)
 
-    def _get_num_rows_cols_to_set(self, rs: Union[List[int], ndarray],
+    def _get_nrows_cols_to_set(self, rs: Union[List[int], ndarray],
                                   cs: List[str]) -> Tuple[int, int]:
         if isinstance(rs, int):
             rows: int = 1
@@ -1448,20 +1430,20 @@ class DataFrame(object):
                 ct: str = utils.convert_kind_to_dtype(cur_kind)
                 raise TypeError(f'Trying to set a {dt} on column {col} which has type {ct}')
 
-    def _validate_set_array_shape(self, num_rows_to_set: int, num_cols_to_set: int,
+    def _validate_set_array_shape(self, nrows_to_set: int, ncols_to_set: int,
                                   other: Union[List, 'DataFrame']) -> None:
         if isinstance(other, list):
-            num_rows_set = len(other[0])
-            num_cols_set = len(other)
+            nrows_set = len(other[0])
+            ncols_set = len(other)
         # Otherwise we have a DataFrame
         else:
-            num_rows_set = other.shape[0]
-            num_cols_set = other.shape[1]
+            nrows_set = other.shape[0]
+            ncols_set = other.shape[1]
 
-        if num_rows_to_set != num_rows_set:
-            raise ValueError(f'Mismatch of number of rows {num_rows_to_set} != {num_rows_set}')
-        if num_cols_to_set != num_cols_set:
-            raise ValueError(f'Mismatch of number of columns {num_cols_to_set} != {num_cols_set}')
+        if nrows_to_set != nrows_set:
+            raise ValueError(f'Mismatch of number of rows {nrows_to_set} != {nrows_set}')
+        if ncols_to_set != ncols_set:
+            raise ValueError(f'Mismatch of number of columns {ncols_to_set} != {ncols_set}')
 
     def _get_kinds(self, cols: List[str],
                    other: Union[List[ndarray], 'DataFrame']) -> Tuple[List[str], List[str]]:
@@ -2252,6 +2234,43 @@ class DataFrame(object):
         return Grouper(self, columns)
 
 
+class Grouper(object):
+
+    def __init__(self, df: DataFrame, columns: Union[str, List[str]]) -> None:
+        self._df: DataFrame = df
+        self._create_groups(columns)
+        self._group_columns = columns
+
+    def _create_groups(self, columns):
+        dtype, loc, _ = self._df._column_info[columns].values  # type: str, int, int
+        arr: ndarray = self._df._data[dtype][:, loc]
+        (self._group_labels,
+         self._group_names,
+         self._group_position) = gb.get_group_assignment(arr)
+
+    def size(self):
+        new_columns = np.array([self._group_columns, 'size'], dtype='O')
+        new_column_info = {self._group_columns: utils.Column('O', 0, 0),
+                           'size': utils.Column('i', 0, 1)}
+        size = gb.size(self._group_labels, len(self._group_names))[:, np.newaxis]
+        new_data = {'O': self._group_names, 'i': size}
+        return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
+
+    def count(self):
+        labels = self._group_labels
+        size = len(self._group_names)
+
+        arrs = []
+        for dtype, data in self._df._data.items():
+            if dtype == 'f':
+                arrs.append(gb.count_float(labels, size, data))
+            elif dtype == 'O':
+                arrs.append(gb.count_str(labels, size, data))
+            else:
+                arrs.append(np.full((size, data.shape[1]), data.shape[0], dtype='int64'))
+        return arrs
+
+
 class StringClass(object):
 
     def __init__(self, df):
@@ -2290,23 +2309,3 @@ class StringClass(object):
         new_data[dtype] = arr
         # add _column_info
         return self.df._construct_from_new(new_data, new_columns)
-
-
-class Grouper(object):
-
-    def __init__(self, df, columns):
-        self._df = df
-        self._create_groups(columns)
-        self._group_columns = columns
-
-    def _create_groups(self, columns):
-        arr = self._df._get_col_array(columns)
-        (self._group_labels,
-         self._group_names,
-         self._group_position) = gb.get_group_assignment(arr)
-
-    def size(self):
-        size = gb.size(self._group_labels, len(self._group_names))
-        df_new = self._df[self._group_position, self._group_columns]
-        df_new[:, 'size'] = size
-        return df_new

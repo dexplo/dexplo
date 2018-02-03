@@ -145,6 +145,29 @@ def maybe_convert_1d_array(arr: ndarray, column: Optional[str]=None) -> ndarray:
         raise NotImplementedError(f'Data type {kind} unknown')
 
 
+def validate_array_type_and_dim(data: ndarray) -> int:
+    """
+    Called when array is passed to `data` parameter in DataFrame constructor.
+    Validates that the array is of a specific type and either 1 or 2 dimensions
+
+    Parameters
+    ----------
+    data: Array
+
+    Returns
+    -------
+    The number of columns as an integer
+    """
+    if data.dtype.kind not in 'bifSUO':
+        raise TypeError('Array must be of type boolean, integer, float, string, or unicode')
+    if data.ndim == 1:
+        return 1
+    elif data.ndim == 2:
+        return data.shape[1]
+    else:
+        raise ValueError('Array must be either one or two dimensions')
+
+
 def is_one_row(num_rows_to_set: int, num_cols_to_set: int) -> bool:
     return num_rows_to_set == 1 and num_cols_to_set >= 1
 
@@ -245,7 +268,7 @@ def get_kind_from_scalar(s: Any) -> str:
         return 'i'
     elif isinstance(s, (float, np.floating)):
         return 'f'
-    elif isinstance(s, (str, bytes)):
+    elif isinstance(s, (str, bytes)) or s is None:
         return 'O'
     else:
         return ''

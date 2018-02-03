@@ -35,7 +35,7 @@ def add_obj(ndarray[object, ndim=2] arr, str other):
             try:
                 final[i, j] = arr[i, j] + other
             except:
-                final[i, j] = nan
+                final[i, j] = None
     return final
 
 def radd_obj(ndarray[object, ndim=2] arr, str other):
@@ -48,7 +48,7 @@ def radd_obj(ndarray[object, ndim=2] arr, str other):
             try:
                 final[i, j] = other + arr[i, j]
             except:
-                final[i, j] = nan
+                final[i, j] = None
     return final
 
 def lt_obj(ndarray[object, ndim=2] arr, str other):
@@ -230,22 +230,16 @@ def nunique_str(ndarray[object, ndim=2] a, axis, count_na=False, **kwargs):
 
     if axis == 0:
         result = np.empty(nc, dtype='int64')
-        if count_na:
-            for i in range(nc):
-                s = set()
-                ct_nan = 0
-                for j in range(nr):
-                    if isinstance(a[j, i], (float, np.floating)) and np.isnan(a[j, i]):
-                        ct_nan = 1
-                    else:
-                        s.add(a[j, i])
-                result[i] = len(s) + ct_nan
-        else:
-            for i in range(nc):
-                s = set()
-                for j in range(nr):
-                    if not(isinstance(a[j, i], (float, np.floating)) and np.isnan(a[j, i])):
-                        s.add(a[j, i])
+        for i in range(nc):
+            s = set()
+            for j in range(nr):
+                s.add(a[j, i])
+            if None in s:
+                if count_na:
+                    result[i] = len(s)
+                else:
+                    result[i] = len(s) - 1
+            else:
                 result[i] = len(s)
 
     if axis == 1:
@@ -255,7 +249,7 @@ def nunique_str(ndarray[object, ndim=2] a, axis, count_na=False, **kwargs):
                 s = set()
                 ct_nan = 0
                 for j in range(nc):
-                    if isinstance(a[i, j], (float, np.floating)) and np.isnan(a[i, j]):
+                    if (isinstance(a[i, j], (float, np.floating)) and np.isnan(a[i, j])) or a[i, j] is None:
                         ct_nan = 1
                     else:
                         s.add(a[i, j])
@@ -264,7 +258,7 @@ def nunique_str(ndarray[object, ndim=2] a, axis, count_na=False, **kwargs):
             for i in range(nr):
                 s = set()
                 for j in range(nc):
-                    if not(isinstance(a[i, j], (float, np.floating)) and np.isnan(a[i, j])):
+                    if not(isinstance(a[i, j], (float, np.floating)) and np.isnan(a[i, j])) and a[i, j] is not None:
                         s.add(a[i, j])
                 result[i] = len(s)
 
@@ -437,21 +431,23 @@ def sum_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     return total
 
 def sum_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, **kwargs):
-    cdef unsigned char *arr = <unsigned char*> a.data
     cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef ndarray[np.uint8_t] total
+    cdef ndarray[np.int64_t] total
+
     if axis == 0:
-        total = np.zeros(nc, dtype=np.uint8)
+        total = np.zeros(nc, dtype='int64')
         for i in range(nc):
             for j in range(nr):
-                total[i] += arr[i * nr + j]
+                if a[j, i]:
+                    total[i] += 1
     else:
-        total = np.zeros(nr, dtype=np.uint8)
+        total = np.zeros(nr, dtype='int64')
         for i in range(nr):
             for j in range(nc):
-                total[i] += arr[j * nr + i]
+                if a[j, i]:
+                    total[i] += 1
     return total.astype(np.int64)
 
 def sum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, **kwargs):
@@ -498,11 +494,11 @@ def sum_str(ndarray[object, ndim=2] a, axis, hasnans):
             ct = 0
             if hasnans[i] is None or hasnans[i] == True:
                 for j in range(nr):
-                    if a[j, i] is not nan:
+                    if a[j, i] is not None:
                         total[i] = total[i] + a[j, i]
                         ct += 1
                 if ct == 0:
-                    total[i] = nan
+                    total[i] = None
             else:
                 for j in range(nr):
                     total[i] = total[i] + a[j, i]
@@ -512,11 +508,11 @@ def sum_str(ndarray[object, ndim=2] a, axis, hasnans):
             ct = 0
             if hasnans[i] is None or hasnans[i] == True:
                 for j in range(nr):
-                    if a[j, i] is not nan:
+                    if a[j, i] is not None:
                         total[j] = total[j] + a[j, i]
                         ct += 1
                 if ct == 0:
-                    total[i] = nan
+                    total[i] = None
             else:
                 for j in range(nr):
                     total[j] = total[j] + a[j, i]
@@ -703,15 +699,15 @@ def max_str(ndarray[object, ndim=2] a, axis, hasnans):
     cdef ndarray[object] amax
 
     if axis == 0:
-        amax = np.full(nc, nan, dtype='O')
+        amax = np.full(nc, None, dtype='O')
         for i in range(nc):
             if hasnans[i] is None or hasnans[i] == True:
                 k = 0
-                while a[k, i] is nan and k < nr:
+                while a[k, i] is None and k < nr:
                     k += 1
                 amax[i] = a[k, i]
                 for j in range(k, nr):
-                    if a[j, i] is not nan:
+                    if a[j, i] is not None:
                         if a[j, i] > amax[i]:
                             amax[i] = a[j, i]
             else:
@@ -720,15 +716,15 @@ def max_str(ndarray[object, ndim=2] a, axis, hasnans):
                     if a[j, i] > amax[i]:
                         amax[i] = a[j, i]
     else:
-        amax = np.full(nr, nan, dtype='O')
+        amax = np.full(nr, None, dtype='O')
         if hasnans.sum() > 0:
             for i in range(nr):
                 k = 0
-                while a[i, k] is nan and k < nc:
+                while a[i, k] is None and k < nc:
                     k += 1
                 amax[i] = a[i, k]
                 for j in range(k, nc):
-                    if not a[i, j] is nan:
+                    if not a[i, j] is None:
                         if a[i, j]  > amax[i]:
                             amax[i] = a[i, j] 
         else:
@@ -749,11 +745,11 @@ def min_str(ndarray[object, ndim=2] a, axis, hasnans):
         for i in range(nc):
             if hasnans[i] is None or hasnans[i] == True:
                 k = 0
-                while a[k, i] is nan and k < nr:
+                while a[k, i] is None and k < nr:
                     k += 1
                 amin[i] = a[k, i]
                 for j in range(k, nr):
-                    if not a[j, i] is nan:
+                    if not a[j, i] is None:
                         if a[j, i] < amin[i]:
                             amin[i] = a[j, i]
             else:
@@ -766,11 +762,11 @@ def min_str(ndarray[object, ndim=2] a, axis, hasnans):
         if hasnans.sum() > 0:
             for i in range(nr):
                 k = 0
-                while a[i, k] is nan and k < nc:
+                while a[i, k] is None and k < nc:
                     k += 1
                 amin[i] = a[i, k]
                 for j in range(k, nc):
-                    if not a[i, j] is nan:
+                    if not a[i, j] is None:
                         if a[i, j] < amin[i]:
                             amin[i] = a[i, j]
         else:
@@ -822,8 +818,6 @@ def mean_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, **kwargs):
                 total[j] += arr[i * nr + j]
         return total / nc
 
-@cython.wraparound(False)
-@cython.boundscheck(False)
 def mean_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     cdef double *arr = <double*> a.data
     cdef int i, j
@@ -1116,25 +1110,17 @@ def any_str(ndarray[object, ndim=2] a, axis, hasnans):
         for i in range(nc):
             result[i] = False
             for j in range(nr):
-                if a[j, i] != '':
-                    try:
-                        if isnan(a[j, i]):
-                            pass
-                    except TypeError:
-                        result[i] = True
-                        break
+                if a[j, i] != '' and a[j, i] is not None:
+                    result[i] = True
+                    break
     else:
         result = np.empty(nr, dtype='bool')
         for i in range(nr):
             result[i] = False
             for j in range(nc):
-                if a[i, j] != '':
-                    try:
-                        if isnan(a[i, j]):
-                            pass
-                    except TypeError:
-                        result[i] = True
-                        break
+                if a[i, j] != '' and a[i, j] is not None:
+                    result[i] = True
+                    break
     return result
 
 def all_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
@@ -1222,14 +1208,7 @@ def all_str(ndarray[object, ndim=2] a, axis, hasnans):
         for i in range(nc):
             result[i] = True
             for j in range(nr):
-                if a[j, i] != '':
-                    try:
-                        if a[j, i] is nan:
-                            result[i] = False
-                            break
-                    except TypeError:
-                        pass
-                else:
+                if a[j, i] == '' or a[j, i] is None:
                     result[i] = False
                     break
     else:
@@ -1237,14 +1216,7 @@ def all_str(ndarray[object, ndim=2] a, axis, hasnans):
         for i in range(nr):
             result[i] = True
             for j in range(nc):
-                if a[i, j] != '':
-                    try:
-                        if a[i, j] is nan:
-                            result[i] = False
-                            break
-                    except TypeError:
-                        pass
-                else:
+                if a[i, j] == '' or a[j, i] is None:
                     result[i] = False
                     break
     return result
@@ -1549,7 +1521,7 @@ def count_str(ndarray[object, ndim=2] a, axis, hasnans):
         for i in range(nc):
             ct = 0
             for j in range(nr):
-                if not a[j, i] is nan:
+                if a[j, i] is not None:
                     ct += 1
             result[i] = ct
     else:
@@ -1557,7 +1529,7 @@ def count_str(ndarray[object, ndim=2] a, axis, hasnans):
         for i in range(nr):
             ct = 0
             for j in range(nc):
-                if not a[i, j] is nan:
+                if a[i, j] is not None:
                     ct += 1
             result[i] = ct
     return result
@@ -1571,8 +1543,8 @@ def clip_str_lower(ndarray[object, ndim=2] a, str lower):
     if hasnans == True or hasnans is None:
         for i in range(nc):
             for j in range(nr):
-                if a[j, i] is nan:
-                    b[j, i] = nan
+                if a[j, i] is None:
+                    b[j, i] = None
                 else:
                     if a[j, i] < lower:
                         b[j, i] = lower
@@ -1590,8 +1562,8 @@ def clip_str_upper(ndarray[object, ndim=2] a, str upper):
     if hasnans == True or hasnans is None:
         for i in range(nc):
             for j in range(nr):
-                if a[j, i] is nan:
-                    b[j, i] = nan
+                if a[j, i] is None:
+                    b[j, i] = None
                 else:
                     if a[j, i] > upper:
                         b[j, i] = upper
@@ -1609,8 +1581,8 @@ def clip_str_both(ndarray[object, ndim=2] a, str lower, str upper):
     if hasnans == True or hasnans is None:
         for i in range(nc):
             for j in range(nr):
-                if a[j, i] is nan:
-                    b[j, i] = nan
+                if a[j, i] is None:
+                    b[j, i] = None
                 else:
                     if a[j, i] < lower:
                         b[j, i] = lower
@@ -1830,9 +1802,9 @@ def cummax_str(ndarray[object, ndim=2] a, axis, hasnans):
             amax = ''
             ct = 0
             for j in range(nr):
-                if a[j, i] is nan:
+                if a[j, i] is None:
                     if ct == 0:
-                        b[j, i] = nan
+                        b[j, i] = None
                     else:
                         b[j, i] = amax 
                 else:
@@ -1846,9 +1818,9 @@ def cummax_str(ndarray[object, ndim=2] a, axis, hasnans):
             amax = ''
             ct = 0
             for j in range(nc):
-                if a[i, j] is nan:
+                if a[i, j] is None:
                     if ct == 0:
-                        b[i, j] = nan
+                        b[i, j] = None
                     else:
                         b[i, j] = amax 
                 else:
@@ -1870,9 +1842,9 @@ def cummin_str(ndarray[object, ndim=2] a, axis, hasnans):
         for i in range(nc):
             amin = MAX_CHAR
             for j in range(nr):
-                if a[j, i] is nan:
+                if a[j, i] is None:
                     if amin == MAX_CHAR:
-                        b[j, i] = nan
+                        b[j, i] = None
                     else:
                         b[j, i] = amin 
                 else:
@@ -1884,9 +1856,9 @@ def cummin_str(ndarray[object, ndim=2] a, axis, hasnans):
         for i in range(nr):
             amin = MAX_CHAR
             for j in range(nc):
-                if a[i, j] is nan:
+                if a[i, j] is None:
                     if amin == MAX_CHAR:
-                        b[i, j] = nan
+                        b[i, j] = None
                     else:
                         b[i, j] = amin 
                 else:
@@ -2008,14 +1980,14 @@ def cumsum_str(ndarray[object, ndim=2] a, axis, hasnans):
     if axis == 0:
         for i in range(nc):
             k = 0
-            while a[k, i] is nan and k < nr - 1:
-                total[k, i] = nan
+            while a[k, i] is None and k < nr - 1:
+                total[k, i] = None
                 k += 1
-            if a[k, i] is not nan:
+            if a[k, i] is not None:
                 cur_total = a[k, i]
                 total[k, i] = cur_total
             else:
-                total[k, i] = nan
+                total[k, i] = None
             for j in range(k + 1, nr):
                 try:
                     cur_total += a[j, i]
@@ -2025,14 +1997,14 @@ def cumsum_str(ndarray[object, ndim=2] a, axis, hasnans):
     else:
         for i in range(nr):
             k = 0
-            while a[i, k] is nan and k < nc - 1:
-                total[i, k] = nan
+            while a[i, k] is None and k < nc - 1:
+                total[i, k] = None
                 k += 1
-            if a[i, k] is not nan:
+            if a[i, k] is not None:
                 cur_total = a[i, k]
                 total[i, k] = cur_total
             else:
-                total[i, k] = nan
+                total[i, k] = None
             for j in range(k + 1, nc):
                 try:
                     cur_total += a[i, j]
@@ -2050,7 +2022,7 @@ def isna_str(ndarray[object, ndim=2] a, ndarray[np.uint8_t, cast=True] hasnans):
         if hasnans[i] is False:
             continue
         for j in range(nr):
-            b[j, i] = a[j, i] is nan
+            b[j, i] = a[j, i] is None
     return b
 
 def isna_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.uint8_t, cast=True] hasnans):

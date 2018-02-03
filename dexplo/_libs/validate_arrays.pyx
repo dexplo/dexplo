@@ -6,37 +6,104 @@ cimport cython
 from numpy import nan
 from numpy cimport ndarray
 from libc.math cimport isnan
+import warnings
 
 
-def validate_1D_object_array(ndarray[object] arr, columns):
-    cdef int i
-    cdef int n = len(arr)
+# def validate_1D_object_array(ndarray[object] arr, columns):
+#     cdef int i
+#     cdef int n = len(arr)
+#
+#     cur_dtype = type(arr[0])
+#     for i in range(n):
+#         if not isinstance(arr[i], cur_dtype):
+#             raise TypeError(f'Found mixed data in column {columns[i]}')
 
-    cur_dtype = type(arr[0])
-    for i in range(n):
-        if not isinstance(arr[i], cur_dtype):
-            raise TypeError(f'Found mixed data in column {columns[i]}')
+
+def get_kind(obj):
+    if isinstance(obj, (bool, np.bool_)):
+        return 'bool'
+    if isinstance(obj, (int, np.integer)):
+        return 'int'
+    if isinstance(obj, (float, np.floating)):
+        if isnan(obj):
+            return 'missing'
+        return 'float'
+    # np.str_ is subclass of str? same for bytes
+    if isinstance(obj, (str, np.str_)):
+        return 'str'
+    if obj is None:
+        return 'missing'
+    return 'unknown'
 
 
 def maybe_convert_object_array(ndarray[object] arr, column):
-    cdef int i
+    cdef int i = 0
     cdef int n = len(arr)
 
-    if isinstance(arr[0], (str, bytes)):
-        types = (str, bytes)
-    else:
-        types = type(arr[0]) # TODO: make more broad. if float use floating. need to make a mapping
-    
     for i in range(n):
-        if not isinstance(arr[i], types):
-            if isinstance(arr[i], (float, np.floating)) and np.isnan(arr[i]):
-                continue
-            raise TypeError(f'Found mixed data in column {column}.')
+        dtype = get_kind(arr[i])
+        if dtype != 'missing':
+            break
 
-    if types != (str, bytes):
-        return arr.astype(types)
-    return arr
+    if dtype == 'bool':
+        return convert_bool_array(arr, column)
+    if dtype == 'int':
+        return convert_int_array(arr, column)
+    if dtype == 'float':
+        return arr.astype('float64')
+    if dtype == 'str':
+        return convert_str_array(arr, column)
+    if dtype == 'unknown':
+        raise ValueError(f'Value in column {column} row {i} is {arr[i]} with type {type(arr[i])}. '
+                         'All values must be either bool, int, float, str or missing')
+    else:
+        warnings.warn('Column `{column}` contained all missing values. Converted to float')
+        return arr.astype('float64')
 
+
+def convert_bool_array(ndarray[object] arr, column):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t] result = np.empty(n, dtype='bool')
+
+    for i in range(n):
+        if not isinstance(arr[i], (bool, np.bool_)):
+            raise ValueError(f'The first value of column `{column}` was a boolean. All the other '
+                             'values in the array must also be a boolean. '
+                             f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
+        result[i] = arr[i]
+    return result
+
+def convert_int_array(ndarray[object] arr, column):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.int64_t] result = np.empty(n, dtype='int64')
+
+    for i in range(n):
+        if isinstance(arr[i], (float, np.floating)) or arr[i] is None:
+            return arr.astype('float64')
+        elif not isinstance(arr[i], (int, np.integer)):
+            raise ValueError('The first value of column `{column}` was an integer. All the other '
+                             'values in the array must either be integers or floats. '
+                             f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
+        result[i] = arr[i]
+    return result
+
+
+def convert_str_array(ndarray[object] arr, column):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='O')
+
+    for i in range(n):
+        if isinstance(arr[i], (float, np.floating)) and isnan(arr[i]):
+            result[i] = None
+        elif not isinstance(arr[i], (str, np.str_)):
+            raise ValueError('The first value of column `{column}` was a string. All the other '
+                             'values in the array must either be strings or missing values. '
+                             f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
+        result[i] = arr[i]
+    return result
 
 def validate_strings_in_object_array(ndarray[object] arr, columns=None):
     """
@@ -49,10 +116,10 @@ def validate_strings_in_object_array(ndarray[object] arr, columns=None):
         if not isinstance(arr[i], str):
             if isinstance(arr[i], bytes):
                 arr[i] = arr[i].decode()
-            elif arr[i] is np.nan:
-                pass
+            elif isinstance(arr[i], (float, np.floating)) and isnan(arr[i]):
+                arr[i] = None
             elif arr[i] is None:
-                arr[i] = np.nan
+                pass
             elif columns:
                 raise TypeError('Array of type "object" must only contain '
                                 f'strings in column {columns[i]}')
@@ -69,7 +136,7 @@ def isnan_object(ndarray[object, ndim=2] a):
     cdef ndarray[np.uint8_t, cast=True] hasnan = np.zeros(nc, dtype='bool')
     for i in range(nr):
         for j in range(nc):
-            if a[i][j] is nan:
+            if a[i][j] is None:
                 hasnan[j] = True
                 break
     return hasnan
@@ -81,8 +148,7 @@ def is_equal_1d_object(ndarray[object] a, ndarray[object] b):
     for i in range(n):
         if a[i] == b[i]:
             continue
-        if (isinstance(a[i], (float, np.floating)) and np.isnan(a[i]) and
-            isinstance(b[i], (float, np.floating)) and np.isnan(b[i])):
+        if a[i] is None and b[i] is None:
             continue
         return False
     return True

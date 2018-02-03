@@ -4,7 +4,7 @@ A data analysis library comparible to pandas
 [![Build Status](https://travis-ci.org/dexplo/dexplo.svg?branch=master)](https://travis-ci.org/dexplo/dexplo)
 
 # Main Goals
-* A very minimal set of features 
+* A minimal set of features 
 * Be as explicit as possible
 * There should be one-- and preferably only one --obvious way to do it.
 
@@ -13,22 +13,27 @@ A data analysis library comparible to pandas
 * No Series
 
 ### Data Types
-* Only primitive types - int, float, boolean, numpy.unicode
+* Only primitive types - int, float, boolean, str (unicode)
 * No object data types
 
-### Row and Column Labels
-* No index, meaning no row labels
+### Column Labels
 * No hierarchical index
 * Column names must be strings
 * Column names must be unique
 * Columns stored in a numpy array
 
+### Row Labels
+* No row labels for now
+* Only a number display on the output
+* Might add row labels in future
+
 ### Subset Selection
 * Only one way to select data - `[ ]`
 * Subset selection will be explicit and necessitate both rows and columns
-* Rows will be selected only by integer location
+* Rows will be selected only by integer location (for now)
 * Columns will be selected by either label or integer location. Since columns must be strings, this will not be amibguous
 * Column names cannot be duplicated
+* Slice notation is also OK
 
 ### All selections and operations copy
 * All selections and operations provide new copies of the data
@@ -37,7 +42,7 @@ A data analysis library comparible to pandas
 ### Development
 * Must use type hints
 * Must use 3.6 - fstrings
-* Must have numpy, bottleneck, numexpr
+* Must have numpy
 
 
 ### Small feature set
@@ -124,6 +129,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] memory_usage
 - [ ] merge
 - [ ] pivot
+- [ ] plot
 - [ ] replace
 - [ ] rolling
 - [ ] sort_values
