@@ -51,6 +51,19 @@ def radd_obj(ndarray[object, ndim=2] arr, str other):
                 final[i, j] = None
     return final
 
+def mul_obj(ndarray[object, ndim=2] arr, int other):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] final = np.empty((nr, nc), dtype='O')
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = arr[i, j] * other
+            except:
+                final[i, j] = None
+    return final
+
 def lt_obj(ndarray[object, ndim=2] arr, str other):
     cdef int i, j
     cdef int nr = arr.shape[0]
@@ -446,7 +459,7 @@ def sum_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, **kwargs):
         total = np.zeros(nr, dtype='int64')
         for i in range(nr):
             for j in range(nc):
-                if a[j, i]:
+                if a[i, j]:
                     total[i] += 1
     return total.astype(np.int64)
 
@@ -1025,76 +1038,67 @@ def std_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, int ddof, hasnans):
     return np.sqrt(var_bool(a, axis, ddof, hasnans))
 
 def any_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
-    cdef long *arr = <long*> a.data
     cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.uint8_t, cast=True] result
 
     if axis == 0:
-        result = np.empty(nc, dtype='bool')
+        result = np.full(nc, False, dtype='bool')
         for i in range(nc):
-            result[i] = False
             for j in range(nr):
-                if arr[i * nr + j] != 0:
+                if a[j, i] != 0:
                     result[i] = True
                     break
     else:
-        result = np.empty(nr, dtype='bool')
+        result = np.full(nr, False, dtype='bool')
         for i in range(nr):
-            result[i] = False
             for j in range(nc):
-                if arr[j * nr + i] != 0:
+                if a[i, j] != 0:
                     result[i] = True
                     break
     return result
 
 def any_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, hasnans):
-    cdef unsigned char *arr = <unsigned char*> a.data
     cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.uint8_t, cast=True] result
 
     if axis == 0:
-        result = np.empty(nc, dtype='bool')
+        result = np.full(nc, False, dtype='bool')
         for i in range(nc):
-            result[i] = False
             for j in range(nr):
-                if arr[i * nr + j] == True:
+                if a[j, i] == True:
                     result[i] = True
                     break
     else:
-        result = np.empty(nr, dtype='bool')
+        result = np.full(nr, False, dtype='bool')
         for i in range(nr):
-            result[i] = False
             for j in range(nc):
-                if arr[j * nr + i] == True:
+                if a[i, j] == True:
                     result[i] = True
                     break
     return result
 
 def any_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
-    cdef double *arr = <double*> a.data
     cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.uint8_t, cast=True] result
 
     if axis == 0:
-        result = np.empty(nc, dtype='bool')
+        result = np.full(nc, False, dtype='bool')
         for i in range(nc):
-            result[i] = False
             for j in range(nr):
-                if arr[i * nr + j] != 0 and not isnan(arr[i * nr +j]):
+                if a[j, i] != 0 and not isnan(a[j, i]):
                     result[i] = True
                     break
     else:
-        result = np.empty(nr, dtype='bool')
+        result = np.full(nr, False, dtype='bool')
         for i in range(nr):
-            result[i] = False
             for j in range(nc):
-                if arr[j * nr + i] != 0 and not isnan(arr[j * nr +i]):
+                if a[i, j] != 0 and not isnan(a[i, j]):
                     result[i] = True
                     break
     return result
@@ -1106,17 +1110,15 @@ def any_str(ndarray[object, ndim=2] a, axis, hasnans):
     cdef ndarray[np.uint8_t, cast=True] result
 
     if axis == 0:
-        result = np.empty(nc, dtype='bool')
+        result = np.full(nc, False, dtype='bool')
         for i in range(nc):
-            result[i] = False
             for j in range(nr):
                 if a[j, i] != '' and a[j, i] is not None:
                     result[i] = True
                     break
     else:
-        result = np.empty(nr, dtype='bool')
+        result = np.full(nr, False, dtype='bool')
         for i in range(nr):
-            result[i] = False
             for j in range(nc):
                 if a[i, j] != '' and a[i, j] is not None:
                     result[i] = True
@@ -1124,75 +1126,66 @@ def any_str(ndarray[object, ndim=2] a, axis, hasnans):
     return result
 
 def all_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
-    cdef long *arr = <long*> a.data
     cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.uint8_t, cast=True] result
     if axis == 0:
-        result = np.empty(nc, dtype='bool')
+        result = np.full(nc, True, dtype='bool')
         for i in range(nc):
-            result[i] = True
             for j in range(nr):
-                if arr[i * nr + j] == 0:
+                if a[j, i] == 0:
                     result[i] = False
                     break
     else:
-        result = np.empty(nr, dtype='bool')
+        result = np.full(nr, True, dtype='bool')
         for i in range(nr):
-            result[i] = True
             for j in range(nc):
-                if arr[j * nr + i] == 0:
+                if a[i, j] == 0:
                     result[i] = False
                     break
     return result
 
 def all_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, hasnans):
-    cdef unsigned char *arr = <unsigned char*> a.data
     cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.uint8_t, cast=True] result
 
     if axis == 0:
-        result = np.empty(nc, dtype='bool')
+        result = np.full(nc, True, dtype='bool')
         for i in range(nc):
-            result[i] = True
             for j in range(nr):
-                if arr[i * nr + j] == False:
+                if a[j, i] == False:
                     result[i] = False
                     break
     else:
-        result = np.empty(nr, dtype='bool')
+        result = np.full(nr, True, dtype='bool')
         for i in range(nr):
-            result[i] = True
             for j in range(nc):
-                if arr[j * nr + i] == False:
+                if a[i, j] == False:
                     result[i] = False
                     break
     return result
 
 def all_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
-    cdef double *arr = <double*> a.data
     cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.uint8_t, cast=True] result
 
     if axis == 0:
-        result = np.empty(nc, dtype='bool')
+        result = np.full(nc, True, dtype='bool')
         for i in range(nc):
-            result[i] = True
             for j in range(nr):
-                if arr[i * nr + j] == 0 or isnan(arr[i * nr +j]):
+                if a[j, i] == 0 or isnan(a[j, i]):
                     result[i] = False
                     break
     else:
-        result = np.empty(nr, dtype='bool')
+        result = np.full(nr, True, dtype='bool')
         for i in range(nr):
-            result[i] = True
             for j in range(nc):
-                if arr[j * nr + i] == 0 or isnan(arr[j * nr +i]):
+                if a[i, j] == 0 or isnan(a[i, j]):
                     result[i] = False
                     break
     return result
@@ -1204,19 +1197,17 @@ def all_str(ndarray[object, ndim=2] a, axis, hasnans):
     cdef ndarray[np.uint8_t, cast=True] result
 
     if axis == 0:
-        result = np.empty(nc, dtype='bool')
+        result = np.full(nc, True, dtype='bool')
         for i in range(nc):
-            result[i] = True
             for j in range(nr):
                 if a[j, i] == '' or a[j, i] is None:
                     result[i] = False
                     break
     else:
-        result = np.empty(nr, dtype='bool')
+        result = np.full(nr, True, dtype='bool')
         for i in range(nr):
-            result[i] = True
             for j in range(nc):
-                if a[i, j] == '' or a[j, i] is None:
+                if a[i, j] == '' or a[i, j] is None:
                     result[i] = False
                     break
     return result

@@ -150,6 +150,9 @@ def is_equal_1d_object(ndarray[object] a, ndarray[object] b):
             continue
         if a[i] is None and b[i] is None:
             continue
+        if (isinstance(a[i], (float, np.floating)) and isnan(a[i]) and
+            isinstance(b[i], (float, np.floating)) and isnan(b[i])):
+            continue
         return False
     return True
 

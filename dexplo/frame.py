@@ -1325,6 +1325,8 @@ class DataFrame(object):
                     self._astype_internal(col_name, 'float64')
                     dtype = 'f'
                     loc = -1
+                elif dtype == 'O':
+                    raise ValueError("Can't set nan to a str column. Use `None` instead.")
             else:
                 utils.check_set_value_type(dtype, 'if', 'float')
                 if dtype == 'i':

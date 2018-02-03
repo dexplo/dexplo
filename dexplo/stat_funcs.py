@@ -89,4 +89,6 @@ funcs_str = {'__add__': m.add_obj,
              '__lt__': m.lt_obj,
              '__le__': m.le_obj,
              '__gt__': m.gt_obj,
-             '__ge__': m.ge_obj}
+             '__ge__': m.ge_obj,
+             '__mul__': m.mul_obj,
+             '__rmul__': m.mul_obj}

@@ -15,6 +15,7 @@ df = de.DataFrame({'a': [1, 2, 5, 9, 3, 4, 5, 1],
                   columns=list('abcdefgh'))
 
 
+
 class TestFrameConstructor(object):
 
     def setup_method(self, method):
@@ -496,8 +497,8 @@ class TestSetItem:
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
-        df1[1, 'b'] = nan
-        df2 = de.DataFrame({'a': [-99, 5], 'b': ['pen', nan], 'c': [nan, 5.4],
+        df1[1, 'b'] = None
+        df2 = de.DataFrame({'a': [-99, 5], 'b': ['pen', None], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
@@ -522,6 +523,9 @@ class TestSetItem:
         df2 = de.DataFrame({'a': [1, -9.9], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
+
+        with pytest.raises(ValueError):
+            df1[1, 'b'] = nan
 
     def test_setitem_entire_column_one_value(self):
         df1 = self.df.copy()
@@ -752,9 +756,9 @@ class TestSetItem:
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
-        df1[2, ['c', 'b']] = [9.3, nan]
+        df1[2, ['c', 'b']] = [9.3, None]
 
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', nan, 'penny'],
+        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', None, 'penny'],
                             'c': [nan, 5.4, 9.3, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 

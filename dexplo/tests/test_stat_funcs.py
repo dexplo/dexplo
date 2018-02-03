@@ -5,14 +5,14 @@ import pytest
 from dexplo.testing import assert_frame_equal, assert_array_equal
 
 
-class TestFrameConstructor(object):
+class TestSimpleAggs(object):
     df = de.DataFrame({'a': [0, 0, 5],
                        'b': [0, 1.5, np.nan],
                        'c': [''] + list('bg'),
                        'd': [False, False, True],
                        'e': [0, 20, 30],
                        'f': ['', None, 'ad'],
-                       'g': np.zeros(3, dtype='int'),
+                       'g': np.zeros(3, dtype='int64'),
                        'h': [np.nan] * 3})
 
     def test_sum(self):
@@ -82,7 +82,7 @@ class TestFrameConstructor(object):
                            'd': [False, False, True],
                            'e': [0, 20, 40],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
         df1 = df.mean()
         df2 = de.DataFrame({'a': [7.],
@@ -110,7 +110,7 @@ class TestFrameConstructor(object):
                            'd': [False, False, True],
                            'e': [0, 20, 40],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
         df1 = df.median()
         df2 = de.DataFrame({'a': [5.],
@@ -138,7 +138,7 @@ class TestFrameConstructor(object):
                            'd': [False, False, True],
                            'e': [0, 20, 40],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
         df1 = df.std()
         df2 = de.DataFrame(np.array([[8.18535277, 2.12132034, 0.57735027, 20., 0., nan]]),
@@ -169,7 +169,7 @@ class TestFrameConstructor(object):
                            'd': [False, False, True],
                            'e': [0, 20, 40],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
         df1 = df.var()
         df2 = de.DataFrame(np.array([[67., 4.5, 1 / 3,
@@ -194,44 +194,33 @@ class TestFrameConstructor(object):
         with pytest.raises(TypeError):
             df.select_dtypes('str').var('columns')
 
-    def test_abs(self):
-        df = de.DataFrame({'a': [0, -5, -16],
-                           'b': [4.5, -1.5, np.nan],
-                           'c': [''] + list('bg'),
+    def test_count(self):
+        df = de.DataFrame({'a': [0, 0, 5],
+                           'b': [0, 1.5, np.nan],
+                           'c': [''] + list('bb'),
                            'd': [False, False, True],
-                           'e': [0, -20, 40],
+                           'e': [90, 20, 30],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
-
-        df1 = df.abs(True)
-        df2 = de.DataFrame({'a': [0, 5, 16],
-                            'b': [4.5, 1.5, np.nan],
-                            'c': [''] + list('bg'),
-                            'd': [False, False, True],
-                            'e': [0, 20, 40],
-                            'f': ['', None, 'ad'],
-                            'g': np.zeros(3, dtype='int'),
-                            'h': [np.nan] * 3})
+        df1 = df.count()
+        df2 = de.DataFrame({'a': [3],
+                            'b': [2],
+                            'c': [3],
+                            'd': [3],
+                            'e': [3],
+                            'f': [2],
+                            'g': [3],
+                            'h': [0]},
+                           columns=list('abcdefgh'))
         assert_frame_equal(df1, df2)
 
-        df1 = df.abs()
-        df2 = de.DataFrame({'a': [0, 5, 16],
-                            'b': [4.5, 1.5, np.nan],
-                            'd': [False, False, True],
-                            'e': [0, 20, 40],
-                            'g': np.zeros(3, dtype='int'),
-                            'h': [np.nan] * 3})
+        df1 = df.count('columns')
+        df2 = de.DataFrame({'count': [7, 6, 6]})
         assert_frame_equal(df1, df2)
 
-        df1 = abs(df)
-        df2 = de.DataFrame({'a': [0, 5, 16],
-                            'b': [4.5, 1.5, np.nan],
-                            'd': [False, False, True],
-                            'e': [0, 20, 40],
-                            'g': np.zeros(3, dtype='int'),
-                            'h': [np.nan] * 3})
-        assert_frame_equal(df1, df2)
+
+class TestAnyAll(object):
 
     def test_any(self):
         df = de.DataFrame({'a': [0, -5, -16],
@@ -240,7 +229,7 @@ class TestFrameConstructor(object):
                            'd': [False, False, True],
                            'e': [0, -20, 40],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
         df1 = df.any()
         df2 = de.DataFrame({'a': [True],
@@ -264,7 +253,7 @@ class TestFrameConstructor(object):
                            'd': [False, False, True],
                            'e': [0, -20, 40],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
         df1 = df.all()
         df2 = de.DataFrame({'a': [True],
@@ -281,6 +270,9 @@ class TestFrameConstructor(object):
         df2 = de.DataFrame({'all': [False, False, False]})
         assert_frame_equal(df1, df2)
 
+
+class TestArgMinMax(object):
+
     def test_argmax(self):
         df = de.DataFrame({'a': [0, 0, 5],
                            'b': [0, 1.5, np.nan],
@@ -288,7 +280,7 @@ class TestFrameConstructor(object):
                            'd': [False, False, True],
                            'e': [90, 20, 30],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
         df1 = df.argmax()
         df2 = de.DataFrame({'a': [2],
@@ -313,7 +305,7 @@ class TestFrameConstructor(object):
                            'd': [False, False, True],
                            'e': [90, 20, 30],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
         df1 = df.argmin()
         df2 = de.DataFrame({'a': [0],
@@ -331,29 +323,46 @@ class TestFrameConstructor(object):
         df2 = de.DataFrame({'argmin': [0., 0, 4]})
         assert_frame_equal(df1, df2)
 
-    def test_count(self):
-        df = de.DataFrame({'a': [0, 0, 5],
-                           'b': [0, 1.5, np.nan],
-                           'c': [''] + list('bb'),
+
+class TestAbsClip(object):
+
+    def test_abs(self):
+        df = de.DataFrame({'a': [0, -5, -16],
+                           'b': [4.5, -1.5, np.nan],
+                           'c': [''] + list('bg'),
                            'd': [False, False, True],
-                           'e': [90, 20, 30],
+                           'e': [0, -20, 40],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
-        df1 = df.count()
-        df2 = de.DataFrame({'a': [3],
-                            'b': [2],
-                            'c': [3],
-                            'd': [3],
-                            'e': [3],
-                            'f': [2],
-                            'g': [3],
-                            'h': [0]},
-                           columns=list('abcdefgh'))
+
+        df1 = df.abs(True)
+        df2 = de.DataFrame({'a': [0, 5, 16],
+                            'b': [4.5, 1.5, np.nan],
+                            'c': [''] + list('bg'),
+                            'd': [False, False, True],
+                            'e': [0, 20, 40],
+                            'f': ['', None, 'ad'],
+                            'g': np.zeros(3, dtype='int64'),
+                            'h': [np.nan] * 3})
         assert_frame_equal(df1, df2)
 
-        df1 = df.count('columns')
-        df2 = de.DataFrame({'count': [7, 6, 6]})
+        df1 = df.abs()
+        df2 = de.DataFrame({'a': [0, 5, 16],
+                            'b': [4.5, 1.5, np.nan],
+                            'd': [False, False, True],
+                            'e': [0, 20, 40],
+                            'g': np.zeros(3, dtype='int64'),
+                            'h': [np.nan] * 3})
+        assert_frame_equal(df1, df2)
+
+        df1 = abs(df)
+        df2 = de.DataFrame({'a': [0, 5, 16],
+                            'b': [4.5, 1.5, np.nan],
+                            'd': [False, False, True],
+                            'e': [0, 20, 40],
+                            'g': np.zeros(3, dtype='int64'),
+                            'h': [np.nan] * 3})
         assert_frame_equal(df1, df2)
 
     def test_clip(self):
@@ -363,7 +372,7 @@ class TestFrameConstructor(object):
                            'd': [False, False, True],
                            'e': [90, 20, 30],
                            'f': ['', None, 'ad'],
-                           'g': np.zeros(3, dtype='int'),
+                           'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
 
         df1 = df.clip(2)
@@ -391,7 +400,7 @@ class TestFrameConstructor(object):
                             'b': [0, 1.5, np.nan],
                             'd': [0, 0, 1],
                             'e': [10, 10, 10],
-                            'g': np.zeros(3, dtype='int'),
+                            'g': np.zeros(3, dtype='int64'),
                             'h': [np.nan] * 3})
         assert_frame_equal(df1, df2)
 
@@ -432,7 +441,7 @@ class TestFrameConstructor(object):
                             'd': [False, False, True],
                             'e': [90, 20, 30],
                             'f': ['a', None, 'ab'],
-                            'g': np.zeros(3, dtype='int'),
+                            'g': np.zeros(3, dtype='int64'),
                             'h': [np.nan] * 3})
         assert_frame_equal(df1, df2)
 
@@ -441,6 +450,9 @@ class TestFrameConstructor(object):
 
         with pytest.raises(ValueError):
             df.clip('Z', 'ER')
+
+
+class TestCum(object):
 
     def test_cummax(self):
         df = de.DataFrame({'a': [0, 0, 5],
@@ -537,6 +549,9 @@ class TestFrameConstructor(object):
         df2 = de.DataFrame({'c': ['', 'g', 'b'],
                             'g': ['', 'g', 'bad']})
         assert_frame_equal(df1, df2)
+
+
+class TestIsDropNa(object):
 
     def test_isna(self):
         df = de.DataFrame({'a': [0, 0, 5],
@@ -644,6 +659,9 @@ class TestFrameConstructor(object):
         df2 = df[:, ['a', 'c', 'd', 'e', 'f']]
         assert_frame_equal(df1, df2)
 
+
+class TestCovCorr(object):
+
     def test_cov(self):
         df = de.DataFrame({'a': [0, 0, 5, 1],
                            'b': [0, 1.5, nan, nan],
@@ -714,6 +732,263 @@ class TestFrameConstructor(object):
         with pytest.raises(TypeError):
             df.select_dtypes('str').corr()
 
+    def test_cov2(self):
+        data = {'a': [0, 0, 5, 9, 3, 4, 5, 1],
+                'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
+                'c': [''] + list('bgggzgh'),
+                'd': [False, False, True, False] * 2,
+                'e': [0, 20, 30, 4, 5, 6, 7, 8],
+                'f': [0., 3, 3, 3, 11, 4, 5, 1],
+                'g': ['', nan, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
+                'h': [0, 4, 5, 6, 7, 8, 9, 0],
+                'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
+                'j': np.zeros(8, dtype='int64'),
+                'k': np.ones(8) - 1,
+                'l': [np.nan] * 8}
+
+        df = de.DataFrame(data)
+        df1 = df.cov()
+        data = {'Column Name': ['a', 'b', 'd', 'e', 'f', 'h', 'i', 'j', 'k', 'l'],
+                'a': [9.410714285714286,
+                      7.159612750666668,
+                      0.4642857142857143,
+                      -0.2857142857142857,
+                      2.25,
+                      6.482142857142857,
+                      -1.1785714285714286,
+                      0.0,
+                      0.0,
+                      nan],
+                'b': [7.159612750666668,
+                      13.737677416007287,
+                      0.1660788403333333,
+                      10.76910435583333,
+                      0.0005878263333372047,
+                      -0.3345089859999983,
+                      8.587742030833335,
+                      0.0,
+                      0.0,
+                      nan],
+                'd': [0.4642857142857143,
+                      0.1660788403333333,
+                      0.21428571428571427,
+                      2.4285714285714284,
+                      0.07142857142857142,
+                      0.6071428571428571,
+                      -0.21428571428571427,
+                      0.0,
+                      0.0,
+                      nan],
+                'e': [-0.2857142857142857,
+                      10.76910435583333,
+                      2.4285714285714284,
+                      98.57142857142857,
+                      -2.2857142857142856,
+                      1.4285714285714286,
+                      14.285714285714286,
+                      0.0,
+                      0.0,
+                      nan],
+                'f': [2.25,
+                      0.0005878263333372047,
+                      0.07142857142857142,
+                      -2.2857142857142856,
+                      11.071428571428571,
+                      7.535714285714286,
+                      -1.6428571428571428,
+                      0.0,
+                      0.0,
+                      nan],
+                'h': [6.482142857142857,
+                      -0.3345089859999983,
+                      0.6071428571428571,
+                      1.4285714285714286,
+                      7.535714285714286,
+                      11.553571428571429,
+                      -3.892857142857143,
+                      0.0,
+                      0.0,
+                      nan],
+                'i': [-1.1785714285714286,
+                      8.587742030833335,
+                      -0.21428571428571427,
+                      14.285714285714286,
+                      -1.6428571428571428,
+                      -3.892857142857143,
+                      11.357142857142858,
+                      0.0,
+                      0.0,
+                      nan],
+                'j': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, nan],
+                'k': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, nan],
+                'l': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan]}
+        df2 = de.DataFrame(data, columns=['Column Name', 'a', 'b', 'd', 'e', 'f',
+                                          'h', 'i', 'j', 'k', 'l'])
+        assert_frame_equal(df1, df2)
+
+        np.random.seed(1)
+        a = np.random.randint(0, 100, (10, 5))
+        df = de.DataFrame(a)
+        df1 = df.cov()
+        data = {'Column Name': ['a0', 'a1', 'a2', 'a3', 'a4'],
+                'a0': [828.6222222222223,
+                       204.88888888888889,
+                       -51.422222222222224,
+                       246.06666666666666,
+                       78.33333333333333],
+                'a1': [204.88888888888889,
+                       1434.9444444444443,
+                       -126.72222222222223,
+                       151.38888888888889,
+                       -548.8888888888889],
+                'a2': [-51.422222222222224,
+                       -126.72222222222223,
+                       1321.6555555555556,
+                       -151.58888888888882,
+                       -466.22222222222223],
+                'a3': [246.06666666666666,
+                       151.38888888888889,
+                       -151.58888888888882,
+                       779.1222222222223,
+                       -5.111111111111111],
+                'a4': [78.33333333333333,
+                       -548.8888888888889,
+                       -466.22222222222223,
+                       -5.111111111111111,
+                       1007.5555555555555]}
+        df2 = de.DataFrame(data)
+        assert_frame_equal(df1, df2)
+
+    def test_corr2(self):
+        data = {'a': [0, 0, 5, 9, 3, 4, 5, 1],
+                'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
+                'c': [''] + list('bgggzgh'),
+                'd': [False, False, True, False] * 2,
+                'e': [0, 20, 30, 4, 5, 6, 7, 8],
+                'f': [0., 3, 3, 3, 11, 4, 5, 1],
+                'g': ['', nan, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
+                'h': [0, 4, 5, 6, 7, 8, 9, 0],
+                'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
+                'j': np.zeros(8, dtype='int64'),
+                'k': np.ones(8) - 1,
+                'l': [np.nan] * 8}
+
+        df = de.DataFrame(data)
+        df1 = df.corr()
+        data = {'Column Name': ['a', 'b', 'd', 'e', 'f', 'h', 'i', 'j', 'k', 'l'],
+                'a': [1.0,
+                      0.583685097392588,
+                      0.326947045638107,
+                      -0.009380913603,
+                      0.22042933617057,
+                      0.6216546364862136,
+                      -0.1140013699089899,
+                      nan,
+                      nan,
+                      nan],
+                'b': [0.583685097392588,
+                      1.0,
+                      0.09182951524990407,
+                      0.2767305320147613,
+                      9.30544422486969e-05,
+                      -0.02540609057931423,
+                      0.6391126877826773,
+                      nan,
+                      nan,
+                      nan],
+                'd': [0.326947045638107,
+                      0.09182951524990407,
+                      1.0,
+                      0.5284193913361779,
+                      0.046373889576016826,
+                      0.38586568070322685,
+                      -0.137360563948689,
+                      nan,
+                      nan,
+                      nan],
+                'e': [-0.009380913603,
+                      0.2767305320147613,
+                      0.5284193913361779,
+                      1.0,
+                      -0.06919020001030568,
+                      0.042331953245962436,
+                      0.4269646211491787,
+                      nan,
+                      nan,
+                      nan],
+                'f': [0.22042933617057,
+                      9.30544422486969e-05,
+                      0.046373889576016826,
+                      -0.06919020001030568,
+                      1.0,
+                      0.6662917960183002,
+                      -0.14650870336708577,
+                      nan,
+                      nan,
+                      nan],
+                'h': [0.6216546364862136,
+                      -0.02540609057931423,
+                      0.38586568070322685,
+                      0.042331953245962436,
+                      0.6662917960183002,
+                      1.0,
+                      -0.3398410175630919,
+                      nan,
+                      nan,
+                      nan],
+                'i': [-0.1140013699089899,
+                      0.6391126877826773,
+                      -0.137360563948689,
+                      0.4269646211491787,
+                      -0.14650870336708577,
+                      -0.3398410175630919,
+                      1.0,
+                      nan,
+                      nan,
+                      nan],
+                'j': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan],
+                'k': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan],
+                'l': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan]}
+        df2 = de.DataFrame(data, columns=['Column Name', 'a', 'b', 'd', 'e', 'f',
+                                          'h', 'i', 'j', 'k', 'l'])
+        assert_frame_equal(df1, df2)
+
+        np.random.seed(1)
+        a = np.random.randint(0, 100, (10, 5))
+        df = de.DataFrame(a)
+        df1 = df.corr()
+        data = {'Column Name': ['a0', 'a1', 'a2', 'a3', 'a4'],
+                'a0': [1.0,
+                       0.1878981809143684,
+                       -0.04913753994096178,
+                       0.30624690075804206,
+                       0.08573019636314326],
+                'a1': [0.1878981809143684,
+                       1.0,
+                       -0.09201870004461146,
+                       0.14317713312049318,
+                       -0.45649118427652063],
+                'a2': [-0.04913753994096178,
+                       -0.09201870004461146,
+                       1.0,
+                       -0.14938446325950921,
+                       -0.4040167085005531],
+                'a3': [0.30624690075804206,
+                       0.14317713312049318,
+                       -0.14938446325950921,
+                       1.0,
+                       -0.005768700947290365],
+                'a4': [0.08573019636314326,
+                       -0.45649118427652063,
+                       -0.4040167085005531,
+                       -0.005768700947290365,
+                       1.0]}
+        df2 = de.DataFrame(data, columns=['Column Name', 'a0', 'a1', 'a2', 'a3', 'a4'])
+        assert_frame_equal(df1, df2)
+
+
+class TestSummary(object):
+
     def test_quantile(self):
         data = {'a': [0, 0, 5, 9, 3, 4, 5, 1],
                 'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
@@ -724,7 +999,7 @@ class TestFrameConstructor(object):
                 'g': ['', None, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
                 'h': [0, 4, 5, 6, 7, 8, 9, 0],
                 'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
-                'j': np.zeros(8, dtype='int'),
+                'j': np.zeros(8, dtype='int64'),
                 'k': np.ones(8) - 1,
                 'l': [np.nan] * 8}
 
@@ -783,7 +1058,7 @@ class TestFrameConstructor(object):
                 'g': ['', nan, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
                 'h': [0, 4, 5, 6, 7, 8, 9, 0],
                 'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
-                'j': np.zeros(8, dtype='int'),
+                'j': np.zeros(8, dtype='int64'),
                 'k': np.ones(8) - 1,
                 'l': [np.nan] * 8}
 
@@ -904,259 +1179,8 @@ class TestFrameConstructor(object):
                                           'max'])
         assert_frame_equal(df1, df2)
 
-    def test_cov(self):
-        data = {'a': [0, 0, 5, 9, 3, 4, 5, 1],
-                'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
-                'c': [''] + list('bgggzgh'),
-                'd': [False, False, True, False] * 2,
-                'e': [0, 20, 30, 4, 5, 6, 7, 8],
-                'f': [0., 3, 3, 3, 11, 4, 5, 1],
-                'g': ['', nan, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
-                'h': [0, 4, 5, 6, 7, 8, 9, 0],
-                'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
-                'j': np.zeros(8, dtype='int'),
-                'k': np.ones(8) - 1,
-                'l': [np.nan] * 8}
 
-        df = de.DataFrame(data)
-        df1 = df.cov()
-        data = {'Column Name': ['a', 'b', 'd', 'e', 'f', 'h', 'i', 'j', 'k', 'l'],
-                'a': [9.410714285714286,
-                      7.159612750666668,
-                      0.4642857142857143,
-                      -0.2857142857142857,
-                      2.25,
-                      6.482142857142857,
-                      -1.1785714285714286,
-                      0.0,
-                      0.0,
-                      nan],
-                'b': [7.159612750666668,
-                      13.737677416007287,
-                      0.1660788403333333,
-                      10.76910435583333,
-                      0.0005878263333372047,
-                      -0.3345089859999983,
-                      8.587742030833335,
-                      0.0,
-                      0.0,
-                      nan],
-                'd': [0.4642857142857143,
-                      0.1660788403333333,
-                      0.21428571428571427,
-                      2.4285714285714284,
-                      0.07142857142857142,
-                      0.6071428571428571,
-                      -0.21428571428571427,
-                      0.0,
-                      0.0,
-                      nan],
-                'e': [-0.2857142857142857,
-                      10.76910435583333,
-                      2.4285714285714284,
-                      98.57142857142857,
-                      -2.2857142857142856,
-                      1.4285714285714286,
-                      14.285714285714286,
-                      0.0,
-                      0.0,
-                      nan],
-                'f': [2.25,
-                      0.0005878263333372047,
-                      0.07142857142857142,
-                      -2.2857142857142856,
-                      11.071428571428571,
-                      7.535714285714286,
-                      -1.6428571428571428,
-                      0.0,
-                      0.0,
-                      nan],
-                'h': [6.482142857142857,
-                      -0.3345089859999983,
-                      0.6071428571428571,
-                      1.4285714285714286,
-                      7.535714285714286,
-                      11.553571428571429,
-                      -3.892857142857143,
-                      0.0,
-                      0.0,
-                      nan],
-                'i': [-1.1785714285714286,
-                      8.587742030833335,
-                      -0.21428571428571427,
-                      14.285714285714286,
-                      -1.6428571428571428,
-                      -3.892857142857143,
-                      11.357142857142858,
-                      0.0,
-                      0.0,
-                      nan],
-                'j': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, nan],
-                'k': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, nan],
-                'l': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan]}
-        df2 = de.DataFrame(data, columns=['Column Name', 'a', 'b', 'd', 'e', 'f',
-                                          'h', 'i', 'j', 'k', 'l'])
-        assert_frame_equal(df1, df2)
-
-        np.random.seed(1)
-        a = np.random.randint(0, 100, (10, 5))
-        df = de.DataFrame(a)
-        df1 = df.cov()
-        data = {'Column Name': ['a0', 'a1', 'a2', 'a3', 'a4'],
-                'a0': [828.6222222222223,
-                       204.88888888888889,
-                       -51.422222222222224,
-                       246.06666666666666,
-                       78.33333333333333],
-                'a1': [204.88888888888889,
-                       1434.9444444444443,
-                       -126.72222222222223,
-                       151.38888888888889,
-                       -548.8888888888889],
-                'a2': [-51.422222222222224,
-                       -126.72222222222223,
-                       1321.6555555555556,
-                       -151.58888888888882,
-                       -466.22222222222223],
-                'a3': [246.06666666666666,
-                       151.38888888888889,
-                       -151.58888888888882,
-                       779.1222222222223,
-                       -5.111111111111111],
-                'a4': [78.33333333333333,
-                       -548.8888888888889,
-                       -466.22222222222223,
-                       -5.111111111111111,
-                       1007.5555555555555]}
-        df2 = de.DataFrame(data)
-        assert_frame_equal(df1, df2)
-
-    def test_corr(self):
-        data = {'a': [0, 0, 5, 9, 3, 4, 5, 1],
-                'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
-                'c': [''] + list('bgggzgh'),
-                'd': [False, False, True, False] * 2,
-                'e': [0, 20, 30, 4, 5, 6, 7, 8],
-                'f': [0., 3, 3, 3, 11, 4, 5, 1],
-                'g': ['', nan, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
-                'h': [0, 4, 5, 6, 7, 8, 9, 0],
-                'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
-                'j': np.zeros(8, dtype='int'),
-                'k': np.ones(8) - 1,
-                'l': [np.nan] * 8}
-
-        df = de.DataFrame(data)
-        df1 = df.corr()
-        data = {'Column Name': ['a', 'b', 'd', 'e', 'f', 'h', 'i', 'j', 'k', 'l'],
-                'a': [1.0,
-                      0.583685097392588,
-                      0.326947045638107,
-                      -0.009380913603,
-                      0.22042933617057,
-                      0.6216546364862136,
-                      -0.1140013699089899,
-                      nan,
-                      nan,
-                      nan],
-                'b': [0.583685097392588,
-                      1.0,
-                      0.09182951524990407,
-                      0.2767305320147613,
-                      9.30544422486969e-05,
-                      -0.02540609057931423,
-                      0.6391126877826773,
-                      nan,
-                      nan,
-                      nan],
-                'd': [0.326947045638107,
-                      0.09182951524990407,
-                      1.0,
-                      0.5284193913361779,
-                      0.046373889576016826,
-                      0.38586568070322685,
-                      -0.137360563948689,
-                      nan,
-                      nan,
-                      nan],
-                'e': [-0.009380913603,
-                      0.2767305320147613,
-                      0.5284193913361779,
-                      1.0,
-                      -0.06919020001030568,
-                      0.042331953245962436,
-                      0.4269646211491787,
-                      nan,
-                      nan,
-                      nan],
-                'f': [0.22042933617057,
-                      9.30544422486969e-05,
-                      0.046373889576016826,
-                      -0.06919020001030568,
-                      1.0,
-                      0.6662917960183002,
-                      -0.14650870336708577,
-                      nan,
-                      nan,
-                      nan],
-                'h': [0.6216546364862136,
-                      -0.02540609057931423,
-                      0.38586568070322685,
-                      0.042331953245962436,
-                      0.6662917960183002,
-                      1.0,
-                      -0.3398410175630919,
-                      nan,
-                      nan,
-                      nan],
-                'i': [-0.1140013699089899,
-                      0.6391126877826773,
-                      -0.137360563948689,
-                      0.4269646211491787,
-                      -0.14650870336708577,
-                      -0.3398410175630919,
-                      1.0,
-                      nan,
-                      nan,
-                      nan],
-                'j': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan],
-                'k': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan],
-                'l': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan]}
-        df2 = de.DataFrame(data, columns=['Column Name', 'a', 'b', 'd', 'e', 'f',
-                                          'h', 'i', 'j', 'k', 'l'])
-        assert_frame_equal(df1, df2)
-
-        np.random.seed(1)
-        a = np.random.randint(0, 100, (10, 5))
-        df = de.DataFrame(a)
-        df1 = df.corr()
-        data = {'Column Name': ['a0', 'a1', 'a2', 'a3', 'a4'],
-                'a0': [1.0,
-                       0.1878981809143684,
-                       -0.04913753994096178,
-                       0.30624690075804206,
-                       0.08573019636314326],
-                'a1': [0.1878981809143684,
-                       1.0,
-                       -0.09201870004461146,
-                       0.14317713312049318,
-                       -0.45649118427652063],
-                'a2': [-0.04913753994096178,
-                       -0.09201870004461146,
-                       1.0,
-                       -0.14938446325950921,
-                       -0.4040167085005531],
-                'a3': [0.30624690075804206,
-                       0.14317713312049318,
-                       -0.14938446325950921,
-                       1.0,
-                       -0.005768700947290365],
-                'a4': [0.08573019636314326,
-                       -0.45649118427652063,
-                       -0.4040167085005531,
-                       -0.005768700947290365,
-                       1.0]}
-        df2 = de.DataFrame(data, columns=['Column Name', 'a0', 'a1', 'a2', 'a3', 'a4'])
-        assert_frame_equal(df1, df2)
+class TestUnique(object):
 
     def test_unique(self):
         data = {'a': [0, 0, 5, 9, 3, 4, 5, 1],
@@ -1168,7 +1192,7 @@ class TestFrameConstructor(object):
                 'g': ['', nan, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
                 'h': [0, 4, 5, 6, 7, 8, 9, 0],
                 'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
-                'j': np.zeros(8, dtype='int'),
+                'j': np.zeros(8, dtype='int64'),
                 'k': np.ones(8) - 1,
                 'l': [np.nan] * 8}
 
@@ -1203,7 +1227,7 @@ class TestFrameConstructor(object):
                 'g': ['', nan, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
                 'h': [0, 4, 5, 6, 7, 8, 9, 0],
                 'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
-                'j': np.zeros(8, dtype='int'),
+                'j': np.zeros(8, dtype='int64'),
                 'k': np.ones(8) - 1,
                 'l': [np.nan] * 8}
         columns = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l']
@@ -1246,4 +1270,3 @@ class TestFrameConstructor(object):
         df1 = df.nunique('columns', count_na=True)
         df2 = de.DataFrame({'nunique': [3, 8, 10, 9, 9, 7, 9, 7]})
         assert_frame_equal(df1, df2)
-
