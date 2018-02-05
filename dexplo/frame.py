@@ -1341,7 +1341,7 @@ class DataFrame(object):
             raise TypeError(f'Type {type(value).__name__} not able to be assigned')
         self._data[dtype][rs, loc] = value
 
-    def _setitem_entire_column(self, cs: str, value: Union[Scalar, ndarray]) -> None:
+    def _setitem_entire_column(self, cs: str, value: Union[Scalar, ndarray, 'DataFrame']) -> None:
         """
         Called when setting an entire column (old or new)
         df[:, 'col'] = value
@@ -1362,6 +1362,18 @@ class DataFrame(object):
             if value.dtype.kind == 'O':
                 va.validate_strings_in_object_array(value)
             self._full_columm_add(cs, value.dtype.kind, value)
+        elif isinstance(value, DataFrame):
+            if value.shape[0] != self.shape[0]:
+                raise ValueError(f'The DataFrame on the left has {self.shape[0]} rows. '
+                                 f'The DataFrame on the right has {self.shape[0]} rows. '
+                                 'They must be equal')
+            if value.shape[1] != 1:
+                raise ValueError('You are setting exactly one column. The DataFrame you are '
+                                 f'trying to set this with has {value.shape[1]} columns. '
+                                 'They must be equal')
+            data = value.values.squeeze()
+            kind = data.dtype.kind
+            self._full_columm_add(cs, kind, data)
         else:
             raise TypeError('Must use a scalar, a list, an array, or a '
                             'DataFrame when setting new values')
@@ -1410,7 +1422,7 @@ class DataFrame(object):
             self._setitem_other_cols(rs, cs, arrs, kinds, other_kinds)
 
     def _get_nrows_cols_to_set(self, rs: Union[List[int], ndarray],
-                                  cs: List[str]) -> Tuple[int, int]:
+                               cs: List[str]) -> Tuple[int, int]:
         if isinstance(rs, int):
             rows: int = 1
         else:
@@ -2227,10 +2239,15 @@ class DataFrame(object):
 
     def groupby(self, columns):
         if isinstance(columns, list):
+            col_set = set()
             for col in columns:
                 self._validate_column_name(col)
+                if col in col_set:
+                    raise ValueError('`{col}` has already been selected as a grouping column')
+                col_set.add(col)
         elif isinstance(columns, str):
             self._validate_column_name(columns)
+            columns = [columns]
         else:
             raise ValueError('Must pass in grouping column(s) as a string or list of strings')
         return Grouper(self, columns)
@@ -2240,15 +2257,44 @@ class Grouper(object):
 
     def __init__(self, df: DataFrame, columns: Union[str, List[str]]) -> None:
         self._df: DataFrame = df
-        self._create_groups(columns)
-        self._group_columns = columns
-
-    def _create_groups(self, columns):
-        dtype, loc, _ = self._df._column_info[columns].values  # type: str, int, int
-        arr: ndarray = self._df._data[dtype][:, loc]
         (self._group_labels,
          self._group_names,
-         self._group_position) = gb.get_group_assignment(arr)
+         self._group_position) = self._create_groups(columns)
+        self._group_columns = columns
+
+    def _create_groups(self, columns: List[str]) -> Tuple:
+        self._dtype_loc: Dict[str, List[int]] = defaultdict(list)
+        for col in columns:
+            dtype, loc, _ = self._df._column_info[col].values  # type: str, int, int
+            self._dtype_loc[dtype].append(loc)
+
+        if len(columns) == 1:
+            # since there is just one column, dtype is from the for-loop
+            final_arr = self._df._data[dtype][:, loc].squeeze()
+            if dtype == 'O':
+                return gb.get_group_assignment_str_1d(final_arr)
+            if dtype == 'i':
+                return gb.get_group_assignment_int_1d(final_arr)
+            if dtype == 'f':
+                return gb.get_group_assignment_float_1d(final_arr)
+            if dtype == 'b':
+                return gb.get_group_assignment_bool_1d(final_arr)
+        else:
+            arrs = []
+            for dtype, locs in self._dtype_loc.items():
+                arrs.append(self._df._data[dtype][:, locs])
+            final_arr = np.column_stack(arrs)
+            final_dtype = final_arr.dtype.kind
+
+            if final_dtype == 'O':
+                return gb.get_group_assignment_str_2d(final_arr)
+            if final_dtype == 'i':
+                return gb.get_group_assignment_int_2d(final_arr)
+            if final_dtype == 'f':
+                return gb.get_group_assignment_float_2d(final_arr)
+            if final_dtype == 'b':
+                return gb.get_group_assignment_bool_2d(final_arr)
+
 
     def size(self):
         new_columns = np.array([self._group_columns, 'size'], dtype='O')
@@ -2265,12 +2311,21 @@ class Grouper(object):
         arrs = []
         for dtype, data in self._df._data.items():
             if dtype == 'f':
-                arrs.append(gb.count_float(labels, size, data))
+                # number of grouped columns
+                group_locs: list = self._dtype_loc.get('f', [])
+                if len(group_locs) != data.shape[1]:
+                    arrs.append(gb.count_float(labels, size, data, group_locs))
             elif dtype == 'O':
-                arrs.append(gb.count_str(labels, size, data))
+                group_locs: list = self._dtype_loc.get('O', [])
+                if len(group_locs) != data.shape[1]:
+                    arrs.append(gb.count_str(labels, size, data, group_locs))
             else:
-                arrs.append(np.full((size, data.shape[1]), data.shape[0], dtype='int64'))
-        return arrs
+                group_locs: list = self._dtype_loc.get(dtype, [])
+                len_gl = len(group_locs)
+                if len_gl != data.shape[1]:
+                    arrs.append(
+                        np.full((size, data.shape[1] - len_gl), data.shape[0], dtype='int64'))
+        return np.column_stack(arrs)
 
 
 class StringClass(object):
