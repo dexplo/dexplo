@@ -119,12 +119,17 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 
 **Group By** - specifically with `groupby` method
 - [x] count
+- [x] cov
 - [x] cumcount
-- [ ] max
+- [x] first
+- [x] last
+- [x] max
 - [ ] median
-- [ ] min
+- [x] min
+- [x] ngroups
 - [x] size
-- [ ] sum
+- [x] sum
+- [x] var
 
 **Other**
 

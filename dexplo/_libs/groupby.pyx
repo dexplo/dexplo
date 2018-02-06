@@ -8,7 +8,7 @@ import cython
 from cpython cimport dict, set, list, tuple
 from libc.math cimport isnan, sqrt
 from numpy import nan
-from .math import min_max_int, min_max_int2
+from .math import min_max_int, min_max_int2, isna_str, get_first_non_nan
 from libc.stdlib cimport malloc, free
 
 MAX_FLOAT = np.finfo(np.float64).max
@@ -573,15 +573,14 @@ def max_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2
     cdef int i, j, k = 0
     cdef int nr = data.shape[0]
     cdef int nc = data.shape[1]
-    cdef ndarray[np.float64_t, ndim=2] result = np.full((size, nc - len(group_locs)),MIN_FLOAT, dtype='float64')
+    cdef ndarray[np.float64_t, ndim=2] result = np.full((size, nc - len(group_locs)), nan, dtype='float64')
     for i in range(nc):
         if i in group_locs:
             k += 1
             continue
         for j in range(nr):
-            if data[j, i] > result[labels[j], i - k]:
+            if not isnan(data[j, i]) and (isnan(result[labels[j], i - k]) or data[j, i] > result[labels[j], i - k]):
                 result[labels[j], i - k] = data[j, i]
-    result[result == MIN_FLOAT] = nan
     return result
 
 def max_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
@@ -602,14 +601,312 @@ def max_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, 
     cdef int i, j, k = 0
     cdef int nr = data.shape[0]
     cdef int nc = data.shape[1]
-    cdef ndarray[object, ndim=2] result = np.zeros((size, nc - len(group_locs)), dtype='U').astype('O')
+    cdef ndarray[object, ndim=2] result = np.full((size, nc - len(group_locs)), None, dtype='O')
     for i in range(nc):
         if i in group_locs:
             k += 1
             continue
         for j in range(nr):
             if data[j, i] is not None:
-                if data[j, i] > result[labels[j], i - k]:
+                if result[labels[j], i - k] is None or data[j, i] > result[labels[j], i - k]:
                     result[labels[j], i - k] = data[j, i]
-    # run my isna to change to None
     return result
+
+def min_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.full((size, nc - len(group_locs)), MAX_INT, dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] < result[labels[j], i - k]:
+                result[labels[j], i - k] = data[j, i]
+    return result
+
+def min_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.full((size, nc - len(group_locs)), nan, dtype='float64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if not isnan(data[j, i]) and (isnan(result[labels[j], i - k]) or data[j, i] < result[labels[j], i - k]):
+                result[labels[j], i - k] = data[j, i]
+    return result
+
+def min_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.zeros((size, nc - len(group_locs)), dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] < result[labels[j], i - k]:
+                result[labels[j], i - k] = data[j, i]
+    return result
+
+def min_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[object, ndim=2] result = np.full((size, nc - len(group_locs)), None, dtype='O')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] is not None:
+                if result[labels[j], i - k] is None or data[j, i] < result[labels[j], i - k]:
+                    result[labels[j], i - k] = data[j, i]
+    return result
+
+
+def last_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            result[labels[j], i - k] = data[j, i]
+    return result
+
+def last_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            result[labels[j], i - k] = data[j, i]
+    return result
+
+def last_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.empty((size, nc - len(group_locs)), dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            result[labels[j], i - k] = data[j, i]
+    return result
+
+def last_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='O')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            result[labels[j], i - k] = data[j, i]
+    return result
+
+def _get_first_non_nan(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if isnan(data[j, i]):
+                continue
+            result[labels[j], i - k] = data[j, i]
+    return result
+
+
+def var_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs,
+            ndarray[np.int64_t] first_position, int ddof=1):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.int64_t, ndim=2] ct = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] Ex = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] Ex2 = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] First = data[first_position, :]
+
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            ct[labels[j], i - k] += 1
+            Ex[labels[j], i - k] = Ex[labels[j], i - k]+  (data[j, i] - First[labels[j], i - k])
+            Ex2[labels[j], i - k] = Ex2[labels[j], i - k] + (data[j, i] - First[labels[j], i - k]) ** 2
+
+    with np.errstate(invalid='ignore'):
+        result = (Ex2 - (Ex * Ex) / ct) / (ct - ddof)
+    result[ct <= ddof] = nan
+    return result
+
+def var_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs,
+            ndarray[np.int64_t] first_position, int ddof=1):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.int64_t, ndim=2] ct = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef ndarray[np.float64_t, ndim=2] Ex = np.zeros((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.float64_t, ndim=2] Ex2 = np.zeros((size, nc - len(group_locs)), dtype='float64')
+
+    # There must be a faster way to initialize this. Could just get first non-na of each column
+    cdef ndarray[np.float64_t, ndim=2] First = _get_first_non_nan(labels, size, data, group_locs)
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if isnan(data[j, i]):
+                continue
+            ct[labels[j], i - k] += 1
+            Ex[labels[j], i - k] = Ex[labels[j], i - k] +  (data[j, i] - First[labels[j], i])
+            Ex2[labels[j], i - k] = Ex2[labels[j], i - k] + (data[j, i] - First[labels[j], i]) ** 2
+
+    with np.errstate(invalid='ignore'):
+        result = (Ex2 - (Ex * Ex) / ct) / (ct - ddof)
+    result[ct <= ddof] = nan
+    return result
+
+def var_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs,
+            ndarray[np.int64_t] first_position, int ddof=1):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.int64_t, ndim=2] ct = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] Ex = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] Ex2 = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] First = data[first_position, :]
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            ct[labels[j], i - k] += 1
+            Ex[labels[j], i - k] = Ex[labels[j], i - k]+  (data[j, i] - First[labels[j], i])
+            Ex2[labels[j], i - k] = Ex2[labels[j], i - k] + (data[j, i] - First[labels[j], i]) ** 2
+
+    with np.errstate(invalid='ignore'):
+        result = (Ex2 - (Ex * Ex) / ct) / (ct - ddof)
+    result[ct <= ddof] = nan
+    return result
+
+
+def cov_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int start, end
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef list covs
+    cdef ndarray[np.int64_t, ndim=2] x
+    cdef ndarray[np.int64_t] x0
+    cdef ndarray[np.int64_t, ndim=2] x_diff
+    cdef ndarray[np.int64_t, ndim=2] Ex
+    cdef ndarray[np.int64_t, ndim=2] Exy
+    cdef ndarray[np.int64_t, ndim=2] ExEy
+    cdef int counts
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    covs = []
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        x = data[start:end]
+        start = end
+
+        x0 = x[0]
+        x_diff = x - x0
+        Exy = (x_diff.T @ x_diff)
+        Ex = x_diff.sum(0)[np.newaxis, :]
+        ExEy = Ex.T @ Ex
+        counts = len(x)
+
+        with np.errstate(invalid='ignore'):
+            cov = (Exy - ExEy / counts) / (counts - 1)
+
+        covs.append(cov)
+    return np.row_stack(covs)
+
+def cov_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int start, end
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef list covs
+    cdef ndarray[np.float64_t, ndim=2] x
+    cdef ndarray[np.float64_t] x0
+    cdef ndarray[np.float64_t, ndim=2] x_diff
+    cdef ndarray[np.float64_t, ndim=2] x_diff_0
+    cdef ndarray[np.int64_t, ndim=2] x_not_nan
+    cdef ndarray[np.float64_t, ndim=2] Ex
+    cdef ndarray[np.float64_t, ndim=2] Exy
+    cdef ndarray[np.float64_t, ndim=2] ExEy
+    cdef ndarray[np.int64_t, ndim=2] counts
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    covs = []
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        x = data[start:end]
+        start = end
+
+        x0 = get_first_non_nan(x)
+        x_diff = x - x0
+        x_not_nan = (~np.isnan(x)).astype(int)
+
+        x_diff_0 = np.nan_to_num(x_diff)
+        counts = (x_not_nan.T @ x_not_nan)
+        Exy = (x_diff_0.T @ x_diff_0)
+        Ex = (x_diff_0.T @ x_not_nan)
+        ExEy = Ex * Ex.T
+
+        with np.errstate(invalid='ignore'):
+            cov = (Exy - ExEy / counts) / (counts - 1)
+
+        covs.append(cov)
+    return np.row_stack(covs)
