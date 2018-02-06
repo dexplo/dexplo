@@ -190,3 +190,9 @@ def any_str(ndarray[object] a):
         if a[i] != '' and not a[i] is not nan:
             return True
     return False
+
+
+def convert_nan_to_none(ndarray[object, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]

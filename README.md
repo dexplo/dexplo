@@ -117,6 +117,15 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] fillna
 - [ ] interpolate
 
+**Group By** - specifically with `groupby` method
+- [x] count
+- [x] cumcount
+- [ ] max
+- [ ] median
+- [ ] min
+- [x] size
+- [ ] sum
+
 **Other**
 
 - [ ] append

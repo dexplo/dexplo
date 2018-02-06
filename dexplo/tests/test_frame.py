@@ -678,6 +678,25 @@ class TestSetItem:
         with pytest.raises(TypeError):
             df1[:, 'a'] = np.array([5, {1, 2, 3}])
 
+    def test_setitem_entire_new_column_from_df(self):
+        df1 = self.df1.copy()
+        df1[:, 'a_bool'] = df1[:, 'a'] > 3
+
+        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+                            'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True],
+                            'a_bool': [False, True, True, True]},
+                           columns=['a', 'b', 'c', 'd', 'a_bool'])
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df1.copy()
+        df1[:, 'a2'] = df1[:, 'a'] + 5
+
+        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+                            'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True],
+                            'a2': [6, 10, 12, 16]},
+                           columns=['a', 'b', 'c', 'd', 'a2'])
+        assert_frame_equal(df1, df2)
+
     def test_setitem_entire_old_column_from_list(self):
         df1 = self.df.copy()
         df1[:, 'd'] = [9, 99]

@@ -1,4 +1,5 @@
 from collections import defaultdict, OrderedDict
+import warnings
 
 import numpy as np
 from numpy import nan, ndarray
@@ -2228,11 +2229,11 @@ class DataFrame(object):
         self._validate_column_name(col)
         arr = self._get_col_array(col)
 
-        group_labels, group_names, group_position = gb.get_group_assignment(arr)
+        group_labels, group_position = gb.get_group_assignment(arr)
 
         size = gb.size(group_labels, d)
 
-        new_data = {'O': group_names, 'b': None, 'f': None, 'i': size[:, np.newaxis]}
+        new_data = {'O': arr[group_position], 'b': None, 'f': None, 'i': size[:, np.newaxis]}
         new_columns = ['Column Values', 'Counts']
         # add _column_info
         return self._construct_from_new(new_data, new_columns)
@@ -2257,16 +2258,17 @@ class Grouper(object):
 
     def __init__(self, df: DataFrame, columns: Union[str, List[str]]) -> None:
         self._df: DataFrame = df
-        (self._group_labels,
-         self._group_names,
-         self._group_position) = self._create_groups(columns)
+        self._group_labels, self._group_position = self._create_groups(columns)
         self._group_columns = columns
 
     def _create_groups(self, columns: List[str]) -> Tuple:
-        self._dtype_loc: Dict[str, List[int]] = defaultdict(list)
-        for col in columns:
+        self._group_dtype_loc: Dict[str, List[int]] = defaultdict(list)
+        self._column_info = {}
+        for i, col in enumerate(columns):
             dtype, loc, _ = self._df._column_info[col].values  # type: str, int, int
-            self._dtype_loc[dtype].append(loc)
+            cur_loc = len(self._group_dtype_loc[dtype])
+            self._group_dtype_loc[dtype].append(loc)
+            self._column_info[col] = utils.Column(dtype, cur_loc, i)
 
         if len(columns) == 1:
             # since there is just one column, dtype is from the for-loop
@@ -2281,10 +2283,25 @@ class Grouper(object):
                 return gb.get_group_assignment_bool_1d(final_arr)
         else:
             arrs = []
-            for dtype, locs in self._dtype_loc.items():
+
+            total_locs = 0
+            start = 0
+            end = 0
+            for i, (dtype, locs) in enumerate(self._group_dtype_loc.items()):
+                # in case there is a mix of floats and objects
+                if dtype == 'f':
+                    start = total_locs
+                    end = start + len(locs)
+                    float_idx = i
                 arrs.append(self._df._data[dtype][:, locs])
+                total_locs += len(locs)
+
             final_arr = np.column_stack(arrs)
             final_dtype = final_arr.dtype.kind
+
+            if final_dtype == 'O' and end != 0:
+                arr_nan = np.isnan(arrs[float_idx])
+                final_arr[:, start:end][arr_nan] = None
 
             if final_dtype == 'O':
                 return gb.get_group_assignment_str_2d(final_arr)
@@ -2294,38 +2311,124 @@ class Grouper(object):
                 return gb.get_group_assignment_float_2d(final_arr)
             if final_dtype == 'b':
                 return gb.get_group_assignment_bool_2d(final_arr)
+        if len(self._group_position) == self._df.shape[0]:
+            warnings.warn("Each group contains exactly one row of data. "
+                          "Are you sure you are grouping correctly?")
 
+    def _get_group_col_data(self):
+        data_dict = defaultdict(list)
+        for dtype, locs in self._group_dtype_loc.items():
+            ix = np.ix_(self._group_position, locs)
+            arr = self._df._data[dtype][ix]
+            if arr.ndim == 1:
+                arr = arr[:, np.newaxis]
+            data_dict[dtype].append(arr)
+        return data_dict
+
+    def _get_group_col_data_all(self):
+        data_dict = defaultdict(list)
+        for dtype, locs in self._group_dtype_loc.items():
+            arr = self._df._data[dtype][:, locs]
+            if arr.ndim == 1:
+                arr = arr[:, np.newaxis]
+            data_dict[dtype].append(arr)
+        return data_dict
+
+    def _get_agg_name(self, name):
+        i = 1
+        while name in self._group_columns:
+            name = name + str(i)
+        return name
+
+    def __repr__(self):
+        return ("This is a groupby object. Here is some info on it:\n"
+                f"Grouping Columns: {self._group_columns}\n"
+                f"Number of Groups: {len(self._group_position)}")
 
     def size(self):
-        new_columns = np.array([self._group_columns, 'size'], dtype='O')
-        new_column_info = {self._group_columns: utils.Column('O', 0, 0),
-                           'size': utils.Column('i', 0, 1)}
-        size = gb.size(self._group_labels, len(self._group_names))[:, np.newaxis]
-        new_data = {'O': self._group_names, 'i': size}
-        return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
+        name = self._get_agg_name('size')
+        new_columns = np.array(self._group_columns + [name], dtype='O')
+        size = gb.size(self._group_labels, len(self._group_position))[:, np.newaxis]
+        data_dict = self._get_group_col_data()
+        data_dict['i'].append(size)
+        new_data = utils.concat_stat_arrays(data_dict)
+        self._column_info[name] = utils.Column('i', new_data['i'].shape[1] - 1,
+                                               len(new_columns) - 1)
+        return DataFrame._construct_from_new(new_data, self._column_info, new_columns)
 
     def count(self):
-        labels = self._group_labels
-        size = len(self._group_names)
+        return self._group_agg('count', ignore_str=False)
 
-        arrs = []
+    def cumcount(self):
+        name = self._get_agg_name('cumcount')
+        new_columns = np.array(self._group_columns + [name], dtype='O')
+        cumcount = gb.cumcount(self._group_labels, len(self._group_position))[:, np.newaxis]
+        data_dict = self._get_group_col_data_all()
+        data_dict['i'].append(cumcount)
+        new_data = utils.concat_stat_arrays(data_dict)
+        self._column_info[name] = utils.Column('i', new_data['i'].shape[1] - 1,
+                                               len(new_columns) - 1)
+        return DataFrame._construct_from_new(new_data, self._column_info, new_columns)
+
+    def sum(self):
+        return self._group_agg('sum')
+
+    def mean(self):
+        return self._group_agg('mean')
+
+    def max(self):
+        return self._group_agg('max', False)
+
+    def _group_agg(self, name, ignore_str=True):
+        labels = self._group_labels
+        size = len(self._group_position)
+        data_dict = self._get_group_col_data()
+
+        old_dtype_col = defaultdict(list)
+        for col, col_obj in self._df._column_info.items():
+            if col not in self._group_columns:
+                old_dtype_col[col_obj.dtype].append(col)
+
         for dtype, data in self._df._data.items():
-            if dtype == 'f':
-                # number of grouped columns
-                group_locs: list = self._dtype_loc.get('f', [])
-                if len(group_locs) != data.shape[1]:
-                    arrs.append(gb.count_float(labels, size, data, group_locs))
-            elif dtype == 'O':
-                group_locs: list = self._dtype_loc.get('O', [])
-                if len(group_locs) != data.shape[1]:
-                    arrs.append(gb.count_str(labels, size, data, group_locs))
+            if ignore_str and dtype == 'O':
+                continue
+            # number of grouped columns
+            group_locs: list = self._group_dtype_loc.get(dtype, [])
+            if len(group_locs) != data.shape[1]:
+                func_name = name + '_' + utils.convert_kind_to_dtype(dtype)
+                func = getattr(gb, func_name)
+                arr = func(labels, size, data, group_locs)
             else:
-                group_locs: list = self._dtype_loc.get(dtype, [])
-                len_gl = len(group_locs)
-                if len_gl != data.shape[1]:
-                    arrs.append(
-                        np.full((size, data.shape[1] - len_gl), data.shape[0], dtype='int64'))
-        return np.column_stack(arrs)
+                continue
+
+            new_kind = arr.dtype.kind
+            cur_loc = utils.get_num_cols(data_dict.get(new_kind, []))
+            data_dict[new_kind].append(arr)
+            for col in old_dtype_col[dtype]:
+                count_less = 0
+                old_kind, old_loc, old_order = self._df._column_info[col].values
+                for k in self._group_dtype_loc.get(dtype, []):
+                    count_less += old_loc > k
+                self._column_info[col] = utils.Column(new_kind, cur_loc + old_loc - count_less, 0)
+
+        new_columns = self._group_columns.copy()
+        i = len(self._group_columns)
+        j = 0
+        for col in self._df._columns:
+            if col not in self._column_info:
+                continue
+            if col in self._group_columns:
+                self._column_info[col].order = j
+                j += 1
+                continue
+            # new_columns[i] = col
+            new_columns.append(col)
+            self._column_info[col].order = i
+            i += 1
+
+        new_data = utils.concat_stat_arrays(data_dict)
+
+        return DataFrame._construct_from_new(new_data, self._column_info, new_columns)
 
 
 class StringClass(object):
