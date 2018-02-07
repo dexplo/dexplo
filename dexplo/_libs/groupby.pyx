@@ -10,6 +10,7 @@ from libc.math cimport isnan, sqrt
 from numpy import nan
 from .math import min_max_int, min_max_int2, isna_str, get_first_non_nan
 from libc.stdlib cimport malloc, free
+import bottleneck as bn
 
 MAX_FLOAT = np.finfo(np.float64).max
 MIN_FLOAT = np.finfo(np.float64).min
@@ -825,6 +826,7 @@ def cov_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] da
     cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
     cdef ndarray[np.int64_t]label_args = np.argsort(labels)
     cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.int64_t, ndim=2] data_sorted = data[label_args]
     cdef list covs
     cdef ndarray[np.int64_t, ndim=2] x
     cdef ndarray[np.int64_t] x0
@@ -845,7 +847,7 @@ def cov_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] da
     start = 0
     for i in range(size):
         end = group_end_idx[i]
-        x = data[start:end]
+        x = data_sorted[start:end]
         start = end
 
         x0 = x[0]
@@ -870,6 +872,7 @@ def cov_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2
     cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
     cdef ndarray[np.int64_t]label_args = np.argsort(labels)
     cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.float64_t, ndim=2] data_sorted = data[label_args]
     cdef list covs
     cdef ndarray[np.float64_t, ndim=2] x
     cdef ndarray[np.float64_t] x0
@@ -892,7 +895,7 @@ def cov_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2
     start = 0
     for i in range(size):
         end = group_end_idx[i]
-        x = data[start:end]
+        x = data_sorted[start:end]
         start = end
 
         x0 = get_first_non_nan(x)
@@ -910,3 +913,468 @@ def cov_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2
 
         covs.append(cov)
     return np.row_stack(covs)
+
+def corr_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int start, end
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.int64_t, ndim=2] data_sorted = data[label_args]
+    cdef list corrs
+    cdef ndarray[np.int64_t, ndim=2] x
+    cdef ndarray[np.int64_t] x0
+    cdef ndarray[np.int64_t, ndim=2] x_diff
+    cdef ndarray[np.int64_t, ndim=2] Ex
+    cdef ndarray[np.int64_t, ndim=2] Ex2
+    cdef ndarray[np.int64_t, ndim=2] Exy
+    cdef ndarray[np.int64_t, ndim=2] ExEy
+    cdef ndarray[np.float64_t, ndim=2] stdx
+    cdef ndarray[np.float64_t, ndim=2] stdy
+    cdef ndarray[np.float64_t, ndim=2] corr
+    cdef int counts
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    corrs = []
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        x = data_sorted[start:end]
+        start = end
+
+        x0 = x[0]
+        x_diff = x - x0
+        Exy = (x_diff.T @ x_diff)
+        Ex = x_diff.sum(0)[np.newaxis, :]
+        ExEy = Ex.T @ Ex
+        counts = len(x)
+        Ex2 = (x_diff ** 2).sum(0)
+
+        with np.errstate(invalid='ignore'):
+            cov = (Exy - ExEy / counts) / (counts - 1)
+            stdx = (Ex2 - Ex ** 2 / counts) / (counts - 1)
+            stdxy = stdx * stdx.T
+            corr = cov / np.sqrt(stdxy)
+
+        corrs.append(corr)
+    return np.row_stack(corrs)
+
+def corr_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int start, end
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.float64_t, ndim=2] data_sorted = data[label_args]
+    cdef list corrs
+    cdef ndarray[np.float64_t, ndim=2] x
+    cdef ndarray[np.float64_t] x0
+    cdef ndarray[np.float64_t, ndim=2] x_diff
+    cdef ndarray[np.float64_t, ndim=2] x_diff_0
+    cdef ndarray[np.int64_t, ndim=2] x_not_nan
+    cdef ndarray[np.float64_t, ndim=2] Ex
+    cdef ndarray[np.float64_t, ndim=2] Ex2
+    cdef ndarray[np.float64_t, ndim=2] Exy
+    cdef ndarray[np.float64_t, ndim=2] ExEy
+    cdef ndarray[np.float64_t, ndim=2] stdx
+    cdef ndarray[np.float64_t, ndim=2] stdy
+    cdef ndarray[np.float64_t, ndim=2] corr
+    cdef ndarray[np.int64_t, ndim=2] counts
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    corrs = []
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        x = data_sorted[start:end]
+        start = end
+
+        x0 = get_first_non_nan(x)
+        x_diff = x - x0
+        x_not_nan = (~np.isnan(x)).astype(int)
+
+        x_diff_0 = np.nan_to_num(x_diff)
+        counts = (x_not_nan.T @ x_not_nan)
+        Exy = (x_diff_0.T @ x_diff_0)
+        Ex = (x_diff_0.T @ x_not_nan)
+        ExEy = Ex * Ex.T
+        Ex2 = (x_diff_0.T ** 2 @ x_not_nan)
+
+        with np.errstate(invalid='ignore'):
+            cov = (Exy - ExEy / counts) / (counts - 1)
+            stdx = (Ex2 - Ex ** 2 / counts) / (counts - 1)
+            stdxy = stdx * stdx.T
+            corr = cov / np.sqrt(stdxy)
+
+        corrs.append(corr)
+    return np.row_stack(corrs)  
+    
+def any_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.zeros((size, nc - len(group_locs)), dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] != 0:
+                result[labels[j], i - k] = True
+    return result
+
+def any_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.zeros((size, nc - len(group_locs)), dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if not isnan(data[j, i]) and data[j, i] != 0:
+                result[labels[j], i - k] = True
+    return result
+
+def any_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.zeros((size, nc - len(group_locs)), dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] != False:
+                result[labels[j], i - k] = True
+    return result
+
+def any_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.zeros((size, nc - len(group_locs)), dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] is not None and data[j, i] != 0:
+                result[labels[j], i - k] = True
+    return result
+
+def all_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.ones((size, nc - len(group_locs)), dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] == 0:
+                result[labels[j], i - k] = False
+    return result
+
+def all_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.ones((size, nc - len(group_locs)), dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if isnan(data[j, i]) or data[j, i] == 0:
+                result[labels[j], i - k] = False
+    return result
+
+def all_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.ones((size, nc - len(group_locs)), dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] == False:
+                result[labels[j], i - k] = False
+    return result
+
+def all_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.ones((size, nc - len(group_locs)), dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] is None or data[j, i] == 0:
+                result[labels[j], i - k] = False
+    return result
+
+
+def median_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int start, end
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.int64_t, ndim=2] data_sorted = data[label_args]
+    cdef list medians = []
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        x = data_sorted[start:end]
+        start = end
+        medians.append(np.median(x, 0))
+    return np.row_stack(medians)
+
+def median_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int start, end
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.float64_t, ndim=2] data_sorted = data[label_args]
+    cdef list medians = []
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        x = data_sorted[start:end]
+        start = end
+        medians.append(bn.nanmedian(x, 0))
+    return np.row_stack(medians)
+
+
+def median_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int start, end
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.uint8_t, ndim=2] data_sorted = data[label_args]
+    cdef list medians = []
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        x = data_sorted[start:end]
+        start = end
+        medians.append(np.median(x, 0))
+    return np.row_stack(medians)
+
+def nunique_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((size, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] data_sorted = data[label_args]
+    cdef ndarray[object] uniques
+    cdef np.uint8_t first
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        uniques = np.empty(nc_final, dtype='O')
+        for j in range(nc_final):
+            uniques[j] = set()
+        for k in range(nc_final):
+            first = data_sorted[0, k]
+            result[i, k] = 1
+            for j in range(start, end):
+                if data_sorted[j, k] != first:
+                    result[i, k] = 2
+                    break
+        start = end
+    return result
+
+def nunique_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, list group_locs):
+    cdef int i, j, k
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((size, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[object, ndim=2] data_sorted = data[label_args]
+    cdef ndarray[object] uniques
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        uniques = np.empty(nc_final, dtype='O')
+        for j in range(nc_final):
+            uniques[j] = set()
+        for j in range(start, end):
+            for k in range(nc_final):
+                uniques[k].add(data_sorted[j, k])
+        for j in range(nc_final):
+            result[i, j] = len(uniques[j])
+        start = end
+    return result
+
+def nunique_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((size, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.int64_t, ndim=2] data_sorted = data[label_args]
+    cdef ndarray[object] uniques
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        uniques = np.empty(nc_final, dtype='O')
+        for j in range(nc_final):
+            uniques[j] = set()
+        for j in range(start, end):
+            for k in range(nc_final):
+                uniques[k].add(data_sorted[j, k])
+        for j in range(nc_final):
+            result[i, j] = len(uniques[j])
+        start = end
+    return result
+
+def nunique_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((size, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.float64_t, ndim=2] data_sorted = data[label_args]
+    cdef ndarray[object] uniques
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        uniques = np.empty(nc_final, dtype='O')
+        for j in range(nc_final):
+            uniques[j] = set()
+        for j in range(start, end):
+            for k in range(nc_final):
+                uniques[k].add(data_sorted[j, k])
+        for j in range(nc_final):
+            result[i, j] = len(uniques[j])
+        start = end
+    return result
+
+def head(ndarray[np.int64_t] labels, int size, n):
+    cdef int i
+    cdef int nr = len(labels)
+    cdef ndarray[np.int64_t] count = np.zeros(size, dtype='int64')
+    cdef list final_locs = []
+    for i in range(nr):
+        count[labels[i]] += 1
+        if count[labels[i]] <= n:
+            final_locs.append(i)
+    return final_locs
+
+def tail(ndarray[np.int64_t] labels, int size, n):
+    cdef int i
+    cdef int nr = len(labels)
+    cdef ndarray[np.int64_t] count = np.zeros(size, dtype='int64')
+    cdef list final_locs = []
+    for i in range(nr - 1, -1, -1):
+        count[labels[i]] += 1
+        if count[labels[i]] <= n:
+            final_locs.append(i)
+    return final_locs[::-1]

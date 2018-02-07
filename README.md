@@ -118,17 +118,33 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] interpolate
 
 **Group By** - specifically with `groupby` method
+- [ ] agg
+- [x] all
+- [ ] apply
+- [x] any
+- [x] corr
 - [x] count
 - [x] cov
 - [x] cumcount
+- [ ] cummax
+- [ ] cummin
+- [ ] cumsum
+- [x] head
 - [x] first
+- [ ] fillna
+- [ ] filter
 - [x] last
 - [x] max
-- [ ] median
+- [x] median
 - [x] min
 - [x] ngroups
+- [x] nunique
+- [ ] quantile
+- [ ] rank
+- [ ] rolling
 - [x] size
 - [x] sum
+- [x] tail
 - [x] var
 
 **Other**
@@ -139,9 +155,9 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] astype
 - [ ] groupby
 - [ ] info
+- [ ] join
 - [ ] melt
 - [ ] memory_usage
-- [ ] merge
 - [ ] pivot
 - [ ] plot
 - [ ] replace

@@ -2384,6 +2384,8 @@ class Grouper(object):
             if col not in self._group_columns:
                 old_dtype_col[col_obj.dtype].append(col)
 
+        new_column_info = self._get_new_column_info()
+
         for dtype, data in self._df._data.items():
             if ignore_str and dtype == 'O':
                 continue
@@ -2402,8 +2404,6 @@ class Grouper(object):
             new_kind = arr.dtype.kind
             cur_loc = utils.get_num_cols(data_dict.get(new_kind, []))
             data_dict[new_kind].append(arr)
-
-            new_column_info = self._get_new_column_info()
 
             for col in old_dtype_col[dtype]:
                 count_less = 0
@@ -2455,7 +2455,7 @@ class Grouper(object):
         data_dict['i'].append(cumcount)
         new_data = utils.concat_stat_arrays(data_dict)
         new_column_info[name] = utils.Column('i', new_data['i'].shape[1] - 1,
-                                               len(new_columns) - 1)
+                                             len(new_columns) - 1)
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
     def sum(self):
@@ -2485,6 +2485,12 @@ class Grouper(object):
         return self._group_agg('var', add_positions=True, ddof=1)
 
     def cov(self):
+        return self._cov_corr('cov')
+
+    def corr(self):
+        return self._cov_corr('corr')
+
+    def _cov_corr(self, name):
         calc_columns = []
         calc_dtype_loc = []
         np_dtype = 'int64'
@@ -2499,36 +2505,55 @@ class Grouper(object):
                 calc_dtype_loc.append((dtype, loc))
 
         data = self._df._values_number_drop(calc_columns, calc_dtype_loc, np_dtype)
-        if data.dtype.kind == 'i':
-            result = gb.cov_int(self._group_labels, len(self), data, [])
-        else:
-            result = gb.cov_float(self._group_labels, len(self), data, [])
+        dtype_word = utils.convert_kind_to_dtype(data.dtype.kind)
+        func = getattr(gb, name + '_' + dtype_word)
+        result = func(self._group_labels, len(self), data, [])
 
         data_dict = self._get_group_col_data()
-        for dtype, arr in data_dict.items():
-            data_dict[dtype] = np.repeat(arr, len(calc_columns), axis=1)
+        data_dict_final = defaultdict(list)
+        for dtype, arrs in data_dict.items():
+            data_dict_final[dtype] = [np.repeat(arrs[0], len(calc_columns), axis=0)]
 
         new_column_info = self._get_new_column_info()
         num_group_cols = len(self._group_columns)
         new_columns = self._group_columns.copy()
 
-        cur_obj_loc = utils.get_num_cols(data_dict.get('O', []))
+        cur_obj_loc = utils.get_num_cols(data_dict_final.get('O', []))
         column_name_array = np.tile(calc_columns, len(self))[:, np.newaxis]
-        data_dict['O'].append(column_name_array)
+        data_dict_final['O'].append(column_name_array)
         new_columns.append('Column Name')
         new_column_info['Column Name'] = utils.Column('O', cur_obj_loc, num_group_cols)
 
-        cur_loc = utils.get_num_cols(data_dict.get('f', []))
+        cur_loc = utils.get_num_cols(data_dict_final.get('f', []))
 
         for i, col in enumerate(calc_columns):
             new_column_info[col] = utils.Column('f', i + cur_loc, i + num_group_cols + 1)
             new_columns.append(col)
 
-        data_dict['f'].append(result)
-        new_data = utils.concat_stat_arrays(data_dict)
+        data_dict_final['f'].append(result)
+        new_data = utils.concat_stat_arrays(data_dict_final)
 
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
+    def any(self):
+        return self._group_agg('any', False)
+
+    def all(self):
+        return self._group_agg('all', False)
+
+    def median(self):
+        return self._group_agg('median')
+
+    def nunique(self):
+        return self._group_agg('nunique', False)
+
+    def head(self, n=5):
+        row_idx = gb.head(self._group_labels, len(self), n=n)
+        return self._df[row_idx, :]
+
+    def tail(self, n=5):
+        row_idx = gb.tail(self._group_labels, len(self), n=n)
+        return self._df[row_idx, :]
 
 class StringClass(object):
 
