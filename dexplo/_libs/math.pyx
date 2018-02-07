@@ -2092,3 +2092,59 @@ def quantile_int(ndarray[np.int64_t, ndim=2] a, axis, double q, ndarray[np.uint8
 
 def quantile_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, double q, ndarray[np.uint8_t, cast=True] hasnans):
     return np.percentile(a, q * 100, axis)
+
+def fillna_float(ndarray[np.float64_t, ndim=2] a, int limit, np.float64_t value):
+    cdef i, j, k, ct
+    cdef nr = a.shape[0]
+    cdef nc = a.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] a_new = np.empty((nr, nc), dtype='float64')
+
+    if limit == -1:
+        for i in range(nc):
+            for j in range(nr):
+                if isnan(a[j, i]):
+                    a_new[j, i] = value
+                else:
+                    a_new[j, i] = a[j, i]
+    else:
+        for i in range(nc):
+            ct = 0
+            for j in range(nr):
+                if isnan(a[j, i]):
+                    a_new[j, i] = value
+                    ct += 1
+                else:
+                    a_new[j, i] = a[j, i]
+                if ct == limit:
+                    for k in range(j + 1, nr):
+                        a_new[k, i] = a[k, i]
+                    break
+    return a_new
+
+def fillna_str(ndarray[object, ndim=2] a, int limit, str value):
+    cdef i, j, k, ct
+    cdef nr = a.shape[0]
+    cdef nc = a.shape[1]
+    cdef ndarray[object, ndim=2] a_new = np.empty((nr, nc), dtype='O')
+
+    if limit == -1:
+        for i in range(nc):
+            for j in range(nr):
+                if a[j, i] is None:
+                    a_new[j, i] = value
+                else:
+                    a_new[j, i] = a[j, i]
+    else:
+        for i in range(nc):
+            ct = 0
+            for j in range(nr):
+                if a[j, i] is None:
+                    a_new[j, i] = value
+                    ct += 1
+                else:
+                    a_new[j, i] = a[j, i]
+                if ct == limit:
+                    for k in range(j + 1, nr):
+                        a_new[k, i] = a[k, i]
+                    break
+    return a_new

@@ -333,7 +333,7 @@ class DataFrame(object):
         if len(self._data) == 1:
             kind: str = list(self._data.keys())[0]
             order = [col_obj.loc for col, col_obj in self._column_info.items()]
-            return self._data[kind].copy('F')[:, order]
+            return self._data[kind][:, order]
 
         if 'b' in self._data or 'O' in self._data:
             arr_dtype: str = 'O'
@@ -494,35 +494,6 @@ class DataFrame(object):
             data_list.append(data)
 
         return data_list, long_len, decimal_len, idx
-
-    # def __repr__(self) -> str:
-    #     data_list: List[List[str]]
-    #     decimal_len: List[int]
-    #     idx: List[int]
-    #     data_list, long_len, decimal_len, idx = self._build_repr()
-    #
-    #     return_string: str = ''
-    #     for i in range(len(idx) + 1):
-    #         for d, fl, dl in zip(data_list, long_len, decimal_len):
-    #             print('d is', d)
-    #             if isinstance(d[i], (float, np.floating)) and np.isnan(d[i]):
-    #                 d[i] = 'NaN'
-    #             if isinstance(d[i], bool):
-    #                 d[i] = str(d[i])
-    #             if isinstance(d[i], str):
-    #                 cur_str = d[i]
-    #                 if len(cur_str) > options.max_colwidth:
-    #                     cur_str = cur_str[:options.max_colwidth - 3] + "..."
-    #                 return_string += f'{cur_str: >{fl}}  '
-    #             else:
-    #                 print(i, d[i])
-    #                 return_string += f'{d[i]: >{fl}.{dl}f}  '
-    #         return_string += '\n'
-    #         if i == options.max_rows // 2 and len(self) > options.max_rows:
-    #             for j, fl in enumerate(long_len):
-    #                 return_string += f'{"...": >{str(fl)}}'
-    #             return_string += '\n'
-    #     return return_string
 
     def __repr__(self) -> str:
         data_list: List[List[str]]
@@ -784,6 +755,14 @@ class DataFrame(object):
                 dtype, loc, _ = self._column_info[cs].values  # type: ignore
                 return self._data[dtype][rs, loc]
 
+    def _select_entire_single_column(self, col_selection):
+        self._validate_column_name(col_selection)
+        dtype, loc, _ = self._column_info[col_selection].values
+        new_data = {dtype: self._data[dtype][:, [loc]]}
+        new_columns = [col_selection]
+        new_column_info = {col_selection: utils.Column(dtype, 0, 0)}
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
     def _construct_df_from_selection(self, rs: Union[List[int], ndarray],
                                      cs: List[str]) -> 'DataFrame':
         new_data: Dict[str, ndarray] = {}
@@ -801,13 +780,10 @@ class DataFrame(object):
         for dtype, pos in dt_positions.items():
             if isinstance(rs, (list, ndarray)):
                 ix = np.ix_(rs, pos)
-                arr = np.atleast_2d(self._data[dtype][ix]).copy()
+                arr = np.atleast_2d(self._data[dtype][ix])
             else:
-                arr = np.atleast_2d(self._data[dtype][rs, pos]).copy()
-            if arr.dtype.kind == 'U':
-                arr = arr.astype('O')
-            elif arr.dtype.kind == 'S':
-                arr = arr.astype('U').astype('O')
+                arr = np.atleast_2d(self._data[dtype][rs, pos])
+
             new_data[dtype] = np.asfortranarray(arr)
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
@@ -833,6 +809,9 @@ class DataFrame(object):
         row_selection, col_selection = value  # type: RowSelection, ColSelection
         if isinstance(row_selection, int) and isinstance(col_selection, (int, str)):
             return self._getitem_scalar(row_selection, col_selection)
+
+        if utils.is_entire_column_selection(row_selection, col_selection):
+            return self._select_entire_single_column(col_selection)
 
         cs_final: List[str] = self._convert_col_selection(col_selection)
         rs_final: Union[List[int], ndarray] = self._convert_row_selection(row_selection)
@@ -1112,13 +1091,12 @@ class DataFrame(object):
         if self._is_numeric_or_bool():
             new_data: Dict[str, ndarray] = {}
             for dt, arr in self._data.items():
-                new_data[dt] = -arr.copy()
+                new_data[dt] = -arr
         else:
             raise TypeError('Only works for all numeric columns')
         new_column_info: ColInfoT = {col: utils.Column(*col_obj.values)
                                      for col, col_obj in self._column_info.items()}
-        return self._construct_from_new(new_data, new_column_info,
-                                        self._columns.copy())
+        return self._construct_from_new(new_data, new_column_info, self._columns.copy())
 
     def __bool__(self) -> NoReturn:
         raise ValueError(': The truth value of an array with more than one element is ambiguous. '
@@ -1499,6 +1477,14 @@ class DataFrame(object):
         if column not in self._column_info:
             raise KeyError(f'Column {column} does not exist')
 
+    def _validate_column_name_list(self, columns: list) -> None:
+        col_set = set()
+        for col in columns:
+            self._validate_column_name(col)
+            if col in col_set:
+                raise ValueError('`{col}` has already been selected as a grouping column')
+            col_set.add(col)
+
     def _new_cd_from_kind_shape(self, kind_shape: Dict[str, int], new_kind: str) -> ColInfoT:
         new_column_info: ColInfoT = {}
         for col, col_obj in self._column_info.items():
@@ -1542,8 +1528,7 @@ class DataFrame(object):
 
             new_column_info: ColInfoT = self._new_cd_from_kind_shape(kind_shape, new_kind)
             new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
-            return self._construct_from_new(new_data, new_column_info,
-                                            self._columns.copy())
+            return self._construct_from_new(new_data, new_column_info, self._columns.copy())
 
         elif isinstance(dtype, dict):
             df_new: 'DataFrame' = self.copy()
@@ -2241,17 +2226,93 @@ class DataFrame(object):
         """
         return self._stat_funcs('nunique', axis, count_na=count_na)
 
+    def fillna(self, values=None, method=None, limit=None, fill_function=None):
+        if values is not None:
+            if method is not None:
+                raise ValueError('You cannot specify both `values` and and a `method` '
+                                 'at the same time')
+            if fill_function is not None:
+                raise ValueError('You cannot specify both `values` and `fill_function` '
+                                 'at the same time')
+
+        if isinstance(values, (int, float, np.number)):
+            if limit is not None:
+                if not isinstance(limit, int):
+                    raise TypeError('`limit` must be a number')
+                elif limit < 1:
+                    raise ValueError('`limit` must be greater than 0')
+            else:
+                limit = -1
+            if self._is_string():
+                raise TypeError("You're DataFrame contains only str columns and you are "
+                                "trying to passed a number to fill in missing values")
+
+            new_data = {}
+            for dtype, arr in self._data.items():
+                if dtype == 'f':
+                    new_data['f'] = _math.fillna_float(arr, limit, values)
+                else:
+                    new_data[dtype] = arr.copy()
+        elif isinstance(values, str):
+            if limit is not None:
+                if not isinstance(limit, int):
+                    raise TypeError('`limit` must be a number')
+                elif limit < 1:
+                    raise ValueError('`limit` must be greater than 0')
+            else:
+                limit = -1
+            if 'O' not in self._data:
+                raise TypeError("You passed a `str` value to the `values` parameter. "
+                                "You're DataFrame contains no str columns.")
+
+            new_data = {}
+            for dtype, arr in self._data.items():
+                if dtype == 'O':
+                    new_data['O'] = _math.fillna_str(arr, limit, values)
+                else:
+                    new_data[dtype] = arr.copy()
+
+
+        new_columns = self._columns.copy()
+        new_column_info = self._copy_column_info()
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def sort_values(self, by: Union[str, List[str]], axis: str = 'rows', ascending: bool = True):
+        axis = utils.convert_axis_string(axis)
+        if isinstance(by, str):
+            self._validate_column_name(by)
+            by = [by]
+        elif isinstance(by, list):
+            self._validate_column_name_list(by)
+        else:
+            raise TypeError('`by` variable must either be a column name as a string or a '
+                            'list of column names as strings')
+        if len(by) == 1:
+            col_name = by[0]
+            dtype, loc, _ = self._column_info[col_name].values
+            col_arr = self._data[dtype][:, loc]
+            new_order = np.argsort(col_arr)
+            if not ascending:
+                new_order = new_order[::-1]
+                nan_count = np.isnan(col_arr).sum()
+                new_order = np.roll(new_order, -nan_count)
+
+            new_data = {}
+            for dtype, arr in self._data.items():
+                new_data[dtype] = arr[new_order]
+            new_column_info = self._copy_column_info()
+            new_columns = self._columns.copy()
+        else:
+            pass
+
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
     def value_counts(self, col):
         return self.groupby(col).size()
 
     def groupby(self, columns):
         if isinstance(columns, list):
-            col_set = set()
-            for col in columns:
-                self._validate_column_name(col)
-                if col in col_set:
-                    raise ValueError('`{col}` has already been selected as a grouping column')
-                col_set.add(col)
+            self._validate_column_name_list(columns)
         elif isinstance(columns, str):
             self._validate_column_name(columns)
             columns = [columns]
@@ -2364,7 +2425,8 @@ class Grouper(object):
     def ngroups(self):
         return len(self._group_position)
 
-    def _group_agg(self, name, ignore_str=True, add_positions=False, keep_group_cols=True, **kwargs):
+    def _group_agg(self, name, ignore_str=True, add_positions=False, keep_group_cols=True,
+                   **kwargs):
         labels = self._group_labels
         size = len(self._group_position)
 
