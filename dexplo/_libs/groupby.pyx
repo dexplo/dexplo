@@ -10,7 +10,10 @@ from libc.math cimport isnan, sqrt
 from numpy import nan
 from .math import min_max_int, min_max_int2, isna_str, get_first_non_nan
 from libc.stdlib cimport malloc, free
-import bottleneck as bn
+try:
+    import bottleneck as bn
+except ImportError:
+    import numpy as bn
 
 MAX_FLOAT = np.finfo(np.float64).max
 MIN_FLOAT = np.finfo(np.float64).min
