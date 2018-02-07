@@ -126,9 +126,9 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] count
 - [x] cov
 - [x] cumcount
-- [ ] cummax
-- [ ] cummin
-- [ ] cumsum
+- [x] cummax
+- [x] cummin
+- [x] cumsum
 - [x] head
 - [x] first
 - [ ] fillna

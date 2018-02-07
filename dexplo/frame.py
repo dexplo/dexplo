@@ -2242,17 +2242,7 @@ class DataFrame(object):
         return self._stat_funcs('nunique', axis, count_na=count_na)
 
     def value_counts(self, col):
-        self._validate_column_name(col)
-        arr = self._get_col_array(col)
-
-        group_labels, group_position = gb.get_group_assignment(arr)
-
-        size = gb.size(group_labels, d)
-
-        new_data = {'O': arr[group_position], 'b': None, 'f': None, 'i': size[:, np.newaxis]}
-        new_columns = ['Column Values', 'Counts']
-        # add _column_info
-        return self._construct_from_new(new_data, new_columns)
+        return self.groupby(col).size()
 
     def groupby(self, columns):
         if isinstance(columns, list):
@@ -2374,17 +2364,23 @@ class Grouper(object):
     def ngroups(self):
         return len(self._group_position)
 
-    def _group_agg(self, name, ignore_str=True, add_positions=False, **kwargs):
+    def _group_agg(self, name, ignore_str=True, add_positions=False, keep_group_cols=True, **kwargs):
         labels = self._group_labels
         size = len(self._group_position)
-        data_dict = self._get_group_col_data()
 
         old_dtype_col = defaultdict(list)
         for col, col_obj in self._df._column_info.items():
             if col not in self._group_columns:
                 old_dtype_col[col_obj.dtype].append(col)
 
-        new_column_info = self._get_new_column_info()
+        if keep_group_cols:
+            data_dict = self._get_group_col_data()
+            new_column_info = self._get_new_column_info()
+            new_columns = self._group_columns.copy()
+        else:
+            data_dict = defaultdict(list)
+            new_column_info = {}
+            new_columns = []
 
         for dtype, data in self._df._data.items():
             if ignore_str and dtype == 'O':
@@ -2413,17 +2409,16 @@ class Grouper(object):
 
                 new_column_info[col] = utils.Column(new_kind, cur_loc + old_loc - count_less, 0)
 
-        new_columns = self._group_columns.copy()
-        i = len(self._group_columns)
+        i = len(new_columns)
         j = 0
         for col in self._df._columns:
             if col not in new_column_info:
                 continue
-            if col in self._group_columns:
+            if col in self._group_columns and keep_group_cols:
                 new_column_info[col].order = j
                 j += 1
                 continue
-            # new_columns[i] = col
+
             new_columns.append(col)
             new_column_info[col].order = i
             i += 1
@@ -2454,6 +2449,7 @@ class Grouper(object):
         data_dict = self._get_group_col_data_all()
         data_dict['i'].append(cumcount)
         new_data = utils.concat_stat_arrays(data_dict)
+        new_column_info = self._get_new_column_info()
         new_column_info[name] = utils.Column('i', new_data['i'].shape[1] - 1,
                                              len(new_columns) - 1)
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
@@ -2554,6 +2550,16 @@ class Grouper(object):
     def tail(self, n=5):
         row_idx = gb.tail(self._group_labels, len(self), n=n)
         return self._df[row_idx, :]
+
+    def cummax(self):
+        return self._group_agg('cummax', keep_group_cols=False)
+
+    def cummin(self):
+        return self._group_agg('cummin', keep_group_cols=False)
+
+    def cumsum(self):
+        return self._group_agg('cumsum', keep_group_cols=False)
+
 
 class StringClass(object):
 

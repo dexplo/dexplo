@@ -1381,3 +1381,167 @@ def tail(ndarray[np.int64_t] labels, int size, n):
         if count[labels[i]] <= n:
             final_locs.append(i)
     return final_locs[::-1]
+
+
+def cummax_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] cur_max = np.full((size, nc_final), MIN_INT, dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] > cur_max[labels[j], i - k]:
+                cur_max[labels[j], i - k] = data[j, i]
+            result[j, i - k] = cur_max[labels[j], i - k]
+    return result
+
+def cummax_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc_final), dtype='float64')
+    cdef ndarray[np.float64_t, ndim=2] cur_max = np.full((size, nc_final), nan, dtype='float64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if not isnan(data[j, i]) and (isnan(cur_max[labels[j], i - k]) or data[j, i] > cur_max[labels[j], i - k]):
+                cur_max[labels[j], i - k] = data[j, i]
+            result[j, i - k] = cur_max[labels[j], i - k]
+    return result
+
+def cummax_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.empty((nr, nc_final), dtype='bool')
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] cur_max = np.full((size, nc_final), False, dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if cur_max[labels[j], i - k] == True:
+                result[j, i - k] = True
+                continue
+            elif data[j, i] == True:
+                cur_max[labels[j], i - k] = True
+                result[j, i - k] = True
+            else:
+                result[j, i - k] = False
+    return result
+
+
+def cummin_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] cur_min = np.full((size, nc_final), MAX_INT, dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] < cur_min[labels[j], i - k]:
+                cur_min[labels[j], i - k] = data[j, i]
+            result[j, i - k] = cur_min[labels[j], i - k]
+    return result
+
+def cummin_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc_final), dtype='float64')
+    cdef ndarray[np.float64_t, ndim=2] cur_min = np.full((size, nc_final), nan, dtype='float64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if not isnan(data[j, i]) and (isnan(cur_min[labels[j], i - k]) or data[j, i] < cur_min[labels[j], i - k]):
+                cur_min[labels[j], i - k] = data[j, i]
+            result[j, i - k] = cur_min[labels[j], i - k]
+    return result
+
+def cummin_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.empty((nr, nc_final), dtype='bool')
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] cur_min = np.full((size, nc_final), True, dtype='bool')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if cur_min[labels[j], i - k] == False:
+                result[j, i - k] = False
+                continue
+            elif data[j, i] == False:
+                cur_min[labels[j], i - k] = False
+                result[j, i - k] = False
+            else:
+                result[j, i - k] = True
+    return result
+
+
+def cumsum_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] cur_sum = np.zeros((size, nc_final), dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            cur_sum[labels[j], i - k] += data[j, i]
+            result[j, i - k] = cur_sum[labels[j], i - k]
+    return result
+
+def cumsum_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.float64_t, ndim=2] result = np.zeros((nr, nc_final), dtype='float64')
+    cdef ndarray[np.float64_t, ndim=2] cur_sum = np.zeros((size, nc_final), dtype='float64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if not isnan(data[j, i]):
+                cur_sum[labels[j], i - k] += data[j, i]
+            result[j, i - k] = cur_sum[labels[j], i - k]
+    return result
+
+def cumsum_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] cur_sum = np.zeros((size, nc_final), dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+                cur_sum[labels[j], i - k] += data[j, i]
+                result[j, i - k] = cur_sum[labels[j], i - k]
+    return result
