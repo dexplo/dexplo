@@ -2234,44 +2234,99 @@ class DataFrame(object):
             if fill_function is not None:
                 raise ValueError('You cannot specify both `values` and `fill_function` '
                                  'at the same time')
+        if limit is not None:
+            if not isinstance(limit, int) or limit < 1:
+                raise TypeError('`limit` must be a positive integer')
+        else:
+            limit = len(self)
 
         if isinstance(values, (int, float, np.number)):
-            if limit is not None:
-                if not isinstance(limit, int):
-                    raise TypeError('`limit` must be a number')
-                elif limit < 1:
-                    raise ValueError('`limit` must be greater than 0')
-            else:
-                limit = -1
             if self._is_string():
                 raise TypeError("You're DataFrame contains only str columns and you are "
                                 "trying to passed a number to fill in missing values")
-
             new_data = {}
             for dtype, arr in self._data.items():
+                arr = arr.copy('F')
                 if dtype == 'f':
-                    new_data['f'] = _math.fillna_float(arr, limit, values)
+                    if limit >= len(self):
+                        new_data['f'] = np.where(np.isnan(arr), values, arr)
+                    else:
+                        for col in self._columns:
+                            dtype2, loc, _ = self._column_info[col].values
+                            if dtype2 == 'f':
+                                col_arr = arr[:, loc]
+                                idx = np.where(np.isnan(col_arr))[0][:limit]
+                                # the following operation is a view of arr
+                                col_arr[idx] = values
+                        new_data['f'] = arr
                 else:
-                    new_data[dtype] = arr.copy()
+                    new_data[dtype] = arr
         elif isinstance(values, str):
-            if limit is not None:
-                if not isinstance(limit, int):
-                    raise TypeError('`limit` must be a number')
-                elif limit < 1:
-                    raise ValueError('`limit` must be greater than 0')
-            else:
-                limit = -1
             if 'O' not in self._data:
                 raise TypeError("You passed a `str` value to the `values` parameter. "
                                 "You're DataFrame contains no str columns.")
-
             new_data = {}
             for dtype, arr in self._data.items():
+                arr = arr.copy('F')
                 if dtype == 'O':
-                    new_data['O'] = _math.fillna_str(arr, limit, values)
-                else:
-                    new_data[dtype] = arr.copy()
+                    for col in self._columns:
+                        dtype2, loc, _ = self._column_info[col].values
+                        if dtype2 == 'O':
+                            col_arr = arr[:, loc]
+                            na_arr = _math.isna_str_1d(col_arr)
+                            idx = np.where(na_arr)[0][:limit]
+                            col_arr[idx] = values
 
+                    new_data['O'] = arr
+                else:
+                    new_data[dtype] = arr
+        elif isinstance(values, dict):
+            raise NotImplementedError('not yet')
+        elif values is None:
+            if method is None and fill_function is None:
+                raise ValueError('One of `values`, `method`, or `fill_function` must not be None')
+            if method is not None:
+                if fill_function is not None:
+                    raise ValueError('You cannot specify both `method` and `fill_function` '
+                                     'at the same time')
+                if method == 'ffill':
+                    new_data = {}
+                    for dtype, arr in self._data.items():
+                        arr = arr.copy('F')
+                        if dtype == 'f':
+                            new_data['f'] = _math.ffill_float(arr, limit)
+                        elif dtype == 'O':
+                            new_data['O'] = _math.ffill_str(arr, limit)
+                        else:
+                            new_data[dtype] = arr
+                elif method == 'bfill':
+                    new_data = {}
+                    for dtype, arr in self._data.items():
+                        arr = arr.copy('F')
+                        if dtype == 'f':
+                            new_data['f'] = _math.bfill_float(arr, limit)
+                        elif dtype == 'O':
+                            new_data['O'] = _math.bfill_str(arr, limit)
+                        else:
+                            new_data[dtype] = arr
+                else:
+                    raise ValueError('`method` must be either "bfill" or "ffill"')
+            else:
+                # fill_function must be not none
+                # TODO make limit work with fill function
+                if fill_function not in ['mean', 'median']:
+                    raise ValueError('`fill_function` must be either "mean" or "median"')
+                new_data = {}
+                for dtype, arr in self._data.items():
+                    arr = arr.copy('F')
+                    if dtype == 'f':
+                        fill_vals = getattr(self, fill_function)().values
+                        new_data['f'] = np.where(np.isnan(arr), fill_vals, arr)
+                    else:
+                        new_data[dtype] = arr
+        else:
+            raise TypeError('`values` must be either an int, str, dict or None. You passed '
+                            f'{values}')
 
         new_columns = self._columns.copy()
         new_column_info = self._copy_column_info()

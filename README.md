@@ -55,9 +55,9 @@ No complex Python data types
 - [x] int - always 64 bits, not-null
 - [x] float - always 64 bits, nulls allowed
 - [x] str - A python unicode object, nulls allowed
-- [ ] categorical
 - [ ] datetime
 - [ ] timedelta
+- [ ] categorical
 
 #### Attributes to implement
 - [x] size
@@ -91,6 +91,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] mode
 - [ ] nlargest
 - [ ] nsmallest
+- [ ] prod
 - [x] quantile
 - [ ] rank
 - [x] std
@@ -105,6 +106,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] drop_duplicates
 - [x] head
 - [ ] isin
+- [ ] rename
 - [ ] sample
 - [x] select_dtypes
 - [x] tail
@@ -153,7 +155,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] apply
 - [ ] assign
 - [x] astype
-- [ ] groupby
+- [x] groupby
 - [ ] info
 - [ ] join
 - [ ] melt

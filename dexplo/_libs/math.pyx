@@ -2016,7 +2016,16 @@ def isna_str(ndarray[object, ndim=2] a, ndarray[np.uint8_t, cast=True] hasnans):
             b[j, i] = a[j, i] is None
     return b
 
+def isna_str_1d(ndarray[object] a):
+    cdef int i
+    cdef int n = a.shape[0]
+    cdef ndarray[np.int8_t, cast=True] b = np.zeros(n, dtype='bool')
+    for i in range(n):
+        b[i] = a[i] is None
+    return b
+
 def isna_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.uint8_t, cast=True] hasnans):
+    # slower than numpy
     cdef np.float64_t *arr = <np.float64_t*> a.data
     cdef int i, j
     cdef int nc = a.shape[1]
@@ -2093,58 +2102,148 @@ def quantile_int(ndarray[np.int64_t, ndim=2] a, axis, double q, ndarray[np.uint8
 def quantile_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, double q, ndarray[np.uint8_t, cast=True] hasnans):
     return np.percentile(a, q * 100, axis)
 
-def fillna_float(ndarray[np.float64_t, ndim=2] a, int limit, np.float64_t value):
-    cdef i, j, k, ct
-    cdef nr = a.shape[0]
-    cdef nc = a.shape[1]
-    cdef ndarray[np.float64_t, ndim=2] a_new = np.empty((nr, nc), dtype='float64')
+# def fillna_float(ndarray[np.float64_t, ndim=2] a, int limit, np.float64_t value):
+#     cdef i, j, k, ct
+#     cdef nr = a.shape[0]
+#     cdef nc = a.shape[1]
+#     cdef ndarray[np.float64_t, ndim=2] a_new = np.empty((nr, nc), dtype='float64')
+#
+#     if limit == -1:
+#         for i in range(nc):
+#             for j in range(nr):
+#                 if isnan(a[j, i]):
+#                     a_new[j, i] = value
+#                 else:
+#                     a_new[j, i] = a[j, i]
+#     else:
+#         for i in range(nc):
+#             ct = 0
+#             for j in range(nr):
+#                 if isnan(a[j, i]):
+#                     a_new[j, i] = value
+#                     ct += 1
+#                 else:
+#                     a_new[j, i] = a[j, i]
+#                 if ct == limit:
+#                     for k in range(j + 1, nr):
+#                         a_new[k, i] = a[k, i]
+#                     break
+#     return a_new
+#
+# def fillna_str(ndarray[object, ndim=2] a, int limit, str value):
+#     cdef i, j, k, ct
+#     cdef nr = a.shape[0]
+#     cdef nc = a.shape[1]
+#     cdef ndarray[object, ndim=2] a_new = np.empty((nr, nc), dtype='O')
+#
+#     if limit == -1:
+#         for i in range(nc):
+#             for j in range(nr):
+#                 if a[j, i] is None:
+#                     a_new[j, i] = value
+#                 else:
+#                     a_new[j, i] = a[j, i]
+#     else:
+#         for i in range(nc):
+#             ct = 0
+#             for j in range(nr):
+#                 if a[j, i] is None:
+#                     a_new[j, i] = value
+#                     ct += 1
+#                 else:
+#                     a_new[j, i] = a[j, i]
+#                 if ct == limit:
+#                     for k in range(j + 1, nr):
+#                         a_new[k, i] = a[k, i]
+#                     break
+#     return a_new
+
+def ffill_float(ndarray[np.float64_t, ndim=2] a, int limit):
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef int ct = 0
 
     if limit == -1:
         for i in range(nc):
-            for j in range(nr):
+            for j in range(1, nr):
                 if isnan(a[j, i]):
-                    a_new[j, i] = value
-                else:
-                    a_new[j, i] = a[j, i]
+                    a[j, i] = a[j - 1, i]
     else:
         for i in range(nc):
-            ct = 0
-            for j in range(nr):
+            for j in range(1, nr):
                 if isnan(a[j, i]):
-                    a_new[j, i] = value
+                    if ct == limit:
+                        continue
+                    a[j, i] = a[j - 1, i]
                     ct += 1
                 else:
-                    a_new[j, i] = a[j, i]
-                if ct == limit:
-                    for k in range(j + 1, nr):
-                        a_new[k, i] = a[k, i]
-                    break
-    return a_new
+                    ct = 0
+    return a
 
-def fillna_str(ndarray[object, ndim=2] a, int limit, str value):
-    cdef i, j, k, ct
-    cdef nr = a.shape[0]
-    cdef nc = a.shape[1]
-    cdef ndarray[object, ndim=2] a_new = np.empty((nr, nc), dtype='O')
+def ffill_str(ndarray[object, ndim=2] a, int limit):
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef int ct = 0
+    if limit == -1:
+        for i in range(nc):
+            for j in range(1, nr):
+                if a[j, i] is None:
+                    a[j, i] = a[j - 1, i]
+    else:
+        for i in range(nc):
+            for j in range(1, nr):
+                if a[j, i] is None:
+                    if ct == limit:
+                        continue
+                    a[j, i] = a[j - 1, i]
+                    ct += 1
+                else:
+                    ct = 0
+    return a
+
+def bfill_float(ndarray[np.float64_t, ndim=2] a, int limit):
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef int ct = 0
 
     if limit == -1:
         for i in range(nc):
-            for j in range(nr):
-                if a[j, i] is None:
-                    a_new[j, i] = value
-                else:
-                    a_new[j, i] = a[j, i]
+            for j in range(nr - 1, -1, -1):
+                if isnan(a[j, i]):
+                    a[j, i] = a[j + 1, i]
     else:
         for i in range(nc):
-            ct = 0
-            for j in range(nr):
-                if a[j, i] is None:
-                    a_new[j, i] = value
+            for j in range(nr -1, -1, -1):
+                if isnan(a[j, i]):
+                    if ct == limit:
+                        continue
+                    a[j, i] = a[j + 1, i]
                     ct += 1
                 else:
-                    a_new[j, i] = a[j, i]
-                if ct == limit:
-                    for k in range(j + 1, nr):
-                        a_new[k, i] = a[k, i]
-                    break
-    return a_new
+                    ct = 0
+    return a
+
+def bfill_str(ndarray[object, ndim=2] a, int limit):
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef int ct = 0
+    if limit == -1:
+        for i in range(nc):
+            for j in range(nr - 1, -1, -1):
+                if a[j, i] is None:
+                    a[j, i] = a[j + 1, i]
+    else:
+        for i in range(nc):
+            for j in range(nr - 1, -1, -1):
+                if a[j, i] is None:
+                    if ct == limit:
+                        continue
+                    a[j, i] = a[j + 1, i]
+                    ct += 1
+                else:
+                    ct = 0
+    return a
