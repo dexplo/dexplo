@@ -531,6 +531,74 @@ def sum_str(ndarray[object, ndim=2] a, axis, hasnans):
                     total[j] = total[j] + a[j, i]
     return total
 
+def prod_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
+    cdef long *arr = <long*> a.data
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[np.int64_t] total
+
+    if axis == 0:
+        total = np.ones(nc, dtype=np.int64)
+        for i in range(nc):
+            for j in range(nr):
+                total[i] *= arr[i * nr + j]
+    else:
+        total = np.zeros(nr, dtype=np.int64)
+        for i in range(nr):
+            for j in range(nc):
+                total[i] *= arr[j * nr + i]
+    return total
+
+def prod_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, **kwargs):
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[np.int64_t] total
+
+    if axis == 0:
+        total = np.ones(nc, dtype='int64')
+        for i in range(nc):
+            for j in range(nr):
+                total[i] *= a[j, i]
+    else:
+        total = np.zeros(nr, dtype='int64')
+        for i in range(nr):
+            for j in range(nc):
+                total[i] *= a[i, j]
+    return total
+
+def prod_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, **kwargs):
+    cdef double *arr = <double*> a.data
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef long idx
+    cdef ndarray[np.float64_t] total
+
+    if axis == 0:
+        total = np.ones(nc, dtype=np.float64)
+        for i in range(nc):
+            if hasnans[i] is None or hasnans[i] == True:
+                for j in range(nr):
+                    if not isnan(arr[i * nr + j]):
+                        total[i] *= arr[i * nr + j]
+            else:
+                for j in range(nr):
+                    total[i] *= arr[i * nr + j]
+
+    else:
+        total = np.zeros(nr, dtype=np.float64)
+        for i in range(nc):
+            if hasnans[i] is None or hasnans[i] == True:
+                for j in range(nr):
+                    if not isnan(arr[i * nr + j]):
+                        total[j] *= arr[i * nr + j]
+            else:
+                for j in range(nr):
+                    total[j] *= arr[i * nr + j]
+    return total
+
 def max_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     cdef long *arr = <long*> a.data
     cdef int i, j
@@ -1343,6 +1411,9 @@ def argmax_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                 result[i] = np.nan
             else:
                 result[i] = iloc
+
+    if (result % 1).sum() == 0:
+        return result.astype('int64')
     return result
 
 def argmin_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
@@ -1378,6 +1449,9 @@ def argmin_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                 result[i] = np.nan
             else:
                 result[i] = iloc
+
+    if (result % 1).sum() == 0:
+        return result.astype('int64')
     return result
 
 def argmax_str(ndarray[object, ndim=2] a, axis, hasnans):
@@ -1418,6 +1492,9 @@ def argmax_str(ndarray[object, ndim=2] a, axis, hasnans):
                 result[i] = nan
             else:
                 result[i] = iloc
+
+    if (result % 1).sum() == 0:
+        return result.astype('int64')
     return result
 
 def argmin_str(ndarray[object, ndim=2] a, axis, hasnans):
@@ -1458,6 +1535,9 @@ def argmin_str(ndarray[object, ndim=2] a, axis, hasnans):
                 result[i] = nan
             else:
                 result[i] = iloc
+
+    if (result % 1).sum() == 0:
+        return result.astype('int64')
     return result
 
 def count_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
@@ -1882,41 +1962,6 @@ def cumsum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                 total[i, j] = cur_total
     return total
 
-# def cumsum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
-#     cdef np.float64_t *arr = <np.float64_t*> a.data
-#     cdef int i, j, k
-#     cdef int nc = a.shape[1]
-#     cdef int nr = a.shape[0]
-#     cdef ndarray[np.float64_t, ndim=2] total = np.empty((nr, nc), dtype=np.float64)
-#     total.fill(nan)
-#     cdef double cur_total
-#
-#     if axis == 0:
-#         for i in range(nc):
-#             k = 0
-#             cur_total = arr[i * nr + k]
-#             while isnan(cur_total) and k < nr - 1:
-#                 k += 1
-#                 cur_total = arr[i * nr + k]
-#             total[k, i] = cur_total
-#             for j in range(k + 1, nr):
-#                 if not isnan(arr[i * nr + j]):
-#                     cur_total += arr[i * nr + j]
-#                 total[j, i] = cur_total
-#     else:
-#         for i in range(nr):
-#             k = 0
-#             cur_total = arr[k * nr + i]
-#             while isnan(cur_total) and k < nc - 1:
-#                 k += 1
-#                 cur_total = arr[k * nr + i]
-#             total[i, k] = cur_total
-#             for j in range(k + 1, nc):
-#                 if not isnan(arr[j * nr + i]):
-#                     cur_total += arr[j * nr + i]
-#                 total[i, j] = cur_total
-#     return total
-
 def cumsum_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
     cdef np.int64_t *arr = <np.int64_t*> a.data
     cdef int i, j
@@ -2001,6 +2046,75 @@ def cumsum_str(ndarray[object, ndim=2] a, axis, hasnans):
                     cur_total += a[i, j]
                 except TypeError:
                     pass
+                total[i, j] = cur_total
+    return total
+
+
+def cumprod_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
+    cdef np.float64_t *arr = <np.float64_t*> a.data
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[np.float64_t, ndim=2] total = np.zeros((nr, nc), dtype=np.float64)
+    cdef double cur_total = 0
+
+    if axis == 0:
+        for i in range(nc):
+            cur_total = 1
+            for j in range(nr):
+                if not isnan(arr[i * nr + j]):
+                    cur_total *= arr[i * nr + j]
+                total[j, i] = cur_total
+    else:
+        for i in range(nr):
+            cur_total = 1
+            for j in range(nc):
+                if not isnan(arr[j * nr + i]):
+                    cur_total *= arr[j * nr + i]
+                total[i, j] = cur_total
+    return total
+
+def cumprod_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
+    cdef np.int64_t *arr = <np.int64_t*> a.data
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[np.int64_t, ndim=2] total = np.empty((nr, nc), dtype=np.int64)
+    cdef np.int64_t cur_total
+
+    if axis == 0:
+        for i in range(nc):
+            cur_total = 1
+            for j in range(nr):
+                cur_total *= arr[i * nr + j]
+                total[j, i] = cur_total
+    else:
+        for i in range(nr):
+            cur_total = 1
+            for j in range(nc):
+                cur_total *= arr[j * nr + i]
+                total[i, j] = cur_total
+    return total
+
+def cumprod_bool(ndarray[np.int8_t, ndim=2, cast=True] a, axis, hasnans):
+    cdef np.int8_t *arr = <np.int8_t*> a.data
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[np.int64_t, ndim=2] total = np.empty((nr, nc), dtype=np.int64)
+    cdef np.int64_t cur_total
+
+    if axis == 0:
+        for i in range(nc):
+            cur_total = 1
+            for j in range(nr):
+                cur_total *= arr[i * nr + j]
+                total[j, i] = cur_total
+    else:
+        for i in range(nr):
+            cur_total = 1
+            for j in range(nc):
+                cur_total *= arr[j * nr + i]
                 total[i, j] = cur_total
     return total
 

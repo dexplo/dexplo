@@ -713,19 +713,29 @@ class DataFrame(object):
                 raise ValueError('Length of boolean array must be the same as DataFrame. '
                                  f'{len(rs)} != {len(self)}')
         elif isinstance(rs, ndarray):
-            row_array: ndarray = utils.try_to_squeeze_array(rs)
-            if row_array.dtype.kind == 'b':
-                if len(row_array) != len(self):
+            rs = utils.try_to_squeeze_array(rs)
+            if rs.dtype.kind == 'b':
+                if len(rs) != len(self):
                     raise ValueError('Length of boolean array must be the same as DataFrame. '
                                      f'{len(row_array)} != {len(self)}')
-            elif row_array.dtype.kind != 'i':
+            elif rs.dtype.kind != 'i':
                 raise TypeError('Row selection array data type must be either integer or boolean')
         elif isinstance(rs, DataFrame):
-            if rs.shape[1] != 1:
-                raise ValueError('Boolean selection only works with single-column DataFames')
+            if rs.shape[0] != 1 and rs.shape[1] != 1:
+                raise ValueError('When using a DataFrame for selecting rows, it must have '
+                                 'either one row or one column')
             row_array = rs.values.squeeze()
-            if row_array.dtype.kind != 'b':
-                raise TypeError('All values for row selection must be boolean')
+            if row_array.dtype.kind not in 'bi':
+                if row_array.dtype.kind == 'f':
+                    # check if float can be safely converted to int
+                    if (row_array % 1).sum() == 0:
+                        row_array = row_array.astype('int64')
+                    else:
+                        raise ValueError('Your DataFrame for row selection has float values that '
+                                         'are not whole numbers. Use a DataFrame with only '
+                                         'integers or booleans.')
+                else:
+                    raise TypeError('All values for row selection must be boolean or integer')
             rs = row_array
         elif not isinstance(rs, int):
             raise TypeError('Selection must either be one of '
@@ -1604,11 +1614,11 @@ class DataFrame(object):
                                 f'The `{name}` only works with numeric columns.')
             return {'O'}
         if axis == 0:
-            if name in ['std', 'var', 'mean', 'median', 'quantile']:
+            if name in ['std', 'var', 'mean', 'median', 'quantile', 'prod', 'cumprod']:
                 return {'i', 'f', 'b'}
         elif axis == 1:
             if name in ['std', 'var', 'mean', 'median', 'quantile', 'sum', 'max', 'min',
-                        'cumsum', 'cummax', 'cummin', 'argmin', 'argmax']:
+                        'cumsum', 'cummax', 'cummin', 'argmin', 'argmax', 'prod', 'cumprod']:
                 return {'i', 'f', 'b'}
         return {'i', 'f', 'b', 'O'}
 
@@ -1727,6 +1737,9 @@ class DataFrame(object):
 
     def sum(self, axis: str = 'rows') -> 'DataFrame':
         return self._stat_funcs('sum', axis)
+
+    def prod(self, axis: str = 'rows') -> 'DataFrame':
+        return self._stat_funcs('prod', axis)
 
     def max(self, axis: str = 'rows') -> 'DataFrame':
         return self._stat_funcs('max', axis)
@@ -1902,6 +1915,9 @@ class DataFrame(object):
 
     def cumsum(self, axis: str = 'rows') -> 'DataFrame':
         return self._stat_funcs('cumsum', axis)
+
+    def cumprod(self, axis: str = 'rows') -> 'DataFrame':
+        return self._stat_funcs('cumprod', axis)
 
     def _hasnans_dtype(self, kind: str) -> ndarray:
         hasnans: ndarray = np.ones(self._data[kind].shape[1], dtype='bool')
@@ -2281,7 +2297,46 @@ class DataFrame(object):
                 else:
                     new_data[dtype] = arr
         elif isinstance(values, dict):
-            raise NotImplementedError('not yet')
+            self._validate_column_name_list(list(values))
+            dtype_locs = defaultdict(list)
+            for col, val in values.items():
+                dtype, loc, _ = self._column_info[col].values
+                if dtype in 'fO':
+                    dtype_locs[dtype].append((col, loc, val))
+
+            for col, loc, new_val in dtype_locs['f']:
+                if not isinstance(new_val, (int, float, np.number)):
+                    raise TypeError(f'Column {col} has dtype float. Must set with a number')
+            for col, loc, new_val in dtype_locs['O']:
+                if not isinstance(new_val, str):
+                    raise TypeError(f'Column {col} has dtype {dtype}. Must set with a str')
+
+            arr_float = self._data.get('f', []).copy('F')
+            arr_str = self._data.get('O', []).copy('F')
+            for col, loc, new_val in dtype_locs['f']:
+                if limit >= len(self):
+                    arr_float[:, loc] = np.where(np.isnan(arr_float[:, loc]), new_val, arr_float[:, loc])
+                else:
+                    idx = np.where(np.isnan(arr_float[:, loc]))[0][:limit]
+                    arr_float[idx, loc] = new_val
+
+            for col, loc, new_val in dtype_locs['O']:
+                na_arr = _math.isna_str_1d(arr_str[:, loc])
+                if limit >= len(self):
+                    arr_str[:, loc] = np.where(na_arr, new_val, arr_str[:, loc])
+                else:
+                    idx = np.where(na_arr)[0][:limit]
+                    arr_float[idx, loc] = new_val
+
+            new_data = {}
+            for dtype, arr in self._data.items():
+                if dtype == 'f':
+                    new_data[dtype] = arr_float
+                elif dtype == 'O':
+                    new_data[dtype] = arr_str
+                else:
+                    new_data[dtype] = arr.copy("F")
+
         elif values is None:
             if method is None and fill_function is None:
                 raise ValueError('One of `values`, `method`, or `fill_function` must not be None')
@@ -2574,6 +2629,9 @@ class Grouper(object):
     def sum(self):
         return self._group_agg('sum')
 
+    def prod(self):
+        return self._group_agg('prod')
+
     def mean(self):
         return self._group_agg('mean')
 
@@ -2676,6 +2734,9 @@ class Grouper(object):
 
     def cumsum(self):
         return self._group_agg('cumsum', keep_group_cols=False)
+
+    def cumprod(self):
+        return self._group_agg('cumprod', keep_group_cols=False)
 
 
 class StringClass(object):

@@ -513,6 +513,46 @@ def sum_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, 
                 result[labels[j], i - k] = result[labels[j], i - k] + data[j, i]
     return result
 
+def prod_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.ones((size, nc - len(group_locs)), dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            result[labels[j], i - k] = result[labels[j], i - k] * data[j, i]
+    return result
+
+def prod_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.ones((size, nc - len(group_locs)), dtype='float64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if not isnan(data[j, i]):
+                result[labels[j], i - k] = result[labels[j], i - k] * data[j, i]
+    return result
+
+def prod_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.ones((size, nc - len(group_locs)), dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            result[labels[j], i - k] = result[labels[j], i - k] * data[j, i]
+    return result
+
 def mean_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
     cdef int i, j, k = 0
     cdef int nr = data.shape[0]
@@ -1543,5 +1583,56 @@ def cumsum_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2
             continue
         for j in range(nr):
                 cur_sum[labels[j], i - k] += data[j, i]
+                result[j, i - k] = cur_sum[labels[j], i - k]
+    return result
+
+
+
+def cumprod_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.ones((nr, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] cur_sum = np.ones((size, nc_final), dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            cur_sum[labels[j], i - k] *= data[j, i]
+            result[j, i - k] = cur_sum[labels[j], i - k]
+    return result
+
+def cumprod_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.float64_t, ndim=2] result = np.ones((nr, nc_final), dtype='float64')
+    cdef ndarray[np.float64_t, ndim=2] cur_sum = np.ones((size, nc_final), dtype='float64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if not isnan(data[j, i]):
+                cur_sum[labels[j], i - k] *= data[j, i]
+            result[j, i - k] = cur_sum[labels[j], i - k]
+    return result
+
+def cumprod_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.ones((nr, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] cur_sum = np.ones((size, nc_final), dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+                cur_sum[labels[j], i - k] *= data[j, i]
                 result[j, i - k] = cur_sum[labels[j], i - k]
     return result

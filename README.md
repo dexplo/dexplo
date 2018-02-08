@@ -81,7 +81,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] cov
 - [x] cummax
 - [x] cummin
-- [ ] cumprod
+- [x] cumprod
 - [x] cumsum
 - [x] describe
 - [x] max
@@ -91,7 +91,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] mode
 - [ ] nlargest
 - [ ] nsmallest
-- [ ] prod
+- [x] prod
 - [x] quantile
 - [ ] rank
 - [x] std
@@ -116,7 +116,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 
 - [x] isna
 - [x] dropna
-- [ ] fillna
+- [x] fillna
 - [ ] interpolate
 
 **Group By** - specifically with `groupby` method
@@ -131,6 +131,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] cummax
 - [x] cummin
 - [x] cumsum
+- [x] cumprod
 - [x] head
 - [x] first
 - [ ] fillna
@@ -141,6 +142,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] min
 - [x] ngroups
 - [x] nunique
+- [x] prod
 - [ ] quantile
 - [ ] rank
 - [ ] rolling
@@ -159,7 +161,6 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] info
 - [ ] join
 - [ ] melt
-- [ ] memory_usage
 - [ ] pivot
 - [ ] plot
 - [ ] replace
