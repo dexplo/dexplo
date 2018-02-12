@@ -2624,6 +2624,46 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
+    def _nest(self, n, column, keep, name):
+        if not isinstance(n, (int, np.integer)):
+            raise TypeError('`n` must be an integer')
+        if n < 1:
+            raise ValueError('`n` must be a positive integer')
+        if keep not in ['first', 'last', 'all']:
+            raise ValueError('`keep` must be either "all", "first", or "last"')
+
+        self._validate_column_name(column)
+        dtype, loc, _ = self._column_info[column].values
+        col_arr = self._data[dtype][:, loc]
+
+        if n >= len(self):
+            order = np.argsort(col_arr)
+            if name == 'nlargest':
+                order = order[::-1]
+        else:
+            func_name = name + '_' + utils.convert_kind_to_dtype(dtype)
+            order, ties = getattr(_math, func_name)(col_arr, n)
+
+            if keep == 'all' and ties:
+                order = np.append(order, ties)
+            elif keep == 'last':
+                if ties:
+                    order[-1] = ties[-1]
+
+        new_column_info = self._copy_column_info()
+        new_columns = self._columns.copy()
+        new_data = {}
+        for dtype, arr in self._data.items():
+            new_data[dtype] = arr[order]
+
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def nlargest(self, n, column, keep='all'):
+        return self._nest(n, column, keep, 'nlargest')
+
+    def nsmallest(self, n, column, keep='all'):
+        return self._nest(n, column, keep, 'nsmallest')
+
 
 class Grouper(object):
 

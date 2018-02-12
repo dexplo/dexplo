@@ -2541,3 +2541,349 @@ def streak_group_str(ndarray[object] a):
             count += 1
             b[i] = count
     return b
+
+
+def nlargest_int(ndarray[np.int64_t] a, n):
+    cdef int i, j, k, prev, prev2
+    cdef int prev_arg, prev_arg2
+    cdef int nr = len(a)
+    cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
+    cdef ndarray[np.int64_t] topn = a[topn_arg]
+    cdef list count_arg = []
+
+    for i in range(n, nr):
+        if a[i] < topn[0]:
+            continue
+        elif a[i] > topn[0]:
+            for j in range(n - 1, -1, -1):
+                if a[i] > topn[j]:
+                    prev = topn[j]
+                    prev_arg = topn_arg[j]
+
+                    topn[j] = a[i]
+                    topn_arg[j] = i
+                    for k in range(j - 1, -1, -1):
+                        prev2 = topn[k]
+                        prev2_arg = topn_arg[k]
+
+                        topn[k] = prev
+                        topn_arg[k] = prev_arg
+                        prev = prev2
+                        prev_arg = prev2_arg
+                    break
+
+            if j == 0:
+                count_arg = []
+        else:
+            count_arg.append(i)
+
+    return topn_arg[::-1], count_arg
+
+
+def nlargest_float(ndarray[np.float64_t] a, n):
+    cdef int i, j, k, init_count = 0
+    cdef float prev, prev2
+    cdef int prev_arg, prev_arg2
+    cdef int nr = len(a)
+    cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
+    cdef ndarray[np.float64_t] topn = np.empty(n, dtype='float64')
+    cdef list count_arg = []
+
+    for i in range(n):
+        if isnan(a[i]):
+            continue
+        topn[init_count] = a[i]
+        init_count += 1
+        if init_count == n:
+            break
+
+    topn_arg = np.argsort(topn_arg)
+    topn = topn[topn_arg]
+
+    for i in range(init_count, nr):
+        if a[i] < topn[0] or isnan(a[i]):
+            continue
+        elif a[i] > topn[0]:
+            for j in range(n - 1, -1, -1):
+                if a[i] > topn[j]:
+                    prev = topn[j]
+                    prev_arg = topn_arg[j]
+
+                    topn[j] = a[i]
+                    topn_arg[j] = i
+                    for k in range(j - 1, -1, -1):
+                        prev2 = topn[k]
+                        prev2_arg = topn_arg[k]
+
+                        topn[k] = prev
+                        topn_arg[k] = prev_arg
+                        prev = prev2
+                        prev_arg = prev2_arg
+                    break
+
+            if j == 0:
+                count_arg = []
+        else:
+            count_arg.append(i)
+
+    return topn_arg[::-1], count_arg
+
+def nlargest_str(ndarray[object] a, n):
+    cdef int i, j, k, init_count = 0
+    cdef str prev, prev2
+    cdef int prev_arg, prev_arg2
+    cdef int nr = len(a)
+    cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
+    cdef ndarray[object] topn = np.empty(n, dtype='O')
+    cdef list count_arg = []
+
+    for i in range(n):
+        if a[i] is None:
+            continue
+        topn[init_count] = a[i]
+        init_count += 1
+        if init_count == n:
+            break
+
+    topn_arg = np.argsort(topn_arg)
+    topn = topn[topn_arg]
+
+    for i in range(init_count, nr):
+        if a[i] is None or a[i] < topn[0]:
+            continue
+        elif a[i] > topn[0]:
+            for j in range(n - 1, -1, -1):
+                if a[i] > topn[j]:
+                    prev = topn[j]
+                    prev_arg = topn_arg[j]
+
+                    topn[j] = a[i]
+                    topn_arg[j] = i
+                    for k in range(j - 1, -1, -1):
+                        prev2 = topn[k]
+                        prev2_arg = topn_arg[k]
+
+                        topn[k] = prev
+                        topn_arg[k] = prev_arg
+                        prev = prev2
+                        prev_arg = prev2_arg
+                    break
+
+            if j == 0:
+                count_arg = []
+        else:
+            count_arg.append(i)
+
+    return topn_arg[::-1], count_arg
+
+def nlargest_bool(ndarray[np.uint8_t, cast=True] a, n):
+    cdef int i, j, k
+    cdef np.uint8_t prev, prev2
+    cdef int prev_arg, prev_arg2
+    cdef int nr = len(a)
+    cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
+    cdef ndarray[np.uint8_t, cast=True] topn = a[topn_arg]
+    cdef list count_arg = []
+
+    for i in range(n, nr):
+        if a[i] < topn[0]:
+            continue
+        elif a[i] > topn[0]:
+            for j in range(n - 1, -1, -1):
+                if a[i] > topn[j]:
+                    prev = topn[j]
+                    prev_arg = topn_arg[j]
+
+                    topn[j] = a[i]
+                    topn_arg[j] = i
+                    for k in range(j - 1, -1, -1):
+                        prev2 = topn[k]
+                        prev2_arg = topn_arg[k]
+
+                        topn[k] = prev
+                        topn_arg[k] = prev_arg
+                        prev = prev2
+                        prev_arg = prev2_arg
+                    break
+
+            if j == 0:
+                count_arg = []
+        else:
+            count_arg.append(i)
+
+    return topn_arg[::-1], count_arg
+
+def nsmallest_int(ndarray[np.int64_t] a, n):
+    cdef int i, j, k, prev, prev2
+    cdef int prev_arg, prev_arg2
+    cdef int nr = len(a)
+    cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
+    cdef ndarray[np.int64_t] topn = a[topn_arg]
+    cdef list count_arg = []
+    cdef int n1 = n - 1
+
+    for i in range(n, nr):
+        if a[i] > topn[n1]:
+            continue
+        elif a[i] < topn[n1]:
+            for j in range(n):
+                if a[i] < topn[j]:
+                    prev = topn[j]
+                    prev_arg = topn_arg[j]
+
+                    topn[j] = a[i]
+                    topn_arg[j] = i
+                    for k in range(j + 1, n):
+                        prev2 = topn[k]
+                        prev2_arg = topn_arg[k]
+
+                        topn[k] = prev
+                        topn_arg[k] = prev_arg
+                        prev = prev2
+                        prev_arg = prev2_arg
+                    break
+
+            if j == n1:
+                count_arg = []
+        else:
+            count_arg.append(i)
+
+    return topn_arg, count_arg
+
+
+def nsmallest_float(ndarray[np.float64_t] a, n):
+    cdef int i, j, k, init_count = 0
+    cdef float prev, prev2
+    cdef int prev_arg, prev_arg2
+    cdef int nr = len(a)
+    cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
+    cdef ndarray[np.float64_t] topn = np.empty(n, dtype='float64')
+    cdef list count_arg = []
+    cdef int n1 = n - 1
+
+    for i in range(n):
+        if isnan(a[i]):
+            continue
+        topn[init_count] = a[i]
+        init_count += 1
+        if init_count == n:
+            break
+
+    topn_arg = np.argsort(topn_arg)
+    topn = topn[topn_arg]
+
+    for i in range(init_count, nr):
+        if a[i] > topn[n1] or isnan(a[i]):
+            continue
+        elif a[i] < topn[n1]:
+            for j in range(n):
+                if a[i] < topn[j]:
+                    prev = topn[j]
+                    prev_arg = topn_arg[j]
+
+                    topn[j] = a[i]
+                    topn_arg[j] = i
+                    for k in range(j + 1, n):
+                        prev2 = topn[k]
+                        prev2_arg = topn_arg[k]
+
+                        topn[k] = prev
+                        topn_arg[k] = prev_arg
+                        prev = prev2
+                        prev_arg = prev2_arg
+                    break
+
+            if j == n1:
+                count_arg = []
+        else:
+            count_arg.append(i)
+
+    return topn_arg, count_arg
+
+def nsmallest_str(ndarray[object] a, n):
+    cdef int i, j, k, init_count = 0
+    cdef str prev, prev2
+    cdef int prev_arg, prev_arg2
+    cdef int nr = len(a)
+    cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
+    cdef ndarray[object] topn = np.empty(n, dtype='O')
+    cdef list count_arg = []
+    cdef int n1 = n - 1
+
+    for i in range(n):
+        if a[i] is None:
+            continue
+        topn[init_count] = a[i]
+        init_count += 1
+        if init_count == n:
+            break
+
+    topn_arg = np.argsort(topn_arg)
+    topn = topn[topn_arg]
+
+    for i in range(init_count, nr):
+        if a[i] is None or a[i] > topn[n1]:
+            continue
+        elif a[i] < topn[n1]:
+            for j in range(n):
+                if a[i] < topn[j]:
+                    prev = topn[j]
+                    prev_arg = topn_arg[j]
+
+                    topn[j] = a[i]
+                    topn_arg[j] = i
+                    for k in range(j + 1, n):
+                        prev2 = topn[k]
+                        prev2_arg = topn_arg[k]
+
+                        topn[k] = prev
+                        topn_arg[k] = prev_arg
+                        prev = prev2
+                        prev_arg = prev2_arg
+                    break
+
+            if j == n1:
+                count_arg = []
+        else:
+            count_arg.append(i)
+
+    return topn_arg, count_arg
+
+def nsmallest_bool(ndarray[np.uint8_t, cast=True] a, n):
+    cdef int i, j, k
+    cdef np.uint8_t prev, prev2
+    cdef int prev_arg, prev_arg2
+    cdef int nr = len(a)
+    cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
+    cdef ndarray[np.uint8_t, cast=True] topn = a[topn_arg]
+    cdef list count_arg = []
+    cdef int n1 = n - 1
+
+    for i in range(n, nr):
+        if a[i] > topn[n1]:
+            continue
+        elif a[i] < topn[n1]:
+            for j in range(n):
+                if a[i] < topn[j]:
+                    prev = topn[j]
+                    prev_arg = topn_arg[j]
+
+                    topn[j] = a[i]
+                    topn_arg[j] = i
+                    for k in range(j + 1, n):
+                        prev2 = topn[k]
+                        prev2_arg = topn_arg[k]
+
+                        topn[k] = prev
+                        topn_arg[k] = prev_arg
+                        prev = prev2
+                        prev_arg = prev2_arg
+                    break
+
+            if j == n1:
+                count_arg = []
+        else:
+            count_arg.append(i)
+
+    return topn_arg, count_arg
+
