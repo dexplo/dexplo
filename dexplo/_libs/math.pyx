@@ -2361,3 +2361,183 @@ def bfill_str(ndarray[object, ndim=2] a, int limit):
                 else:
                     ct = 0
     return a
+
+def streak_int(ndarray[np.int64_t] a):
+    cdef int i, n = len(a)
+    cdef int count = 1
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    b[0] = 1
+
+    for i in range(1, n):
+        if a[i] == a[i - 1]:
+            b[i] = count + 1
+            count += 1
+        else:
+            count = 1
+            b[i] = 1
+    return b
+
+def streak_float(ndarray[np.float64_t] a):
+    cdef int i, n = len(a)
+    cdef int count = 1
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    b[0] = 1
+
+    for i in range(1, n):
+        if a[i] == a[i - 1]:
+            b[i] = count + 1
+            count += 1
+        else:
+            count = 1
+            b[i] = 1
+    return b
+
+def streak_bool(ndarray[np.uint8_t, cast=True] a):
+    cdef int i, n = len(a)
+    cdef int count = 1
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    b[0] = 1
+
+    for i in range(1, n):
+        if a[i] == a[i -1]:
+            b[i] = count + 1
+            count += 1
+        else:
+            count = 1
+            b[i] = 1
+    return b
+
+def streak_str(ndarray[object] a):
+    cdef int i, n = len(a)
+    cdef int count = 1
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    b[0] = 1
+
+    for i in range(1, n):
+        if a[i] == a[i -1] and a[i] is not None:
+            b[i] = count + 1
+            count += 1
+        else:
+            count = 1
+            b[i] = 1
+    return b
+
+def streak_value_int(ndarray[np.int64_t] a, int value):
+    cdef int i, n = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    for i in range(n):
+        if a[i] == value:
+            b[i] = count + 1
+            count += 1
+        else:
+            count = 0
+            b[i] = 0
+    return b
+
+def streak_value_float(ndarray[np.float64_t] a, float value):
+    cdef int i, n = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    for i in range(n):
+        if a[i] == value:
+            b[i] = count + 1
+            count += 1
+        else:
+            count = 0
+            b[i] = 0
+    return b
+
+def streak_value_bool(ndarray[np.uint8_t, cast=True] a, np.uint8_t value):
+    cdef int i, n = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    for i in range(n):
+        if a[i] == value:
+            b[i] = count + 1
+            count += 1
+        else:
+            count = 0
+            b[i] = 0
+    return b
+
+def streak_value_str(ndarray[object] a, str value):
+    cdef int i, n = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    for i in range(n):
+        if a[i] == value:
+            b[i] = count + 1
+            count += 1
+        else:
+            count = 0
+            b[i] = 0
+    return b
+
+def streak_group_int(ndarray[np.int64_t] a):
+    cdef int i, n = len(a)
+    cdef int count = 1
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    b[0] = 1
+
+    for i in range(1, n):
+        if a[i] == a[i -1]:
+            b[i] = count
+        else:
+            count += 1
+            b[i] = count
+    return b
+
+def streak_group_float(ndarray[np.float64_t] a):
+    cdef int i, n = len(a)
+    cdef int count = 1
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    b[0] = 1
+
+    for i in range(1, n):
+        if a[i] == a[i -1]:
+            b[i] = count
+        else:
+            count += 1
+            b[i] = count
+    return b
+
+def streak_group_bool(ndarray[np.uint8_t, cast=True] a):
+    cdef int i, n = len(a)
+    cdef int count = 1
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    b[0] = 1
+
+    for i in range(1, n):
+        if a[i] == a[i -1]:
+            b[i] = count
+        else:
+            count += 1
+            b[i] = count
+    return b
+
+def streak_group_str(ndarray[object] a):
+    cdef int i, n = len(a)
+    cdef int count = 1
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+
+    b[0] = 1
+
+    for i in range(1, n):
+        if a[i] == a[i -1] and a[i] is not None:
+            b[i] = count
+        else:
+            count += 1
+            b[i] = count
+    return b

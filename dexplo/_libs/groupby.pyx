@@ -32,7 +32,6 @@ def get_group_assignment_str_1d(ndarray[object] a):
     cdef int count = 0
     cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
     cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
-    cdef ndarray[object] qq = np.empty(nc, dtype='O')
     cdef dict d = {}
     cdef tuple t
 
@@ -46,6 +45,32 @@ def get_group_assignment_str_1d(ndarray[object] a):
 
     return group, group_position[:count]
 
+def get_group_assignment_str_1d_idx(ndarray[object] a):
+    cdef int i, j, k, group_num
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef ndarray[object] group_idx = np.empty(nr, dtype='O')
+    cdef dict d = {}
+
+    for i in range(nr):
+        group_idx[i] = []
+
+    for i in range(nr):
+        group_num = d.get(a[i], -1)
+        if group_num == -1:
+            group_position[count] = i
+            group[i] = count
+            d[a[i]] = count
+            count += 1
+        else:
+            group[i] = group_num
+            group_idx[group_num].append(i)
+
+    return group, group_position[:count], group_idx[:count]
+
 def get_group_assignment_str_2d(ndarray[object, ndim=2] a):
     cdef int i, j, k
     cdef int nr = a.shape[0]
@@ -53,7 +78,6 @@ def get_group_assignment_str_2d(ndarray[object, ndim=2] a):
     cdef int count = 0
     cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
     cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
-    cdef ndarray[object] qq = np.empty(nc, dtype='O')
     cdef dict d = {}
     cdef tuple t
 
@@ -382,6 +406,59 @@ def get_group_assignment_bool_2d(ndarray[np.uint8_t, cast=True, ndim=2] a):
 
     return group, group_position[:count]
 
+def value_counts_int_bounded(ndarray[np.int64_t] a, int low, int high):
+    cdef int i
+    cdef int n = len(a)
+
+    cdef ndarray[np.int64_t] counts = np.zeros(high - low + 1, dtype=np.int64)
+
+    for i in range(n):
+        counts[a[i] - low] += 1
+    return counts
+
+def value_counts_int(ndarray[np.int64_t] a):
+    cdef int i, group_num
+    cdef int n = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group_name = np.empty(n, dtype=np.int64)
+    cdef ndarray[np.int64_t] counts = np.empty(n, dtype=np.int64)
+    cdef dict d = {}
+
+    low, high = min_max_int(a)
+    # if high - low < 10_000_000:
+    #     return value_counts_int_bounded(a, low, high)
+
+    for i in range(n):
+        group_num = d.get(a[i], -1)
+        if group_num == -1:
+            counts[count] = 1
+            group_name[count] = i
+            d[a[i]] = count
+            count += 1
+        else:
+            counts[group_num] += 1
+    return group_name[:count], counts[:count]
+
+def value_counts_str(ndarray[object] a):
+    cdef int i, j, k, group_num
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_count = np.zeros(nr, dtype=np.int64)
+    cdef dict d = {}
+
+    for i in range(nr):
+        group_num = d.get(a[i], -1)
+        if group_num == -1:
+            group_position[count] = i
+            group_count[count] = 1
+            d[a[i]] = count
+            count += 1
+        else:
+            group_count[group_num] += 1
+
+    return group_position[:count], group_count[:count]
 
 def size(ndarray[np.int64_t] a, int group_size):
     cdef int i

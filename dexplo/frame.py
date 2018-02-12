@@ -2398,14 +2398,33 @@ class DataFrame(object):
             raise TypeError('`by` variable must either be a column name as a string or a '
                             'list of column names as strings')
         if len(by) == 1:
-            col_name = by[0]
-            dtype, loc, _ = self._column_info[col_name].values
+            col = by[0]
+            dtype, loc, _ = self._column_info[col].values
             col_arr = self._data[dtype][:, loc]
-            new_order = np.argsort(col_arr)
-            if not ascending:
-                new_order = new_order[::-1]
-                nan_count = np.isnan(col_arr).sum()
-                new_order = np.roll(new_order, -nan_count)
+            hasnans = self._hasnans.get(col, True)
+            if dtype == 'O':
+                group_labels, group_position = gb.get_group_assignment_str_1d(col_arr)
+                # size = gb.size(group_labels, len(group_position))
+                unique_names = col_arr[group_position]
+                # print(unique_names, size)
+                if hasnans or hasnans is None:
+                    if ascending:
+                        nan_value = chr(10**6)
+                    else:
+                        nan_value = ''
+                    col_arr = np.where(_math.isna_str_1d(col_arr), nan_value, col_arr)
+            elif dtype == 'f':
+                if hasnans or hasnans is None:
+                    if ascending:
+                        nan_value = np.inf
+                    else:
+                        nan_value = -np.inf
+                    col_arr = np.where(np.isnan(col_arr), nan_value, col_arr)
+
+            if ascending:
+                new_order = np.argsort(col_arr)
+            else:
+                new_order = np.argsort(col_arr)[::-1]
 
             new_data = {}
             for dtype, arr in self._data.items():
@@ -2418,7 +2437,22 @@ class DataFrame(object):
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def value_counts(self, col):
-        return self.groupby(col).size()
+        # return self.groupby(col).size()
+        if not isinstance(col, str):
+            raise TypeError('`col` must be the name of a column')
+        self._validate_column_name(col)
+        dtype, loc, _ = self._column_info[col].values
+        arr = self._data[dtype][:, loc]
+        if dtype =='O':
+            groups, counts = gb.value_counts_str(arr)
+        elif dtype == 'i':
+            min, max = _math.min_max_int(arr)
+        order = np.argsort(counts)[::-1]
+        unique_strings = arr[groups][order]
+        new_data = {'O': unique_strings[:, np.newaxis], 'i': counts[order, np.newaxis]}
+        new_columns = [col, 'count']
+        new_column_info = {col: utils.Column('O', 0, 0), 'count': utils.Column('i', 0, 1)}
+        return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def groupby(self, columns):
         if isinstance(columns, list):
@@ -2429,6 +2463,58 @@ class DataFrame(object):
         else:
             raise ValueError('Must pass in grouping column(s) as a string or list of strings')
         return Grouper(self, columns)
+
+    def streak(self, column=None, value=None, group=False):
+        """
+        Three types of streaks for a single column. Must specify Column
+        All values - begin at 1, value=None
+        Specific value given by value
+        group - each group is given same number
+        """
+        if not isinstance(column, str):
+            raise TypeError('`column` must be a column name as a string')
+        else:
+            self._validate_column_name(column)
+
+        if not isinstance(group, (bool, np.bool_)):
+            raise TypeError('`group` must be either True or False')
+
+        dtype, loc, _ = self._column_info[column].values
+        col_arr = self._data[dtype][:, loc]
+
+        if not group:
+            if value is None:
+                func_name = 'streak_' + utils.convert_kind_to_dtype(dtype)
+                func = getattr(_math, func_name)
+                return func(col_arr)
+            else:
+                if dtype == 'i':
+                    if not isinstance(value, (int, np.integer)):
+                        raise TypeError(f'Column {column} has dtype int and `value` is a '
+                                        f'{type(value).__name__}.')
+                    return _math.streak_value_int(col_arr, value)
+                elif dtype == 'f':
+                    if not isinstance(value, (int, float, np.number)):
+                        raise TypeError(f'Column {column} has dtype float and `value` is a '
+                                        f'{type(value).__name__}.')
+                    return _math.streak_value_float(col_arr, value)
+                elif dtype == 'O':
+                    if not isinstance(value, str):
+                        raise TypeError(f'Column {column} has dtype str and `value` is a '
+                                        f'{type(value).__name__}.')
+                    return _math.streak_value_str(col_arr, value)
+                elif dtype == 'b':
+                    if not isinstance(value, (bool, np.bool_)):
+                        raise TypeError(f'Column {column} has dtype bool and `value` is a '
+                                        f'{type(value).__name__}.')
+                    return _math.streak_value_bool(col_arr, value)
+        else:
+            if value is not None:
+                raise ValueError('If `group` is True then `value` must be None')
+
+            func_name = 'streak_group_' + utils.convert_kind_to_dtype(dtype)
+            func = getattr(_math, func_name)
+            return func(col_arr)
 
 
 class Grouper(object):
