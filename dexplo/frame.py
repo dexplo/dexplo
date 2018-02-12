@@ -135,8 +135,7 @@ class DataFrame(object):
         new_columns : list or array of unique strings the same length as the current
             number of columns
         """
-        self._check_column_validity(new_columns)
-        new_columns = np.asarray(new_columns, dtype='O')
+        new_columns = self._check_column_validity(new_columns)
 
         len_new: int = len(new_columns)
         len_old: int = len(self._columns)
@@ -168,13 +167,13 @@ class DataFrame(object):
         """
         if columns is None:
             columns = np.array(list(data.keys()))
-            self._check_column_validity(columns)
+            columns = self._check_column_validity(columns)
         else:
-            self._check_column_validity(columns)
+            columns = self._check_column_validity(columns)
             if set(columns) != set(data.keys()):
                 raise ValueError("Column names don't match dictionary keys")
 
-        self._columns: ColumnT = np.asarray(columns, dtype='O')
+        self._columns: ColumnT = columns
 
     def _initialize_columns_from_array(self, columns: ColumnT, num_cols: int) -> None:
         """
@@ -194,13 +193,13 @@ class DataFrame(object):
             col_list: List[str] = ['a' + str(i) for i in range(num_cols)]
             self._columns: ColumnT = np.array(col_list, dtype='O')
         else:
-            self._check_column_validity(columns)
+            columns = self._check_column_validity(columns)
             if len(columns) != num_cols:
                 raise ValueError(f'Number of column names {len(columns)} does not equal '
                                  f'number of columns of data array {num_cols}')
-            self._columns: ColumnT = np.asarray(columns, dtype='O')
+            self._columns: ColumnT = columns
 
-    def _check_column_validity(self, cols: ColumnT) -> None:
+    def _check_column_validity(self, cols: ColumnT) -> ndarray:
         """
         Determine if column names are valid
         Parameters
@@ -223,6 +222,7 @@ class DataFrame(object):
             if col in col_set:
                 raise ValueError(f'Column name {col} is duplicated. Column names must be unique')
             col_set.add(col)
+        return np.asarray(cols, dtype='O')
 
     def _initialize_data_from_dict(self, data: DataC) -> None:
         """
@@ -2315,7 +2315,8 @@ class DataFrame(object):
             arr_str = self._data.get('O', []).copy('F')
             for col, loc, new_val in dtype_locs['f']:
                 if limit >= len(self):
-                    arr_float[:, loc] = np.where(np.isnan(arr_float[:, loc]), new_val, arr_float[:, loc])
+                    arr_float[:, loc] = np.where(np.isnan(arr_float[:, loc]), new_val,
+                                                 arr_float[:, loc])
                 else:
                     idx = np.where(np.isnan(arr_float[:, loc]))[0][:limit]
                     arr_float[idx, loc] = new_val
@@ -2409,7 +2410,7 @@ class DataFrame(object):
                 # print(unique_names, size)
                 if hasnans or hasnans is None:
                     if ascending:
-                        nan_value = chr(10**6)
+                        nan_value = chr(10 ** 6)
                     else:
                         nan_value = ''
                     col_arr = np.where(_math.isna_str_1d(col_arr), nan_value, col_arr)
@@ -2436,20 +2437,36 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def value_counts(self, col):
+    def value_counts(self, col, normalize=False, sort=True):
         # return self.groupby(col).size()
         if not isinstance(col, str):
             raise TypeError('`col` must be the name of a column')
         self._validate_column_name(col)
         dtype, loc, _ = self._column_info[col].values
         arr = self._data[dtype][:, loc]
-        if dtype =='O':
+        if dtype == 'O':
             groups, counts = gb.value_counts_str(arr)
+            uniques = arr[groups]
         elif dtype == 'i':
-            min, max = _math.min_max_int(arr)
-        order = np.argsort(counts)[::-1]
-        unique_strings = arr[groups][order]
-        new_data = {'O': unique_strings[:, np.newaxis], 'i': counts[order, np.newaxis]}
+            low, high = _math.min_max_int(arr)
+            if high - low < 10_000_000:
+                uniques, counts = gb.value_counts_int_bounded(arr, low, high)
+            else:
+                groups, counts = gb.value_counts_int(arr)
+                uniques = arr[groups]
+        elif dtype == 'f':
+            groups, counts = gb.value_counts_float(arr)
+            uniques = arr[groups]
+        elif dtype == 'b':
+            uniques, counts = gb.value_counts_bool(arr)
+
+        if sort:
+            order = np.argsort(counts)[::-1]
+            uniques = uniques[order]
+            new_data = {'O': uniques[:, np.newaxis], 'i': counts[order, np.newaxis]}
+        else:
+            new_data = {'O': uniques[:, np.newaxis], 'i': counts[:, np.newaxis]}
+
         new_columns = [col, 'count']
         new_column_info = {col: utils.Column('O', 0, 0), 'count': utils.Column('i', 0, 1)}
         return self._construct_from_new(new_data, new_column_info, new_columns)
@@ -2515,6 +2532,97 @@ class DataFrame(object):
             func_name = 'streak_group_' + utils.convert_kind_to_dtype(dtype)
             func = getattr(_math, func_name)
             return func(col_arr)
+
+    def rename(self, columns):
+        """
+        pass in a list to rename all columns
+        use a dictionary to rename specific columns
+        or a callable
+
+        """
+        if isinstance(columns, (list, ndarray)):
+            new_columns = self._check_column_validity(columns)
+
+        elif isinstance(columns, dict):
+            for col in columns:
+                if col not in self._column_info:
+                    raise ValueError(f'Column {col} is not a column')
+
+            new_columns = [columns.get(col, col) for col in self._columns]
+            new_columns = self._check_column_validity(new_columns)
+
+        elif callable(columns):
+            new_columns = [columns(col) for col in self._columns]
+            new_columns = self._check_column_validity(new_columns)
+
+        if len(new_columns) != len(self._columns):
+            raise ValueError('The number of strings in your list/array of new columns '
+                             'does not match the number of columns '
+                             f'{len(new_columns)} ! {len(self._columns)}')
+
+        new_column_info = {}
+        for old_col, new_col in zip(self._columns, new_columns):
+            new_column_info[new_col] = utils.Column(*self._column_info[old_col].values)
+
+        new_data = {}
+        for dtype, arr in self._data.items():
+            new_data[dtype] = arr.copy('F')
+
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def drop(self, rows=None, columns=None):
+        if isinstance(rows, int):
+            rows = [rows]
+        elif isinstance(rows, ndarray):
+            rows = utils.try_to_squeeze_array(rows)
+        elif isinstance(rows, list):
+            pass
+        elif rows is not None:
+            raise TypeError('Rows must either be an int, list/array of ints or None')
+
+        for row in rows:
+            if not isinstance(row, int):
+                raise TypeError('All the row values in your list must be integers')
+            if row < -len(self) or row >= len(self):
+                raise IndexError(f'Integer location {row} for the rows is out of range')
+
+        if isinstance(columns, (int, str, np.integer)):
+            columns = [columns]
+        elif isinstance(columns, ndarray):
+            columns = utils.try_to_squeeze_array(rows)
+        elif isinstance(columns, list):
+            pass
+        elif columns is not None:
+            raise TypeError('Rows must either be an int, list/array of ints or None')
+        else:
+            columns = []
+
+        column_strings = []
+        for col in columns:
+            if isinstance(col, str):
+                column_strings.append(col)
+            elif isinstance(col, (int, np.integer)):
+                column_strings.append(self._columns[col])
+
+        self._validate_column_name_list(column_strings)
+        column_set = set(column_strings)
+
+        new_rows = np.isin(np.arange(len(self)), rows, invert=True)
+        new_columns = [col for col in self._columns if col not in column_set]
+
+        new_column_info = {}
+        data_dict = defaultdict(list)
+        for i, col in enumerate(new_columns):
+            dtype, loc, _ = self._column_info[col].values
+            cur_loc = len(data_dict[dtype])
+            new_column_info[col] = utils.Column(dtype, cur_loc, i)
+            data_dict[dtype].append(loc)
+
+        new_data = {}
+        for dtype, locs in data_dict.items():
+            new_data[dtype] = self._data[dtype][np.ix_(new_rows, locs)]
+
+        return self._construct_from_new(new_data, new_column_info, new_columns)
 
 
 class Grouper(object):

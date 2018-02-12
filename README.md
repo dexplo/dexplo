@@ -44,7 +44,6 @@ A data analysis library comparible to pandas
 * Must use 3.6 - fstrings
 * Must have numpy
 
-
 ### Small feature set
 * Implement as few attributes and methods as possible
 * Focus on good idiomatic cookbook examples for doing more complex tasks
@@ -95,18 +94,20 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] quantile
 - [ ] rank
 - [x] std
+- [x] streak
 - [x] sum
 - [x] var
 - [x] unique
 - [x] nunique
+- [x] value_counts
 
 **Selection**
 
-- [ ] drop
+- [x] drop
 - [ ] drop_duplicates
 - [x] head
 - [ ] isin
-- [ ] rename
+- [x] rename
 - [ ] sample
 - [x] select_dtypes
 - [x] tail
@@ -118,6 +119,30 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] dropna
 - [x] fillna
 - [ ] interpolate
+
+**Other**
+
+- [ ] append
+- [ ] apply
+- [ ] assign
+- [x] astype
+- [ ] factorize
+- [x] groupby
+- [ ] iterrows
+- [ ] join
+- [ ] melt
+- [ ] pivot
+- [ ] plot
+- [ ] profile
+- [ ] replace
+- [ ] rolling
+- [ ] sort_values
+
+**Functions**
+
+- [ ] read_csv
+- [ ] read_sql
+- [ ] concat
 
 **Group By** - specifically with `groupby` method
 - [ ] agg
@@ -150,26 +175,3 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] sum
 - [x] tail
 - [x] var
-
-**Other**
-
-- [ ] append
-- [ ] apply
-- [ ] assign
-- [x] astype
-- [x] groupby
-- [ ] info
-- [ ] join
-- [ ] melt
-- [ ] pivot
-- [ ] plot
-- [ ] replace
-- [ ] rolling
-- [ ] sort_values
-
-**Functions**
-
-- [ ] read_csv
-- [ ] read_sql
-- [ ] concat
-
