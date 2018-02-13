@@ -106,9 +106,9 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] drop
 - [ ] drop_duplicates
 - [x] head
-- [ ] isin
+- [x] isin
 - [x] rename
-- [ ] sample
+- [x] sample
 - [x] select_dtypes
 - [x] tail
 - [ ] where
