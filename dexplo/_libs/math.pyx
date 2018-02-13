@@ -9,6 +9,8 @@ import cython
 from cpython cimport dict, set, list, tuple
 from libc.math cimport isnan, sqrt, floor, ceil
 import cmath
+import groupby as gb
+import math as _math
 
 try:
     import bottleneck as bn
@@ -531,6 +533,132 @@ def sum_str(ndarray[object, ndim=2] a, axis, hasnans):
                     total[j] = total[j] + a[j, i]
     return total
 
+def mode_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans, keep):
+    cdef int i, j, order, low, high, last
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[np.int64_t] result, col_arr, uniques, counts, groups
+
+    if axis == 0:
+        result = np.empty(nc, dtype='int64')
+        for i in range(nc):
+            col_arr = a[:, i]
+            low, high = _math.min_max_int(col_arr)
+            if high - low < 10_000_000:
+                uniques, counts = gb.value_counts_int_bounded(col_arr, low, high)
+            else:
+                groups, counts = gb.value_counts_int(col_arr)
+                uniques = col_arr[groups]
+
+            last = np.argsort(counts)[len(counts) - 1]
+            result[i] = uniques[last]
+    else:
+        result = np.empty(nr, dtype='int64')
+        for i in range(nr):
+            col_arr = a[i, :]
+            low, high = _math.min_max_int(col_arr)
+            if high - low < 10_000_000:
+                uniques, counts = gb.value_counts_int_bounded(col_arr, low, high)
+            else:
+                groups, counts = gb.value_counts_int(col_arr)
+                uniques = col_arr[groups]
+
+            last = np.argsort(counts)[len(counts) - 1]
+            result[i] = uniques[last]
+    return result
+
+def mode_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, keep):
+    cdef int i, j, order, low, high, last
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[np.int64_t] groups, counts
+    cdef ndarray[np.float64_t] result, col_arr, uniques
+
+    if axis == 0:
+        result = np.empty(nc, dtype='float64')
+        for i in range(nc):
+            col_arr = a[:, i]
+            groups, counts = gb.value_counts_float(col_arr, dropna=True)
+            uniques = col_arr[groups]
+
+            if len(uniques) == 0:
+                result[i] = nan
+            else:
+                last = np.argsort(counts)[len(counts) - 1]
+                result[i] = uniques[last]
+    else:
+        result = np.empty(nr, dtype='float64')
+        for i in range(nr):
+            col_arr = a[i, :]
+            groups, counts = gb.value_counts_float(col_arr, dropna=True)
+            uniques = col_arr[groups]
+
+            if len(uniques) == 0:
+                result[i] = nan
+            else:
+                last = np.argsort(counts)[len(counts) - 1]
+                result[i] = uniques[last]
+    return result
+
+def mode_str(ndarray[object, ndim=2] a, axis, hasnans, keep):
+    cdef int i, j, order, low, high, last
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[np.int64_t] groups, counts
+    cdef ndarray[object] result, col_arr, uniques
+
+    if axis == 0:
+        result = np.empty(nc, dtype='O')
+        for i in range(nc):
+            col_arr = a[:, i]
+            groups, counts = gb.value_counts_str(col_arr, dropna=True)
+            uniques = col_arr[groups]
+
+            if len(uniques) == 0:
+                result[i] = None
+            else:
+                last = np.argsort(counts)[len(counts) - 1]
+                result[i] = uniques[last]
+    else:
+        result = np.empty(nr, dtype='O')
+        for i in range(nr):
+            col_arr = a[i, :]
+            groups, counts = gb.value_counts_str(col_arr, dropna=True)
+            uniques = col_arr[groups]
+
+            if len(uniques) == 0:
+                result[i] = None
+            else:
+                last = np.argsort(counts)[len(counts) - 1]
+                result[i] = uniques[last]
+    return result
+
+
+def mode_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, hasnans, keep):
+    cdef int i, j, order, low, high, last
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef ndarray[np.int64_t] groups, counts
+    cdef ndarray[np.int8_t, cast=True] result, col_arr, uniques
+
+    if axis == 0:
+        result = np.empty(nc, dtype='bool')
+        for i in range(nc):
+            col_arr = a[:, i]
+            uniques, counts = gb.value_counts_bool(col_arr)
+
+            last = np.argsort(counts)[len(counts) - 1]
+            result[i] = uniques[last]
+    else:
+        result = np.empty(nr, dtype='bool')
+        for i in range(nr):
+            col_arr = a[i, :]
+            uniques, counts = gb.value_counts_bool(col_arr)
+
+            last = np.argsort(counts)[len(counts) - 1]
+            result[i] = uniques[last]
+    return result
+
 def prod_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     cdef long *arr = <long*> a.data
     cdef int i, j
@@ -579,24 +707,22 @@ def prod_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, **kwargs):
     if axis == 0:
         total = np.ones(nc, dtype=np.float64)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] == True:
-                for j in range(nr):
-                    if not isnan(arr[i * nr + j]):
-                        total[i] *= arr[i * nr + j]
-            else:
-                for j in range(nr):
+            for j in range(nr):
+                if not isnan(arr[i * nr + j]):
                     total[i] *= arr[i * nr + j]
+            # else:
+            #     for j in range(nr):
+            #         total[i] *= arr[i * nr + j]
 
     else:
         total = np.zeros(nr, dtype=np.float64)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] == True:
-                for j in range(nr):
-                    if not isnan(arr[i * nr + j]):
-                        total[j] *= arr[i * nr + j]
-            else:
-                for j in range(nr):
+            for j in range(nr):
+                if not isnan(arr[i * nr + j]):
                     total[j] *= arr[i * nr + j]
+            # else:
+            #     for j in range(nr):
+            #         total[j] *= arr[i * nr + j]
     return total
 
 def max_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):

@@ -87,9 +87,9 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] min
 - [x] median
 - [x] mean
-- [ ] mode
-- [ ] nlargest
-- [ ] nsmallest
+- [x] mode
+- [x] nlargest
+- [x] nsmallest
 - [x] prod
 - [x] quantile
 - [ ] rank
@@ -126,7 +126,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] apply
 - [ ] assign
 - [x] astype
-- [ ] factorize
+- [x] factorize
 - [x] groupby
 - [ ] iterrows
 - [ ] join

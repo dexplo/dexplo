@@ -12,9 +12,9 @@ _KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'O': 'O'}
 _NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'O': 'O'}
 
 _AXIS = {'rows': 0, 'columns': 1}
-_NON_AGG_FUNCS = {'cumsum', 'cummin', 'cummax'}
+_NON_AGG_FUNCS = {'cumsum', 'cummin', 'cummax', 'cumprod'}
 _COLUMN_STACK_FUNCS = {'cumsum', 'cummin', 'cummax', 'mean', 'median', 'var', 'std',
-                       'argmax', 'argmin', 'quantile', 'nunique'}
+                       'argmax', 'argmin', 'quantile', 'nunique', 'prod', 'cumprod', 'mode'}
 
 ColumnSelection = Union[int, str, slice, List[Union[str, int]]]
 RowSelection = Union[int, slice, List[int], 'DataFrame']

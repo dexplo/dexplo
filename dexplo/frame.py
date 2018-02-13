@@ -1617,7 +1617,7 @@ class DataFrame(object):
             if name in ['std', 'var', 'mean', 'median', 'quantile', 'prod', 'cumprod']:
                 return {'i', 'f', 'b'}
         elif axis == 1:
-            if name in ['std', 'var', 'mean', 'median', 'quantile', 'sum', 'max', 'min',
+            if name in ['std', 'var', 'mean', 'median', 'quantile', 'sum', 'max', 'min', 'mode',
                         'cumsum', 'cummax', 'cummin', 'argmin', 'argmax', 'prod', 'cumprod']:
                 return {'i', 'f', 'b'}
         return {'i', 'f', 'b', 'O'}
@@ -1918,6 +1918,11 @@ class DataFrame(object):
 
     def cumprod(self, axis: str = 'rows') -> 'DataFrame':
         return self._stat_funcs('cumprod', axis)
+
+    def mode(self, axis: str = 'rows', keep='low') -> 'DataFrame':
+        if keep not in ('low', 'high', 'all'):
+            raise ValueError('`keep` must be either "low", "high", or "all"')
+        return self._stat_funcs('mode', axis, keep=keep)
 
     def _hasnans_dtype(self, kind: str) -> ndarray:
         hasnans: ndarray = np.ones(self._data[kind].shape[1], dtype='bool')
@@ -2407,7 +2412,6 @@ class DataFrame(object):
                 group_labels, group_position = gb.get_group_assignment_str_1d(col_arr)
                 # size = gb.size(group_labels, len(group_position))
                 unique_names = col_arr[group_position]
-                # print(unique_names, size)
                 if hasnans or hasnans is None:
                     if ascending:
                         nan_value = chr(10 ** 6)
@@ -2437,15 +2441,14 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def value_counts(self, col, normalize=False, sort=True):
-        # return self.groupby(col).size()
+    def value_counts(self, col, normalize=False, sort=True, dropna=True):
         if not isinstance(col, str):
             raise TypeError('`col` must be the name of a column')
         self._validate_column_name(col)
         dtype, loc, _ = self._column_info[col].values
         arr = self._data[dtype][:, loc]
         if dtype == 'O':
-            groups, counts = gb.value_counts_str(arr)
+            groups, counts = gb.value_counts_str(arr, dropna=dropna)
             uniques = arr[groups]
         elif dtype == 'i':
             low, high = _math.min_max_int(arr)
@@ -2455,20 +2458,26 @@ class DataFrame(object):
                 groups, counts = gb.value_counts_int(arr)
                 uniques = arr[groups]
         elif dtype == 'f':
-            groups, counts = gb.value_counts_float(arr)
+            groups, counts = gb.value_counts_float(arr, dropna=dropna)
             uniques = arr[groups]
         elif dtype == 'b':
             uniques, counts = gb.value_counts_bool(arr)
 
+        if normalize:
+            counts = counts / counts.sum()
+            kind = 'f'
+        else:
+            kind = 'i'
+
         if sort:
             order = np.argsort(counts)[::-1]
             uniques = uniques[order]
-            new_data = {'O': uniques[:, np.newaxis], 'i': counts[order, np.newaxis]}
+            new_data = {'O': uniques[:, np.newaxis], kind: counts[order, np.newaxis]}
         else:
-            new_data = {'O': uniques[:, np.newaxis], 'i': counts[:, np.newaxis]}
+            new_data = {'O': uniques[:, np.newaxis], kind : counts[:, np.newaxis]}
 
         new_columns = [col, 'count']
-        new_column_info = {col: utils.Column('O', 0, 0), 'count': utils.Column('i', 0, 1)}
+        new_column_info = {col: utils.Column('O', 0, 0), 'count': utils.Column(kind, 0, 1)}
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def groupby(self, columns):
@@ -2663,6 +2672,14 @@ class DataFrame(object):
 
     def nsmallest(self, n, column, keep='all'):
         return self._nest(n, column, keep, 'nsmallest')
+
+    def factorize(self, column):
+        self._validate_column_name(column)
+        dtype, loc, _ = self._column_info[column].values
+        func_name = 'get_group_assignment_' + utils.convert_kind_to_dtype(dtype) + '_1d'
+        col_arr = self._data[dtype][:, loc]
+        groups, first_pos = getattr(gb, func_name)(col_arr)
+        return groups, col_arr[first_pos]
 
 
 class Grouper(object):

@@ -440,7 +440,7 @@ def value_counts_int_bounded(ndarray[np.int64_t] a, int low, int high):
     nz = counts.nonzero()[0]
     return nz + low, counts[nz]
 
-def value_counts_str(ndarray[object] a):
+def value_counts_str(ndarray[object] a, dropna):
     cdef int i, j, k, group_num
     cdef int nr = a.shape[0]
     cdef int nc = a.shape[1]
@@ -449,35 +449,61 @@ def value_counts_str(ndarray[object] a):
     cdef ndarray[np.int64_t] group_count = np.zeros(nr, dtype=np.int64)
     cdef dict d = {}
 
-    for i in range(nr):
-        group_num = d.get(a[i], -1)
-        if group_num == -1:
-            group_position[count] = i
-            group_count[count] = 1
-            d[a[i]] = count
-            count += 1
-        else:
-            group_count[group_num] += 1
+    if dropna:
+        for i in range(nr):
+            if a[i] is None:
+                continue
+            group_num = d.get(a[i], -1)
+            if group_num == -1:
+                group_position[count] = i
+                group_count[count] = 1
+                d[a[i]] = count
+                count += 1
+            else:
+                group_count[group_num] += 1
+    else:
+        for i in range(nr):
+            group_num = d.get(a[i], -1)
+            if group_num == -1:
+                group_position[count] = i
+                group_count[count] = 1
+                d[a[i]] = count
+                count += 1
+            else:
+                group_count[group_num] += 1
 
     return group_position[:count], group_count[:count]
 
-def value_counts_float(ndarray[np.float64_t] a):
+def value_counts_float(ndarray[np.float64_t] a, dropna):
     cdef int i, group_num
     cdef int n = len(a)
     cdef int count = 0
-    cdef ndarray[np.float64_t] group_name = np.empty(n, dtype='float64')
+    cdef ndarray[np.int64_t] group_name = np.empty(n, dtype='int64')
     cdef ndarray[np.int64_t] counts = np.empty(n, dtype='int64')
     cdef dict d = {}
 
-    for i in range(n):
-        group_num = d.get(a[i], -1)
-        if group_num == -1:
-            counts[count] = 1
-            group_name[count] = i
-            d[a[i]] = count
-            count += 1
-        else:
-            counts[group_num] += 1
+    if dropna:
+        for i in range(n):
+            if isnan(a[i]):
+                continue
+            group_num = d.get(a[i], -1)
+            if group_num == -1:
+                counts[count] = 1
+                group_name[count] = i
+                d[a[i]] = count
+                count += 1
+            else:
+                counts[group_num] += 1
+    else:
+        for i in range(n):
+            group_num = d.get(a[i], -1)
+            if group_num == -1:
+                counts[count] = 1
+                group_name[count] = i
+                d[a[i]] = count
+                count += 1
+            else:
+                counts[group_num] += 1
     return group_name[:count], counts[:count]
 
 def value_counts_bool(ndarray[np.uint8_t, cast=True] a):
