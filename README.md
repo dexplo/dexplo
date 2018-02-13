@@ -128,7 +128,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] astype
 - [x] factorize
 - [x] groupby
-- [ ] iterrows
+- [x] iterrows
 - [ ] join
 - [ ] melt
 - [ ] pivot

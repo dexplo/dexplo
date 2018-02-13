@@ -348,6 +348,28 @@ class DataFrame(object):
             v[:, order2] = self._data[dtype][:, loc]
         return v
 
+    @property
+    def _values_c(self) -> ndarray:
+        """
+        Retrieve a single 2-d array of all the data in the correct column order
+        """
+        if len(self._data) == 1:
+            kind: str = list(self._data.keys())[0]
+            order = [col_obj.loc for col, col_obj in self._column_info.items()]
+            return np.ascontiguousarray(self._data[kind][:, order])
+
+        if 'b' in self._data or 'O' in self._data:
+            arr_dtype: str = 'O'
+        else:
+            arr_dtype = 'float64'
+
+        v: ndarray = np.empty(self.shape, dtype=arr_dtype, order='C')
+
+        for col, col_obj in self._column_info.items():
+            dtype, loc, order2 = col_obj.values  # type: str, int, int
+            v[:, order2] = self._data[dtype][:, loc]
+        return v
+
     def _values_number(self) -> ndarray:
         """
         Retrieve the array that consists only of integer and floats
@@ -2805,6 +2827,11 @@ class DataFrame(object):
             for i, col in enumerate(self._columns):
                 new_column_info[col] = utils.Column('b', i, i)
             return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def iterrows(self):
+        values = self._values_c
+        for row in np.nditer(values, flags=['refs_ok', 'external_loop'], order='C'):
+            yield row
 
 
 class Grouper(object):
