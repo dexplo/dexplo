@@ -12,7 +12,8 @@ import dexplo.utils as utils
 from dexplo._libs import (string_funcs as sf,
                           groupby as gb,
                           validate_arrays as va,
-                          math as _math)
+                          math as _math,
+                          count_sort as _cs)
 from dexplo import stat_funcs as stat
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
@@ -2417,8 +2418,10 @@ class DataFrame(object):
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def sort_values(self, by: Union[str, List[str]], axis: str = 'rows',
-                    ascending: List[bool] = True):
-        axis = utils.convert_axis_string(axis)
+                    ascending: Union[bool, List[bool]] = True):
+        axis_num = utils.convert_axis_string(axis)
+        if axis_num == 1:
+            raise NotImplementedError('Not implemented for sorting rows')
         if isinstance(by, str):
             self._validate_column_name(by)
             by = [by]
@@ -2462,19 +2465,22 @@ class DataFrame(object):
             dtype, loc, _ = self._column_info[col].values
             col_arr = self._data[dtype][:, loc]
             hasnans = self._hasnans.get(col, True)
-            col_arr = replace_nans(dtype, col_arr, ascending[0], hasnans)
-
+            asc = ascending[0]
+            col_arr = replace_nans(dtype, col_arr, asc, hasnans)
             if dtype == 'O':
-                col_arr = col_arr.astype('U')
-
-            if ascending[0]:
-                new_order = np.argsort(col_arr)
+                if len(set(np.random.choice(col_arr, 100))) <= 70:
+                    d = _cs.sort_str_map(col_arr, asc)
+                    arr = _cs.replace_str_int(col_arr, d)
+                    counts = _cs.count_int_ordered(arr, len(d))
+                    ct_sum = counts.cumsum()
+                    new_order = _cs.get_idx(arr, ct_sum)
+                else:
+                    col_arr = col_arr.astype('U')
+                    new_order = np.argsort(col_arr)[::-1 + 2 * asc]
             else:
-                new_order = np.argsort(col_arr)[::-1]
-
+                new_order = np.argsort(col_arr)[::-1 + 2 * asc]
         else:
             single_cols = []
-
             for col, asc in zip(by, ascending):
                 dtype, loc, _ = self._column_info[col].values
                 col_arr = self._data[dtype][:, loc]
@@ -2485,12 +2491,17 @@ class DataFrame(object):
                     if dtype == 'b':
                         col_arr = ~col_arr
                     elif dtype == 'O':
-                            d = _math.sort_str_map(col_arr)
-                            col_arr = -_math.replace_str_int(col_arr, d)
+                            # TODO: how to avoid mapping to ints for mostly unique string columns?
+                            d = _cs.sort_str_map(col_arr)
+                            col_arr = -_cs.replace_str_int(col_arr, d)
                     else:
                         col_arr = -col_arr
                 elif dtype == 'O':
-                    col_arr = col_arr.astype('U')
+                    if len(set(np.random.choice(col_arr, 100))) <= 30:
+                        d = _cs.sort_str_map(col_arr)
+                        col_arr = _cs.replace_str_int(col_arr, d)
+                    else:
+                        col_arr = col_arr.astype('U')
 
                 single_cols.append(col_arr)
 
@@ -2498,7 +2509,11 @@ class DataFrame(object):
 
         new_data = {}
         for dtype, arr in self._data.items():
-            new_data[dtype] = arr.take(new_order, 0)
+            np_dtype = utils.convert_kind_to_numpy(dtype)
+            arr_final = np.empty(arr.shape, dtype=np_dtype, order='F')
+            for i in range(arr.shape[1]):
+                arr_final[:, i] = arr[:, i][new_order]
+            new_data[dtype] = arr_final
         new_column_info = self._copy_column_info()
         new_columns = self._columns.copy()
 
@@ -2809,7 +2824,7 @@ class DataFrame(object):
             new_column_info = self._copy_column_info()
             new_data = {}
             for dtype, arr in self._data.items():
-                new_data[dtype] = arr.take(new_idx, 0)
+                new_data[dtype] = arr[new_idx]
             return self._construct_from_new(new_data, new_column_info, new_columns)
         else:
             column_ints = defaultdict(int)

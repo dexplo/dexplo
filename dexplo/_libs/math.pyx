@@ -426,26 +426,6 @@ def nunique_int_bounded(ndarray[np.int64_t, ndim=2] a, axis,
             result[i] = count
     return result
 
-def sort_str_map(ndarray[object] a):
-    cdef int i
-    cdef int n = len(a)
-    cdef set s = set()
-    cdef ndarray[object] b
-    for i in range(n):
-        s.add(a[i])
-
-    b = np.sort(np.array(list(s), dtype='O'))
-    return dict(zip(b, np.arange(len(b))))
-
-def replace_str_int(ndarray[object] a, dict d):
-    cdef int i
-    cdef int n = len(a)
-    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
-
-    for i in range(n):
-        b[i] = d[a[i]]
-    return b
-
 def sum_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     cdef long *arr = <long*> a.data
     cdef int i, j
