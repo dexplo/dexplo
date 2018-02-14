@@ -136,7 +136,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] profile
 - [ ] replace
 - [ ] rolling
-- [ ] sort_values
+- [x] sort_values
 
 **Functions**
 
