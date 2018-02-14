@@ -2416,7 +2416,8 @@ class DataFrame(object):
         new_column_info = self._copy_column_info()
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def sort_values(self, by: Union[str, List[str]], axis: str = 'rows', ascending: bool = True):
+    def sort_values(self, by: Union[str, List[str]], axis: str = 'rows',
+                    ascending: List[bool] = True):
         axis = utils.convert_axis_string(axis)
         if isinstance(by, str):
             self._validate_column_name(by)
@@ -2426,41 +2427,80 @@ class DataFrame(object):
         else:
             raise TypeError('`by` variable must either be a column name as a string or a '
                             'list of column names as strings')
+
+        if isinstance(ascending, list):
+            if len(ascending) != len(by):
+                raise ValueError('The number of columns in `by` does not match the number of '
+                                 f'booleans in `ascending` list {len(by)} != {len(ascending)}')
+            for asc in ascending:
+                if not isinstance(asc, bool):
+                    raise TypeError('All values passed to `ascending` list must be boolean')
+        elif not isinstance(ascending, bool):
+            raise TypeError('`ascending` must be a boolean or list of booleans')
+        else:
+            ascending = [ascending] * len(by)
+
+        def replace_nans(dtype, col_arr, asc, hasnans):
+            if dtype == 'O':
+                if hasnans or hasnans is None:
+                    if asc:
+                        nan_value = chr(10 ** 6)
+                    else:
+                        nan_value = ''
+                    return np.where(_math.isna_str_1d(col_arr), nan_value, col_arr)
+            elif dtype == 'f':
+                if hasnans or hasnans is None:
+                    if asc:
+                        nan_value = np.inf
+                    else:
+                        nan_value = -np.inf
+                    return np.where(np.isnan(col_arr), nan_value, col_arr)
+            return col_arr
+
         if len(by) == 1:
             col = by[0]
             dtype, loc, _ = self._column_info[col].values
             col_arr = self._data[dtype][:, loc]
             hasnans = self._hasnans.get(col, True)
-            if dtype == 'O':
-                group_labels, group_position = gb.get_group_assignment_str_1d(col_arr)
-                # size = gb.size(group_labels, len(group_position))
-                unique_names = col_arr[group_position]
-                if hasnans or hasnans is None:
-                    if ascending:
-                        nan_value = chr(10 ** 6)
-                    else:
-                        nan_value = ''
-                    col_arr = np.where(_math.isna_str_1d(col_arr), nan_value, col_arr)
-            elif dtype == 'f':
-                if hasnans or hasnans is None:
-                    if ascending:
-                        nan_value = np.inf
-                    else:
-                        nan_value = -np.inf
-                    col_arr = np.where(np.isnan(col_arr), nan_value, col_arr)
+            col_arr = replace_nans(dtype, col_arr, ascending[0], hasnans)
 
-            if ascending:
+            if dtype == 'O':
+                col_arr = col_arr.astype('U')
+
+            if ascending[0]:
                 new_order = np.argsort(col_arr)
             else:
                 new_order = np.argsort(col_arr)[::-1]
 
-            new_data = {}
-            for dtype, arr in self._data.items():
-                new_data[dtype] = arr[new_order]
-            new_column_info = self._copy_column_info()
-            new_columns = self._columns.copy()
         else:
-            pass
+            single_cols = []
+
+            for col, asc in zip(by, ascending):
+                dtype, loc, _ = self._column_info[col].values
+                col_arr = self._data[dtype][:, loc]
+                hasnans = self._hasnans.get(col, True)
+                col_arr = replace_nans(dtype, col_arr, asc, hasnans)
+
+                if not asc:
+                    if dtype == 'b':
+                        col_arr = ~col_arr
+                    elif dtype == 'O':
+                            d = _math.sort_str_map(col_arr)
+                            col_arr = -_math.replace_str_int(col_arr, d)
+                    else:
+                        col_arr = -col_arr
+                elif dtype == 'O':
+                    col_arr = col_arr.astype('U')
+
+                single_cols.append(col_arr)
+
+            new_order = np.lexsort(single_cols[::-1])
+
+        new_data = {}
+        for dtype, arr in self._data.items():
+            new_data[dtype] = arr.take(new_order, 0)
+        new_column_info = self._copy_column_info()
+        new_columns = self._columns.copy()
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
