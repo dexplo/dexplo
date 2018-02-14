@@ -334,7 +334,7 @@ class DataFrame(object):
         """
         if len(self._data) == 1:
             kind: str = list(self._data.keys())[0]
-            order = [col_obj.loc for col, col_obj in self._column_info.items()]
+            order = [self._column_info[col].loc for col in self._columns]
             return self._data[kind][:, order]
 
         if 'b' in self._data or 'O' in self._data:
@@ -2417,6 +2417,28 @@ class DataFrame(object):
         new_column_info = self._copy_column_info()
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
+    def _replace_nans(self, dtype, col_arr, asc, hasnans):
+        if dtype == 'O':
+            if hasnans or hasnans is None:
+                if asc:
+                    nan_value = chr(10 ** 6)
+                else:
+                    nan_value = ''
+                if col_arr.ndim == 1:
+                    return np.where(_math.isna_str_1d(col_arr), nan_value, col_arr)
+                else:
+                    hasnans = np.array([True] * col_arr.shape[1])
+                    return np.where(_math.isna_str(col_arr, hasnans), nan_value, col_arr)
+        elif dtype == 'f':
+            if hasnans or hasnans is None:
+                if asc:
+                    nan_value = np.inf
+                else:
+                    nan_value = -np.inf
+                # TODO: check individual columns for nans for speed increase
+                return np.where(np.isnan(col_arr), nan_value, col_arr)
+        return col_arr
+
     def sort_values(self, by: Union[str, List[str]], axis: str = 'rows',
                     ascending: Union[bool, List[bool]] = True):
         axis_num = utils.convert_axis_string(axis)
@@ -2443,30 +2465,13 @@ class DataFrame(object):
         else:
             ascending = [ascending] * len(by)
 
-        def replace_nans(dtype, col_arr, asc, hasnans):
-            if dtype == 'O':
-                if hasnans or hasnans is None:
-                    if asc:
-                        nan_value = chr(10 ** 6)
-                    else:
-                        nan_value = ''
-                    return np.where(_math.isna_str_1d(col_arr), nan_value, col_arr)
-            elif dtype == 'f':
-                if hasnans or hasnans is None:
-                    if asc:
-                        nan_value = np.inf
-                    else:
-                        nan_value = -np.inf
-                    return np.where(np.isnan(col_arr), nan_value, col_arr)
-            return col_arr
-
         if len(by) == 1:
             col = by[0]
             dtype, loc, _ = self._column_info[col].values
             col_arr = self._data[dtype][:, loc]
             hasnans = self._hasnans.get(col, True)
             asc = ascending[0]
-            col_arr = replace_nans(dtype, col_arr, asc, hasnans)
+            col_arr = self._replace_nans(dtype, col_arr, asc, hasnans)
             if dtype == 'O':
                 if len(set(np.random.choice(col_arr, 100))) <= 70:
                     d = _cs.sort_str_map(col_arr, asc)
@@ -2485,7 +2490,7 @@ class DataFrame(object):
                 dtype, loc, _ = self._column_info[col].values
                 col_arr = self._data[dtype][:, loc]
                 hasnans = self._hasnans.get(col, True)
-                col_arr = replace_nans(dtype, col_arr, asc, hasnans)
+                col_arr = self._replace_nans(dtype, col_arr, asc, hasnans)
 
                 if not asc:
                     if dtype == 'b':
@@ -2517,6 +2522,33 @@ class DataFrame(object):
         new_column_info = self._copy_column_info()
         new_columns = self._columns.copy()
 
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def rank(self, axis='rows', method='average'):
+        dtype_order = defaultdict(list)
+        dtype_loc = defaultdict(list)
+        dtype_col = defaultdict(list)
+        for col in self._columns:
+            dtype, loc, order = self._column_info[col].values
+            dtype_order[dtype].append(order)
+            dtype_loc[dtype].append(loc)
+            dtype_col[dtype].append(col)
+
+        data_dict = defaultdict(list)
+        new_column_info = {}
+        for dtype, arr in self._data.items():
+            # hasnans = self._hasnans.get(dtype, np.array([True] * arr.shape[1]))
+            arr = self._replace_nans(dtype, arr, True, True)
+            cur_rank = np.argsort(np.argsort(arr, 0), 0) + 1
+            new_dtype = cur_rank.dtype.kind
+            cur_loc = utils.get_num_cols(data_dict.get(new_dtype, []))
+            data_dict[new_dtype].append(cur_rank)
+
+            for col, loc, order in zip(dtype_col[dtype], dtype_loc[dtype], dtype_order[dtype]):
+                new_column_info[col] = utils.Column(new_dtype, loc + cur_loc, order)
+
+        new_data = utils.concat_stat_arrays(data_dict)
+        new_columns = self._columns.copy()
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def value_counts(self, col, normalize=False, sort=True, dropna=True):
