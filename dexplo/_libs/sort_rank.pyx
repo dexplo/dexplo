@@ -326,3 +326,125 @@ def rank_str_min_to_first(ndarray[np.int64_t, ndim=2] cur_rank, ndarray[np.int64
             else:
                 add = 1
     return cur_rank
+
+
+def rank_int_average(ndarray[np.int64_t, ndim=2] arg, ndarray[np.int64_t, ndim=2] act):
+    cdef int i, j, k
+    cdef nr = arg.shape[0]
+    cdef nc = arg.shape[1]
+    cdef int rank, ct
+    cdef np.float64_t avg
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+
+    for i in range(nc):
+        result[arg[0, i], i] = 1
+        rank = 1
+        ct = 1
+        for j in range(1, nr):
+            if act[arg[j, i], i] == act[arg[j - 1, i], i]:
+                result[arg[j, i], i] = rank
+                ct += 1
+            else:
+                if ct > 1:
+                    avg = (j + 1) - <double> (ct + 1) / 2
+                    for k in range(ct):
+                        result[arg[j - k - 1, i], i] = avg
+                result[arg[j, i], i] = j + 1
+                rank = j + 1
+                ct = 1
+        if ct > 0:
+            avg = (j + 2) - <double> (ct + 1) / 2
+            for k in range(ct):
+                result[arg[j - k, i], i] = avg
+    return result
+
+def rank_float_average(ndarray[np.int64_t, ndim=2] arg, ndarray[np.float64_t, ndim=2] act):
+    cdef int i, j, k
+    cdef nr = arg.shape[0]
+    cdef nc = arg.shape[1]
+    cdef int rank, ct
+    cdef np.float64_t avg
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+
+    for i in range(nc):
+        result[arg[0, i], i] = 1
+        rank = 1
+        ct = 1
+        for j in range(1, nr):
+            if act[arg[j, i], i] == act[arg[j - 1, i], i]:
+                result[arg[j, i], i] = rank
+                ct += 1
+            else:
+                if ct > 1:
+                    avg = (j + 1) - <double> (ct + 1) / 2
+                    for k in range(ct):
+                        result[arg[j - k - 1, i], i] = avg
+                result[arg[j, i], i] = j + 1
+                rank = j + 1
+                ct = 1
+        if ct > 0:
+            avg = (j + 2) - <double> (ct + 1) / 2
+            for k in range(ct):
+                result[arg[j - k, i], i] = avg
+    return result
+
+
+def rank_bool_average(ndarray[np.int64_t, ndim=2] arg, ndarray[np.uint8_t, ndim=2, cast=True] act):
+    cdef int i, j, k
+    cdef nr = arg.shape[0]
+    cdef nc = arg.shape[1]
+    cdef int rank, ct
+    cdef np.float64_t avg
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+
+    for i in range(nc):
+        result[arg[0, i], i] = 1
+        rank = 1
+        ct = 1
+        for j in range(1, nr):
+            if act[arg[j, i], i] == act[arg[j - 1, i], i]:
+                result[arg[j, i], i] = rank
+                ct += 1
+            else:
+                if ct > 1:
+                    avg = (j + 1) - <double> (ct + 1) / 2
+                    for k in range(ct):
+                        result[arg[j - k - 1, i], i] = avg
+                result[arg[j, i], i] = j + 1
+                rank = j + 1
+                ct = 1
+        if ct > 0:
+            avg = (j + 2) - <double> (ct + 1) / 2
+            for k in range(ct):
+                result[arg[j - k, i], i] = avg
+    return result
+
+def rank_str_average(ndarray[np.int64_t, ndim=2] arg, ndarray[object, ndim=2] act):
+    cdef int i, j, k
+    cdef nr = arg.shape[0]
+    cdef nc = arg.shape[1]
+    cdef int rank, ct
+    cdef np.float64_t avg
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+
+    for i in range(nc):
+        result[arg[0, i], i] = 1
+        rank = 1
+        ct = 1
+        for j in range(1, nr):
+            if act[arg[j, i], i] == act[arg[j - 1, i], i]:
+                result[arg[j, i], i] = rank
+                ct += 1
+            else:
+                if ct > 1:
+                    avg = (j + 1) - <double> (ct + 1) / 2
+                    for k in range(ct):
+                        result[arg[j - k - 1, i], i] = avg
+                result[arg[j, i], i] = j + 1
+                rank = j + 1
+                ct = 1
+        if ct > 0:
+            avg = (j + 2) - <double> (ct + 1) / 2
+            for k in range(ct):
+                result[arg[j - k, i], i] = avg
+    return result

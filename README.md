@@ -92,7 +92,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] nsmallest
 - [x] prod
 - [x] quantile
-- [ ] rank
+- [x] rank
 - [x] std
 - [x] streak
 - [x] sum
@@ -111,7 +111,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] sample
 - [x] select_dtypes
 - [x] tail
-- [ ] where
+- [x] where
 
 **Missing Data**
 
