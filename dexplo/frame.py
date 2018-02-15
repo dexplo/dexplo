@@ -9,11 +9,11 @@ from typing import (Union, Dict, List, Optional, Tuple, Sequence, Callable,
 
 import dexplo.options as options
 import dexplo.utils as utils
-from dexplo._libs import (string_funcs as sf,
-                          groupby as gb,
-                          validate_arrays as va,
+from dexplo._libs import (string_funcs as _sf,
+                          groupby as _gb,
+                          validate_arrays as _va,
                           math as _math,
-                          count_sort as _cs)
+                          sort_rank as _sr)
 from dexplo import stat_funcs as stat
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
@@ -305,7 +305,7 @@ class DataFrame(object):
 
         data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         for i, col in enumerate(self._columns):
-            arr: ndarray = va.maybe_convert_object_array(data[:, i], col)
+            arr: ndarray = _va.maybe_convert_object_array(data[:, i], col)
             kind: str = arr.dtype.kind
             loc: int = len(data_dict[kind])
             data_dict[kind].append(arr)
@@ -1389,7 +1389,7 @@ class DataFrame(object):
             if value.dtype.kind == 'U':
                 value = value.astype('O')
             if value.dtype.kind == 'O':
-                va.validate_strings_in_object_array(value)
+                _va.validate_strings_in_object_array(value)
             self._full_columm_add(cs, value.dtype.kind, value)
         elif isinstance(value, DataFrame):
             if value.shape[0] != self.shape[0]:
@@ -1611,7 +1611,7 @@ class DataFrame(object):
                 if kind == 'f':
                     self._hasnans['f'] = np.isnan(arr).any(0)
                 elif kind == 'O':
-                    self._hasnans['O'] = va.isnan_object(arr)
+                    self._hasnans['O'] = _va.isnan_object(arr)
                 else:
                     self._hasnans[kind] = np.zeros(arr.shape[1], dtype='bool')
 
@@ -2417,7 +2417,7 @@ class DataFrame(object):
         new_column_info = self._copy_column_info()
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def _replace_nans(self, dtype, col_arr, asc, hasnans):
+    def _replace_nans(self, dtype, col_arr, asc, hasnans, return_na_arr=False):
         if dtype == 'O':
             if hasnans or hasnans is None:
                 if asc:
@@ -2425,10 +2425,12 @@ class DataFrame(object):
                 else:
                     nan_value = ''
                 if col_arr.ndim == 1:
-                    return np.where(_math.isna_str_1d(col_arr), nan_value, col_arr)
+                    na_arr = _math.isna_str_1d(col_arr)
+                    arr_final = np.where(na_arr, nan_value, col_arr)
                 else:
                     hasnans = np.array([True] * col_arr.shape[1])
-                    return np.where(_math.isna_str(col_arr, hasnans), nan_value, col_arr)
+                    na_arr = _math.isna_str(col_arr, hasnans)
+                    arr_final = np.where(na_arr, nan_value, col_arr)
         elif dtype == 'f':
             if hasnans or hasnans is None:
                 if asc:
@@ -2436,8 +2438,14 @@ class DataFrame(object):
                 else:
                     nan_value = -np.inf
                 # TODO: check individual columns for nans for speed increase
-                return np.where(np.isnan(col_arr), nan_value, col_arr)
-        return col_arr
+                na_arr = np.isnan(col_arr)
+                arr_final = np.where(na_arr, nan_value, col_arr)
+        else:
+            return col_arr
+        if return_na_arr:
+            return arr_final, na_arr
+        else:
+            return arr_final
 
     def sort_values(self, by: Union[str, List[str]], axis: str = 'rows',
                     ascending: Union[bool, List[bool]] = True):
@@ -2474,11 +2482,11 @@ class DataFrame(object):
             col_arr = self._replace_nans(dtype, col_arr, asc, hasnans)
             if dtype == 'O':
                 if len(set(np.random.choice(col_arr, 100))) <= 70:
-                    d = _cs.sort_str_map(col_arr, asc)
-                    arr = _cs.replace_str_int(col_arr, d)
-                    counts = _cs.count_int_ordered(arr, len(d))
+                    d = _sr.sort_str_map(col_arr, asc)
+                    arr = _sr.replace_str_int(col_arr, d)
+                    counts = _sr.count_int_ordered(arr, len(d))
                     ct_sum = counts.cumsum()
-                    new_order = _cs.get_idx(arr, ct_sum)
+                    new_order = _sr.get_idx(arr, ct_sum)
                 else:
                     col_arr = col_arr.astype('U')
                     new_order = np.argsort(col_arr)[::-1 + 2 * asc]
@@ -2497,14 +2505,14 @@ class DataFrame(object):
                         col_arr = ~col_arr
                     elif dtype == 'O':
                             # TODO: how to avoid mapping to ints for mostly unique string columns?
-                            d = _cs.sort_str_map(col_arr)
-                            col_arr = -_cs.replace_str_int(col_arr, d)
+                            d = _sr.sort_str_map(col_arr)
+                            col_arr = -_sr.replace_str_int(col_arr, d)
                     else:
                         col_arr = -col_arr
                 elif dtype == 'O':
                     if len(set(np.random.choice(col_arr, 100))) <= 30:
-                        d = _cs.sort_str_map(col_arr)
-                        col_arr = _cs.replace_str_int(col_arr, d)
+                        d = _sr.sort_str_map(col_arr)
+                        col_arr = _sr.replace_str_int(col_arr, d)
                     else:
                         col_arr = col_arr.astype('U')
 
@@ -2524,22 +2532,69 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def rank(self, axis='rows', method='average'):
-        dtype_order = defaultdict(list)
-        dtype_loc = defaultdict(list)
+    def _get_all_dtype_info(self):
         dtype_col = defaultdict(list)
+        dtype_loc = defaultdict(list)
+        dtype_order = defaultdict(list)
+
         for col in self._columns:
             dtype, loc, order = self._column_info[col].values
             dtype_order[dtype].append(order)
             dtype_loc[dtype].append(loc)
             dtype_col[dtype].append(col)
+        return dtype_col, dtype_loc, dtype_order
 
+    def rank(self, axis='rows', method='min', na_option='keep', ascending=True):
+        if method not in ('min', 'max', 'dense', 'first', 'average'):
+            raise ValueError("`method` must be either 'min', 'max', 'dense', 'first', or 'average'")
+        if na_option in ('keep', 'bottom'):
+            if ascending:
+                na_asc = True
+            else:
+                na_asc = False
+        elif na_option == 'top':
+            if ascending:
+                na_asc = False
+            else:
+                na_asc = True
+        else:
+            raise ValueError("`na_option must be 'keep', 'top', or 'bottom'")
+
+        def get_cur_rank(dtype, arr):
+            if na_option == 'keep' and dtype in 'fO':
+                arr, na_arr = self._replace_nans(dtype, arr, na_asc, True, True)
+            else:
+                arr = self._replace_nans(dtype, arr, na_asc, True)
+
+            func_name = 'rank_' + utils.convert_kind_to_dtype(dtype) + '_' + method
+
+            if not ascending:
+                if dtype == 'O':
+                    arg = np.argsort(arr, 0, kind='mergesort')[::-1]
+                elif dtype == 'b':
+                    arg = np.argsort(~arr, 0, kind='mergesort')
+                else:
+                    arg = np.argsort(-arr, 0, kind='mergesort')
+            else:
+                arg = np.argsort(arr, 0, kind='mergesort')
+
+            if method == 'first' and dtype == 'O' and not ascending:
+                cur_rank = _sr.rank_str_min(arg, arr)
+                cur_rank = _sr.rank_str_min_to_first(cur_rank, arg, arr)
+            else:
+                cur_rank = getattr(_sr, func_name)(arg, arr)
+
+            if na_option == 'keep' and dtype in 'fO' and na_arr.sum() > 0:
+                # TODO: only convert columns with nans to floats
+                cur_rank = cur_rank.astype('float64')
+                cur_rank[na_arr] = nan
+            return cur_rank
+
+        dtype_col, dtype_loc, dtype_order = self._get_all_dtype_info()
         data_dict = defaultdict(list)
         new_column_info = {}
         for dtype, arr in self._data.items():
-            # hasnans = self._hasnans.get(dtype, np.array([True] * arr.shape[1]))
-            arr = self._replace_nans(dtype, arr, True, True)
-            cur_rank = np.argsort(np.argsort(arr, 0), 0) + 1
+            cur_rank = get_cur_rank(dtype, arr)
             new_dtype = cur_rank.dtype.kind
             cur_loc = utils.get_num_cols(data_dict.get(new_dtype, []))
             data_dict[new_dtype].append(cur_rank)
@@ -2558,20 +2613,20 @@ class DataFrame(object):
         dtype, loc, _ = self._column_info[col].values
         arr = self._data[dtype][:, loc]
         if dtype == 'O':
-            groups, counts = gb.value_counts_str(arr, dropna=dropna)
+            groups, counts = _gb.value_counts_str(arr, dropna=dropna)
             uniques = arr[groups]
         elif dtype == 'i':
             low, high = _math.min_max_int(arr)
             if high - low < 10_000_000:
-                uniques, counts = gb.value_counts_int_bounded(arr, low, high)
+                uniques, counts = _gb.value_counts_int_bounded(arr, low, high)
             else:
-                groups, counts = gb.value_counts_int(arr)
+                groups, counts = _gb.value_counts_int(arr)
                 uniques = arr[groups]
         elif dtype == 'f':
-            groups, counts = gb.value_counts_float(arr, dropna=dropna)
+            groups, counts = _gb.value_counts_float(arr, dropna=dropna)
             uniques = arr[groups]
         elif dtype == 'b':
-            uniques, counts = gb.value_counts_bool(arr)
+            uniques, counts = _gb.value_counts_bool(arr)
 
         if normalize:
             counts = counts / counts.sum()
@@ -2788,7 +2843,7 @@ class DataFrame(object):
         dtype, loc, _ = self._column_info[column].values
         func_name = 'get_group_assignment_' + utils.convert_kind_to_dtype(dtype) + '_1d'
         col_arr = self._data[dtype][:, loc]
-        groups, first_pos = getattr(gb, func_name)(col_arr)
+        groups, first_pos = getattr(_gb, func_name)(col_arr)
         return groups, col_arr[first_pos]
 
     def sample(self, n=None, frac=None, replace=False, weights=None, random_state=None, axis='rows'):
@@ -3044,14 +3099,7 @@ class DataFrame(object):
 
             return x, y
 
-        dtype_order = defaultdict(list)
-        dtype_loc = defaultdict(list)
-        dtype_col = defaultdict(list)
-        for col in self._columns:
-            dtype, loc, order = self._column_info[col].values
-            dtype_order[dtype].append(order)
-            dtype_loc[dtype].append(loc)
-            dtype_col[dtype].append(col)
+        dtype_col, dtype_loc, dtype_order = self._get_all_dtype_info()
 
         data_dict = defaultdict(list)
         new_column_info = {}
@@ -3106,13 +3154,13 @@ class Grouper(object):
             # since there is just one column, dtype is from the for-loop
             final_arr = self._df._data[dtype][:, loc].squeeze()
             if dtype == 'O':
-                return gb.get_group_assignment_str_1d(final_arr)
+                return _gb.get_group_assignment_str_1d(final_arr)
             if dtype == 'i':
-                return gb.get_group_assignment_int_1d(final_arr)
+                return _gb.get_group_assignment_int_1d(final_arr)
             if dtype == 'f':
-                return gb.get_group_assignment_float_1d(final_arr)
+                return _gb.get_group_assignment_float_1d(final_arr)
             if dtype == 'b':
-                return gb.get_group_assignment_bool_1d(final_arr)
+                return _gb.get_group_assignment_bool_1d(final_arr)
         else:
             arrs = []
 
@@ -3136,13 +3184,13 @@ class Grouper(object):
                 final_arr[:, start:end][arr_nan] = None
 
             if final_dtype == 'O':
-                return gb.get_group_assignment_str_2d(final_arr)
+                return _gb.get_group_assignment_str_2d(final_arr)
             if final_dtype == 'i':
-                return gb.get_group_assignment_int_2d(final_arr)
+                return _gb.get_group_assignment_int_2d(final_arr)
             if final_dtype == 'f':
-                return gb.get_group_assignment_float_2d(final_arr)
+                return _gb.get_group_assignment_float_2d(final_arr)
             if final_dtype == 'b':
-                return gb.get_group_assignment_bool_2d(final_arr)
+                return _gb.get_group_assignment_bool_2d(final_arr)
         if len(self._group_position) == self._df.shape[0]:
             warnings.warn("Each group contains exactly one row of data. "
                           "Are you sure you are grouping correctly?")
@@ -3216,7 +3264,7 @@ class Grouper(object):
             group_locs: list = self._group_dtype_loc.get(dtype, [])
             if len(group_locs) != data.shape[1]:
                 func_name = name + '_' + utils.convert_kind_to_dtype(dtype)
-                func = getattr(gb, func_name)
+                func = getattr(_gb, func_name)
                 if add_positions:
                     arr = func(labels, size, data, group_locs, self._group_position, **kwargs)
                 else:
@@ -3257,7 +3305,7 @@ class Grouper(object):
     def size(self):
         name = self._get_agg_name('size')
         new_columns = np.array(self._group_columns + [name], dtype='O')
-        size = gb.size(self._group_labels, len(self._group_position))[:, np.newaxis]
+        size = _gb.size(self._group_labels, len(self._group_position))[:, np.newaxis]
         data_dict = self._get_group_col_data()
         data_dict['i'].append(size)
         new_data = utils.concat_stat_arrays(data_dict)
@@ -3272,7 +3320,7 @@ class Grouper(object):
     def cumcount(self):
         name = self._get_agg_name('cumcount')
         new_columns = np.array(self._group_columns + [name], dtype='O')
-        cumcount = gb.cumcount(self._group_labels, len(self._group_position))[:, np.newaxis]
+        cumcount = _gb.cumcount(self._group_labels, len(self._group_position))[:, np.newaxis]
         data_dict = self._get_group_col_data_all()
         data_dict['i'].append(cumcount)
         new_data = utils.concat_stat_arrays(data_dict)
@@ -3332,7 +3380,7 @@ class Grouper(object):
 
         data = self._df._values_number_drop(calc_columns, calc_dtype_loc, np_dtype)
         dtype_word = utils.convert_kind_to_dtype(data.dtype.kind)
-        func = getattr(gb, name + '_' + dtype_word)
+        func = getattr(_gb, name + '_' + dtype_word)
         result = func(self._group_labels, len(self), data, [])
 
         data_dict = self._get_group_col_data()
@@ -3374,11 +3422,11 @@ class Grouper(object):
         return self._group_agg('nunique', False)
 
     def head(self, n=5):
-        row_idx = gb.head(self._group_labels, len(self), n=n)
+        row_idx = _gb.head(self._group_labels, len(self), n=n)
         return self._df[row_idx, :]
 
     def tail(self, n=5):
-        row_idx = gb.tail(self._group_labels, len(self), n=n)
+        row_idx = _gb.tail(self._group_labels, len(self), n=n)
         return self._df[row_idx, :]
 
     def cummax(self):
