@@ -40,6 +40,42 @@ def add_obj(ndarray[object, ndim=2] arr, str other):
                 final[i, j] = None
     return final
 
+def add_obj_two(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] final = np.empty((nr, nc), dtype='O')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is None or arr2[i, j] is None:
+                final[i, j] = None
+            else:
+                final[i, j] = arr[i, j] + arr2[i, j]
+    return final
+
+def add_obj_two_bc(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] final = np.empty((nr, nc), dtype='O')
+    cdef ndarray[object] arr2b = arr2.squeeze()
+
+    if arr2.shape[1] == 1:
+        for i in range(nr):
+            for j in range(nc):
+                if arr[i, j] is None or arr2b[i] is None:
+                    final[i, j] = None
+                else:
+                    final[i, j] = arr[i, j] + arr2b[i]
+    else:
+        for i in range(nr):
+            for j in range(nc):
+                if arr[i, j] is None or arr2b[j] is None:
+                    final[i, j] = None
+                else:
+                    final[i, j] = arr[i, j] + arr2b[j]
+        return final
+
 def radd_obj(ndarray[object, ndim=2] arr, str other):
     cdef int i, j
     cdef int nr = arr.shape[0]
@@ -51,6 +87,43 @@ def radd_obj(ndarray[object, ndim=2] arr, str other):
                 final[i, j] = other + arr[i, j]
             except:
                 final[i, j] = None
+    return final
+
+def radd_obj_two(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] final = np.empty((nr, nc), dtype='O')
+
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is None or arr2[i, j] is None:
+                final[i, j] = None
+            else:
+                final[i, j] = arr2[i, j] + arr[i, j]
+    return final
+
+def radd_obj_two_bc(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] final = np.empty((nr, nc), dtype='O')
+    cdef ndarray[object] arr2b = arr2.squeeze()
+
+    if arr2.shape[1] == 1:
+        for i in range(nr):
+            for j in range(nc):
+                if arr[i, j] is None or arr2b[i] is None:
+                    final[i, j] = None
+                else:
+                    final[i, j] = arr2[i] + arr2b[i]
+    else:
+        for i in range(nr):
+            for j in range(nc):
+                if arr[i, j] is None or arr2b[j] is None:
+                    final[i, j] = None
+                else:
+                    final[i, j] = arr2[i] + arr2b[j]
     return final
 
 def mul_obj(ndarray[object, ndim=2] arr, int other):
@@ -79,6 +152,43 @@ def lt_obj(ndarray[object, ndim=2] arr, str other):
                 final[i, j] = False
     return final
 
+def lt_obj_two(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = arr[i, j] < arr2[i, j]
+            except:
+                final[i, j] = False
+    return final
+
+def lt_obj_two_bc(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    cdef ndarray[object] arr2b = arr2.squeeze()
+
+    if arr2.shape[1] == 1:
+        for i in range(nr):
+            for j in range(nc):
+                try:
+                    final[i, j] = arr[i, j] < arr2b[i]
+                except:
+                    final[i, j] = False
+    else:
+        for i in range(nr):
+            for j in range(nc):
+                try:
+                    final[i, j] = arr[i, j] < arr2b[j]
+                except:
+                    final[i, j] = False
+    return final
+
 def le_obj(ndarray[object, ndim=2] arr, str other):
     cdef int i, j
     cdef int nr = arr.shape[0]
@@ -90,6 +200,42 @@ def le_obj(ndarray[object, ndim=2] arr, str other):
                 final[i, j] = arr[i, j] <= other
             except:
                 final[i, j] = False
+    return final
+
+def le_obj_two(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = arr[i, j] <= arr2[i, j]
+            except:
+                final[i, j] = False
+    return final
+
+def le_obj_two_bc(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    cdef ndarray[object] arr2b = arr2.squeeze()
+
+    if arr2.shape[1] == 1:
+        for i in range(nr):
+            for j in range(nc):
+                try:
+                    final[i, j] = arr[i, j] <= arr2b[i]
+                except:
+                    final[i, j] = False
+    else:
+        for i in range(nr):
+            for j in range(nc):
+                try:
+                    final[i, j] = arr[i, j] <= arr2b[j]
+                except:
+                    final[i, j] = False
     return final
 
 def gt_obj(ndarray[object, ndim=2] arr, str other):
@@ -105,6 +251,42 @@ def gt_obj(ndarray[object, ndim=2] arr, str other):
                 final[i, j] = False
     return final
 
+def gt_obj_two(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = arr[i, j] > arr2[i, j]
+            except:
+                final[i, j] = False
+    return final
+
+def gt_obj_two_bc(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    cdef ndarray[object] arr2b = arr2.squeeze()
+
+    if arr2.shape[1] == 1:
+        for i in range(nr):
+            for j in range(nc):
+                try:
+                    final[i, j] = arr[i, j] > arr2b[i]
+                except:
+                    final[i, j] = False
+    else:
+        for i in range(nr):
+            for j in range(nc):
+                try:
+                    final[i, j] = arr[i, j] > arr2b[j]
+                except:
+                    final[i, j] = False
+    return final
+
 def ge_obj(ndarray[object, ndim=2] arr, str other):
     cdef int i, j
     cdef int nr = arr.shape[0]
@@ -116,6 +298,42 @@ def ge_obj(ndarray[object, ndim=2] arr, str other):
                 final[i, j] = arr[i, j] >= other
             except:
                 final[i, j] = False
+    return final
+
+def ge_obj_two(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            try:
+                final[i, j] = arr[i, j] >= arr2[i, j]
+            except:
+                final[i, j] = False
+    return final
+
+def ge_obj_two_bc(ndarray[object, ndim=2] arr, ndarray[object, ndim=2] arr2):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] final = np.empty((nr, nc), dtype='bool')
+    cdef ndarray[object] arr2b = arr2.squeeze()
+
+    if arr2.shape[1] == 1:
+        for i in range(nr):
+            for j in range(nc):
+                try:
+                    final[i, j] = arr[i, j] >= arr2b[i]
+                except:
+                    final[i, j] = False
+    else:
+        for i in range(nr):
+            for j in range(nc):
+                try:
+                    final[i, j] = arr[i, j] >= arr2b[j]
+                except:
+                    final[i, j] = False
     return final
 
 def min_max_int(ndarray[np.int64_t] a):

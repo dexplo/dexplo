@@ -102,3 +102,17 @@ funcs_str = {'__add__': m.add_obj,
              '__ge__': m.ge_obj,
              '__mul__': m.mul_obj,
              '__rmul__': m.mul_obj}
+
+funcs_str2 = {'__add__': m.add_obj_two,
+              '__radd__': m.radd_obj_two,
+              '__lt__': m.lt_obj_two,
+              '__le__': m.le_obj_two,
+              '__gt__': m.gt_obj_two,
+              '__ge__': m.ge_obj_two}
+
+funcs_str2_bc = {'__add__': m.add_obj_two_bc,
+                 '__radd__': m.radd_obj_two_bc,
+                 '__lt__': m.lt_obj_two_bc,
+                 '__le__': m.le_obj_two_bc,
+                 '__gt__': m.gt_obj_two_bc,
+                 '__ge__': m.ge_obj_two_bc}

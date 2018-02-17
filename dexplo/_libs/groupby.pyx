@@ -95,7 +95,7 @@ def get_group_assignment_str_2d(ndarray[object, ndim=2] a):
         elif nc == 7:
             t = (a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5], a[i, 6])
         else:
-            t = tuple(a)
+            t = tuple(a[i])
 
         group[i] = d.get(t, -1)
         if group[i] == -1:
@@ -168,7 +168,7 @@ def get_group_assignment_int_2d(ndarray[np.int64_t, ndim=2] a):
     ranges = highs - lows + 1
     total_range = np.prod(ranges)
 
-    if total_range < 10_000_000:
+    if total_range > 0 and total_range < 10_000_000:
         return get_group_assignment_int_bounded_2d(a, lows, highs, ranges, total_range)
 
     if nc == 2:
@@ -221,7 +221,7 @@ def get_group_assignment_int_2d(ndarray[np.int64_t, ndim=2] a):
                 count += 1
     else:
         for i in range(n):
-            t = tuple(a)
+            t = tuple(a[i])
             group[i] = d.get(t, -1)
             if group[i] == -1:
                 group_position[count] = i

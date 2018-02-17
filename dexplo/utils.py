@@ -300,7 +300,7 @@ def check_compatible_kinds(kinds1: List[str], kinds2: List[str], all_nans: List[
     for k1, k2, an in zip(kinds1, kinds2, all_nans):
         if k1 == k2:
             continue
-        if k1 in 'if' and k2 in 'if':
+        if k1 in 'ifb' and k2 in 'ifb':
             continue
         if k1 in 'O' and an:
             continue
