@@ -64,7 +64,7 @@ def maybe_convert_object_array(ndarray[object] arr, column):
 def convert_bool_array(ndarray[object] arr, column):
     cdef int i
     cdef int n = len(arr)
-    cdef ndarray[np.uint8_t] result = np.empty(n, dtype='bool')
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
 
     for i in range(n):
         if not isinstance(arr[i], (bool, np.bool_)):
@@ -94,12 +94,13 @@ def convert_str_array(ndarray[object] arr, column):
     cdef int i
     cdef int n = len(arr)
     cdef ndarray[object] result = np.empty(n, dtype='O')
+    nt = type(None)
 
     for i in range(n):
         if isinstance(arr[i], (float, np.floating)) and isnan(arr[i]):
             result[i] = None
-        elif not isinstance(arr[i], (str, np.str_)):
-            raise ValueError('The first value of column `{column}` was a string. All the other '
+        elif not isinstance(arr[i], (str, np.str_, nt)):
+            raise ValueError(f'The first value of column `{column}` was a string. All the other '
                              'values in the array must either be strings or missing values. '
                              f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
         result[i] = arr[i]

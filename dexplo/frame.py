@@ -1226,14 +1226,35 @@ class DataFrame(object):
                                      'both DataFrames need the same shape or have one axis the '
                                      'same and the other length of 1.')
             else:
-                raise ValueError('Both DataFrames have a different number of rows and columns'
+                raise ValueError('Both DataFrames have a different number of rows and columns. '
                                  'To make this operation work, '
                                  'both DataFrames need the same shape or have one axis the '
                                  'same and the other length of 1.')
         elif isinstance(other, ndarray):
-            raise NotImplementedError('todo: operate on numpy arrays')
+            if other.ndim == 1:
+                other = other[:, np.newaxis]
+            elif other.ndim != 2:
+                raise ValueError('array must have one or two dimensions')
+
+            new_data = {}
+            dtype = other.dtype.kind
+            if dtype == 'U':
+                dtype = 'O'
+                new_data['O'] = other
+            elif dtype in 'Oifb':
+                new_data[dtype] = other
+            else:
+                raise ValueError('Unknown array data type')
+
+            if dtype == 'O':
+                other = DataFrame(other)
+            else:
+                new_columns = ['a' + str(i) for i in range(other.shape[1])]
+                new_column_info = {col: utils.Column(dtype, i, i) for i, col in enumerate(new_columns)}
+                other = self._construct_from_new(new_data, new_column_info, new_columns)
+            return eval(f"{'self'} .{op_string}({'other'})")
         else:
-            raise TypeError('other must be int, float, or DataFrame')
+            raise TypeError('other must be int, float, str, bool, array or DataFrame')
 
         new_data: Dict[str, ndarray] = {}
         for dt, arrs in dd.items():
