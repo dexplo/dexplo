@@ -285,17 +285,17 @@ class TestArgMinMax(object):
         df1 = df.argmax()
         df2 = de.DataFrame({'a': [2],
                             'b': [1.],
-                            'c': [1.],
+                            'c': [1],
                             'd': [2],
                             'e': [0],
-                            'f': [2.],
+                            'f': [2],
                             'g': [0],
                             'h': [nan]},
                            columns=list('abcdefgh'))
         assert_frame_equal(df1, df2)
 
         df1 = df.argmax('columns')
-        df2 = de.DataFrame({'argmax': [3., 3, 3]})
+        df2 = de.DataFrame({'argmax': [3, 3, 3]})
         assert_frame_equal(df1, df2)
 
     def test_argmin(self):
@@ -310,17 +310,17 @@ class TestArgMinMax(object):
         df1 = df.argmin()
         df2 = de.DataFrame({'a': [0],
                             'b': [0.],
-                            'c': [0.],
+                            'c': [0],
                             'd': [0],
                             'e': [1],
-                            'f': [0.],
+                            'f': [0],
                             'g': [0],
                             'h': [nan]},
                            columns=list('abcdefgh'))
         assert_frame_equal(df1, df2)
 
         df1 = df.argmin('columns')
-        df2 = de.DataFrame({'argmin': [0., 0, 4]})
+        df2 = de.DataFrame({'argmin': [0, 0, 4]})
         assert_frame_equal(df1, df2)
 
 
@@ -1197,25 +1197,183 @@ class TestUnique(object):
                 'l': [np.nan] * 8}
 
         df = de.DataFrame(data)
-        arr1 = df.unique('a')
-        arr2 = np.array([0, 5, 9, 3, 4, 1])
-        assert_array_equal(arr1, arr2)
+        df1 = df.unique('a', only_subset=True)
+        df2 = de.DataFrame({'a': [0, 5, 9, 3, 4, 1]})
+        assert_frame_equal(df1, df2)
 
-        arr1 = df.unique('b')
-        arr2 = np.array([0., 1.51234435, 8., 9., nan, 3., 2.])
-        assert_array_equal(arr1, arr2)
+        df1 = df.unique('b', only_subset=True)
+        df2 = de.DataFrame({'b': np.array([0., 1.51234435, 8., 9., nan, 3., 2.])})
+        assert_frame_equal(df1, df2)
 
-        arr1 = df.unique('c')
-        arr2 = np.array(['', 'b', 'g', 'z', 'h'], dtype=object)
-        assert_array_equal(arr1, arr2)
+        df1 = df.unique('c', only_subset=True)
+        df2 = de.DataFrame({'c': np.array(['', 'b', 'g', 'z', 'h'], dtype=object)})
+        assert_frame_equal(df1, df2)
 
-        arr1 = df.unique('d')
-        arr2 = np.array([False, True], dtype=bool)
-        assert_array_equal(arr1, arr2)
+        df1 = df.unique('d', only_subset=True)
+        df2 = de.DataFrame({'d': np.array([False, True], dtype=bool)})
+        assert_frame_equal(df1, df2)
 
-        arr1 = df.unique('l')
-        arr2 = np.array([nan])
-        assert_array_equal(arr1, arr2)
+        df1 = df.unique('l', only_subset=True)
+        df2 = de.DataFrame({'l': np.array([nan])})
+        assert_frame_equal(df1, df2)
+
+    def test_unique_multiple_cols_1_dtype(self):
+        data = {'a': [0, 0, 5, 5],
+                'b': [8, 3.2, 8, 9],
+                'c': list('bggg'),
+                'd': [False, False, True, False],
+                'e': [20, 20, 30, 30],
+                'f': [4, 3.213, 4, 9],
+                'g': list('cddd'),
+                'h': [False, False, True, True]}
+        df = de.DataFrame(data)
+
+        df1 = df.unique(['a', 'e'], only_subset=True)
+        df2 = de.DataFrame({'a': [0, 5],
+                            'e': [20, 30]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.unique(['b', 'f'], only_subset=True)
+        df2 = de.DataFrame({'b': [8, 3.2, 9],
+                            'f': [4, 3.213, 9]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.unique(['c', 'g'], only_subset=True)
+        df2 = de.DataFrame({'c': ['b', 'g'],
+                            'g': ['c', 'd']})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.unique(['d', 'h'], only_subset=True)
+        df2 = de.DataFrame({'d': [False, True, False],
+                            'h': [False, True, True]})
+        assert_frame_equal(df1, df2)
+
+    def test_unique_multiple_cols_dtypes(self):
+        data = {'a': [0, 0, 5, 5],
+                'b': [8, 3.2, 8, 8],
+                'c': list('bggg'),
+                'd': [False, False, True, False],
+                'e': [20, 20, 30, 30],
+                'f': [4, 3.213, 4, 9],
+                'g': list('cddd'),
+                'h': [False, False, True, True]}
+        df = de.DataFrame(data)
+
+        df1 = df.unique(['a', 'c'], only_subset=True)
+        df2 = de.DataFrame({'a': [0, 0, 5],
+                            'c': ['b', 'g', 'g']})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.unique(['b', 'c'], only_subset=True)
+        df2 = de.DataFrame({'b': [8, 3.2, 8],
+                            'c': ['b', 'g', 'g']})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.unique(['c', 'd'], only_subset=True)
+        df2 = de.DataFrame({'c': ['b', 'g', 'g'],
+                            'd': [False, False, True]})
+        assert_frame_equal(df1, df2)
+
+    def test_unique_all(self):
+        data = {'a': [0, 0, 5, 5],
+                'b': [8, 3.2, 8, 8],
+                'c': list('bggg'),
+                'd': [False, False, True, False],
+                'e': [20, 20, 30, 30],
+                'f': [4, 3.213, 4, 9],
+                'g': list('cddd'),
+                'h': [False, False, True, True]}
+        df = de.DataFrame(data)
+
+        df1 = df.unique('a')
+        data = {'a': [0, 5],
+                'b': [8, 8.],
+                'c': list('bg'),
+                'd': [False, True],
+                'e': [20, 30],
+                'f': [4, 4.],
+                'g': list('cd'),
+                'h': [False, True]}
+        df2 = de.DataFrame(data)
+        assert_frame_equal(df1, df2)
+
+        df1 = df.unique()
+        assert_frame_equal(df1, df)
+
+        data = {'a': [0, 0, 5, 5],
+                'b': [8, 3.2, 8, 8],
+                'c': list('bggg'),
+                'd': [False, False, True, False]}
+
+        df = de.DataFrame(data)
+        df1 = df.unique(['c', 'd'])
+        df2 = de.DataFrame({'a': [0, 0, 5],
+                            'b': [8, 3.2, 8],
+                            'c': ['b', 'g', 'g'],
+                            'd': [False, False, True]})
+        assert_frame_equal(df1, df2)
+
+    def test_unique_last(self):
+        data = {'a': [0, 0, 5, 5],
+                'b': [8, 3.2, 8, 8],
+                'c': list('bggg'),
+                'd': [False, False, True, False],
+                'e': [20, 20, 30, 30],
+                'f': [4, 3.213, 4, 9],
+                'g': list('cddd'),
+                'h': [False, False, True, True]}
+        df = de.DataFrame(data)
+
+        df1 = df.unique('a', keep='last')
+        data = {'a': [0, 5],
+                'b': [3.2, 8.],
+                'c': list('gg'),
+                'd': [False, False],
+                'e': [20, 30],
+                'f': [3.213, 9.],
+                'g': list('dd'),
+                'h': [False, True]}
+        df2 = de.DataFrame(data)
+        assert_frame_equal(df1, df2)
+
+        df1 = df.unique(keep='last')
+        assert_frame_equal(df1, df)
+
+        data = {'a': [0, 0, 5, 5],
+                'b': [8, 3.2, 8, 8],
+                'c': list('bggg'),
+                'd': [False, False, True, False]}
+
+        df = de.DataFrame(data)
+        df1 = df.unique(['c', 'd'], keep='last')
+        df2 = de.DataFrame({'a': [0, 5, 5],
+                            'b': [8, 8, 8.],
+                            'c': ['b', 'g', 'g'],
+                            'd': [False, True, False]})
+        assert_frame_equal(df1, df2)
+
+    def test_unique_none(self):
+        data = {'a': [0, 0, 5, 5],
+                'b': [8, 3.2, 8, 8],
+                'c': list('bggg'),
+                'd': [False, False, True, False]}
+
+        df = de.DataFrame(data)
+        df1 = df.unique(['a'], keep='none', only_subset=True)
+        df2 = de.DataFrame({'a': np.empty(0, 'int64')})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.unique('b', keep='none')
+        df2 = de.DataFrame({'a': [0],
+                            'b': [3.2],
+                            'c': ['g'],
+                            'd': [False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.unique(['d', 'c'], keep='none', only_subset=True)
+        df2 = de.DataFrame({'c': ['b', 'g'],
+                            'd': [False, True]})
+        assert_frame_equal(df1, df2)
 
     def test_nunique(self):
         data = {'a': [0, 0, 5, 9, 3, 4, 5, 1],

@@ -450,31 +450,3 @@ def rank_str_average(ndarray[np.int64_t, ndim=2] arg, ndarray[object, ndim=2] ac
     return result
 
 
-def drop_duplicates_all(ndarray[object, ndim = 2] a, ndarray[np.int64_t, ndim = 2] b,
-                   ndarray[np.uint8_t, ndim = 2, cast = True] c, ndarray[np.float64_t, ndim = 2] d):
-    cdef int i, j, len_before
-    cdef int nr = a.shape[0]
-    cdef int nca = a.shape[1]
-    cdef int ncb = b.shape[1]
-    cdef int ncc = c.shape[1]
-    cdef int ncd = d.shape[1]
-    cdef set s = set()
-    cdef list v = list(range(nca + ncb + ncc + ncd))
-    cdef ndarray[np.uint8_t, cast = True] idx = np.zeros(nr, dtype='bool')
-
-    for i in range(nr):
-        len_before = len(s)
-
-        for j in range(nca):
-            v[j] = a[i, j]
-        for j in range(ncb):
-            v[j + nca] = b[i, j]
-        for j in range(ncc):
-            v[j + nca + ncb] = c[i, j]
-        for j in range(ncd):
-            v[j + nca + ncb + ncc] = d[i, j]
-
-        s.add(tuple(v))
-        if len(s) > len_before:
-            idx[i] = True
-    return idx

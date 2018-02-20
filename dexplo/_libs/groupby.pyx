@@ -79,6 +79,7 @@ def get_group_assignment_str_2d(ndarray[object, ndim=2] a):
     cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
     cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
     cdef dict d = {}
+    cdef list v = list(range(nc))
     cdef tuple t
 
     for i in range(nr):
@@ -95,7 +96,9 @@ def get_group_assignment_str_2d(ndarray[object, ndim=2] a):
         elif nc == 7:
             t = (a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5], a[i, 6])
         else:
-            t = tuple(a[i])
+            for j in range(nc):
+                v[j] = a[i, j]
+            t = tuple(v)
 
         group[i] = d.get(t, -1)
         if group[i] == -1:
@@ -161,14 +164,17 @@ def get_group_assignment_int_2d(ndarray[np.int64_t, ndim=2] a):
     cdef dict d = {}
     cdef tuple t
     cdef ndarray[np.int64_t] ranges
-    cdef np.int64_t total_range
+    cdef np.int64_t total_range = 1
+    cdef int cur_range = 10 ** 7
 
     lows, highs = min_max_int2(a, 0)
 
     ranges = highs - lows + 1
-    total_range = np.prod(ranges)
+    for i in range(nc):
+        cur_range /= ranges[i]
+        total_range *= ranges[i]
 
-    if total_range > 0 and total_range < 10_000_000:
+    if cur_range > 1:
         return get_group_assignment_int_bounded_2d(a, lows, highs, ranges, total_range)
 
     if nc == 2:

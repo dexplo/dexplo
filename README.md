@@ -104,7 +104,6 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 **Selection**
 
 - [x] drop
-- [ ] drop_duplicates
 - [x] head
 - [x] isin
 - [x] rename

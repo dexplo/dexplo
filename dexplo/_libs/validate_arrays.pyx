@@ -193,7 +193,10 @@ def any_str(ndarray[object] a):
     return False
 
 
-def convert_nan_to_none(ndarray[object, ndim=2] a):
+def convert_nan_to_none(ndarray[object, ndim=2] a, int start, int num):
     cdef int i, j
     cdef int nr = a.shape[0]
-    cdef int nc = a.shape[1]
+    for i in range(nr):
+        for j in range(start, start + num):
+            if isnan(a[i, j]):
+                a[i, j] = None

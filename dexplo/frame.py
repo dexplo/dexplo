@@ -13,7 +13,8 @@ from dexplo._libs import (string_funcs as _sf,
                           groupby as _gb,
                           validate_arrays as _va,
                           math as _math,
-                          sort_rank as _sr)
+                          sort_rank as _sr,
+                          unique as _uq)
 from dexplo import stat_funcs as stat
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
@@ -1094,13 +1095,17 @@ class DataFrame(object):
                     if self.shape == other.shape and op_string in stat.funcs_str2:
                         func = stat.funcs_str2[op_string]
                         return func(data1, data2), cur_locs1
-                    elif (self.shape[0] == 1 or other.shape[0] == 1) and op_string in stat.funcs_str2_bc:
+                    elif (self.shape[0] == 1 or other.shape[
+                        0] == 1) and op_string in stat.funcs_str2_bc:
                         func = stat.funcs_str2_bc[op_string]
                         return func(data1, data2), cur_locs1
                 return eval(f"{'data1'} .{op_string}({'data2'})"), cur_locs1
 
-            if self.shape == other.shape or (self.shape[1] == other.shape[1] and (self.shape[0] == 1 or other.shape[0] == 1)):
-                kinds1, kinds2, locs1, locs2, ords1, ords2, cols1, cols2 = self._get_both_column_info(other)
+            if self.shape == other.shape or (self.shape[1] == other.shape[1] and (
+                    self.shape[0] == 1 or other.shape[0] == 1)):
+                kinds1, kinds2, locs1, locs2, ords1, ords2, cols1, cols2 = \
+                    self._get_both_column_info(
+                    other)
                 data_dict = defaultdict(list)
                 new_column_info = {}
                 new_columns = self._columns.copy()
@@ -1148,9 +1153,11 @@ class DataFrame(object):
                             col = self._columns[i]
                             col_arr1 = self._get_single_column_values(i)
                             col_arr2 = other._get_single_column_values(i)
-                            if (kind1 == 'f' and kind2 in 'fib') or (kind2 == 'f' and kind1 in 'fib'):
+                            if (kind1 == 'f' and kind2 in 'fib') or (
+                                    kind2 == 'f' and kind1 in 'fib'):
                                 new_kind = 'f'
-                            elif (kind1 == 'i' and kind2 in 'ib') or (kind2 == 'i' and kind1 in 'ib'):
+                            elif (kind1 == 'i' and kind2 in 'ib') or (
+                                    kind2 == 'i' and kind1 in 'ib'):
                                 new_kind = 'i'
                             else:
                                 new_kind = 'b'
@@ -1192,7 +1199,8 @@ class DataFrame(object):
                         ncol_larger = ncol_other
                         smaller_df = self
 
-                    utils.check_compatible_kinds(kinds1 * ncol_other, kinds2 * ncol_self, [False] * ncol_larger)
+                    utils.check_compatible_kinds(kinds1 * ncol_other, kinds2 * ncol_self,
+                                                 [False] * ncol_larger)
                     data_dict = defaultdict(list)
                     new_column_info = {}
                     for dtype, data1 in larger_df._data.items():
@@ -1250,7 +1258,8 @@ class DataFrame(object):
                 other = DataFrame(other)
             else:
                 new_columns = ['a' + str(i) for i in range(other.shape[1])]
-                new_column_info = {col: utils.Column(dtype, i, i) for i, col in enumerate(new_columns)}
+                new_column_info = {col: utils.Column(dtype, i, i) for i, col in
+                                   enumerate(new_columns)}
                 other = self._construct_from_new(new_data, new_column_info, new_columns)
             return eval(f"{'self'} .{op_string}({'other'})")
         else:
@@ -1721,7 +1730,7 @@ class DataFrame(object):
         for col in columns:
             self._validate_column_name(col)
             if col in col_set:
-                raise ValueError('`{col}` has already been selected as a grouping column')
+                raise ValueError(f'"{col}" has already been selected as a column')
             col_set.add(col)
 
     def _new_cd_from_kind_shape(self, kind_shape: Dict[str, int], new_kind: str) -> ColInfoT:
@@ -2436,29 +2445,173 @@ class DataFrame(object):
         new_data['O'] = np.asfortranarray(new_columns[1:])[:, np.newaxis]
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def unique(self, col: str) -> ndarray:
+    def unique(self, subset: Union[str, List[str], None] = None, only_subset=False,
+               keep='first') -> ndarray:
         """
         Finds the unique elements of a single column in the order that they appeared
 
         Parameters
         ----------
-        col : Name of column as a string
+        subset :
+        only_subset :
+        keep :
 
         Returns
         -------
         A one dimensional NumPy array
         """
-        self._validate_column_name(col)
-        kind, loc, _ = self._column_info[col].values  # type: str, int, int
-        arr: ndarray = self._data[kind][:, loc]
+        if subset is None:
+            subset = self.columns
+        elif isinstance(subset, str):
+            self._validate_column_name(subset)
+            subset = [subset]
+        elif isinstance(subset, list):
+            self._validate_column_name_list(subset)
+        else:
+            raise TypeError('`subset` must be None, a column name as a string, '
+                            'or column names in a list')
 
-        if kind == 'i':
-            return _math.unique_int(arr)
-        elif kind == 'f':
-            return _math.unique_float(arr)
-        elif kind == 'b':
-            return _math.unique_bool(arr)
-        return _math.unique_str(arr)
+        if not isinstance(only_subset, (bool, np.bool_)):
+            raise TypeError('`only_subset` must be a boolean')
+
+        if keep not in ('first', 'last', 'none'):
+            raise ValueError('`keep` must be either "first", "last", or "none"')
+
+        def keep_all(arr_keep):
+            new_data = {}
+            for dtype, arr in self._data.items():
+                new_data[dtype] = arr[arr_keep]
+            new_columns = self._columns.copy()
+            new_column_info = self._copy_column_info()
+            return self._construct_from_new(new_data, new_column_info, new_columns)
+
+        def keep_subset(arr_keep, dtype_col, dtype_loc, new_columns, new_col_order):
+            new_data = {}
+            new_column_info = {}
+            for dtype, locs in dtype_loc.items():
+                arr = self._data[dtype]
+                if arr.shape[1] == len(locs):
+                    new_data[dtype] = arr[arr_keep]
+                    cur_locs = locs
+                else:
+                    arr_new = arr[np.ix_(arr_keep, locs)]
+                    if arr_new.ndim == 1:
+                        arr_new = arr_new[:, np.newaxis]
+                    new_data[dtype] = arr_new
+                    cur_locs = list(range(len(locs)))
+
+                for col, loc in zip(dtype_col[dtype], cur_locs):
+                    new_column_info[col] = utils.Column(dtype, loc, new_col_order[col])
+            return self._construct_from_new(new_data, new_column_info, new_columns)
+
+        if keep == 'none':
+            # todo: have special cases for single columns/dtypes
+            dtype_col, dtype_loc, new_columns, new_col_order = self._get_all_dtype_info_subset(subset)
+            arrs = []
+            arr_locs = []
+            for dtype in 'Oibf':
+                if dtype not in dtype_loc:
+                    np_dtype = utils.convert_kind_to_numpy(dtype)
+                    arrs.append(np.empty((len(self), 0), dtype=np_dtype))
+                    arr_locs.append(np.empty(0, dtype='int64'))
+                    continue
+                arr = self._data[dtype]
+                locs = dtype_loc[dtype]
+                arrs.append(arr)
+                arr_locs.append(np.array(locs, dtype='int64'))
+
+            arr_keep = _uq.unique_all_none(*arrs, *arr_locs)
+            if only_subset:
+                return keep_subset(arr_keep, dtype_col, dtype_loc, new_columns, new_col_order)
+            else:
+                return keep_all(arr_keep)
+
+        if len(subset) == 1:
+            col = subset[0]
+            kind, loc, _ = self._column_info[col].values  # type: str, int, int
+            arr: ndarray = self._data[kind][:, loc]
+            if keep == 'last':
+                arr = arr[::-1]
+
+            if kind == 'i':
+                arr_keep = _uq.unique_int(arr)
+            elif kind == 'f':
+                arr_keep = _uq.unique_float(arr)
+            elif kind == 'b':
+                arr_keep = _uq.unique_bool(arr)
+            elif kind == 'O':
+                arr_keep = _uq.unique_str(arr)
+
+            if keep == 'last':
+                arr_keep = arr_keep[::-1]
+
+            if only_subset:
+                new_data = {kind: arr[arr_keep, np.newaxis]}
+                new_columns = [col]
+                new_column_info = {col: utils.Column(kind, 0, 0)}
+            else:
+                return keep_all(arr_keep)
+        else:
+            # returns columns in order from df regardless of subset order
+            dtype_col, dtype_loc, new_columns, new_col_order = self._get_all_dtype_info_subset(subset)
+            dtypes = list(dtype_col.keys())
+
+            if len(dtypes) == 1:
+                dtype = dtypes[0]
+                locs = dtype_loc[dtype]
+                arr = self._data[dtype]
+
+                if keep == 'last':
+                    arr = arr[::-1]
+
+                if arr.shape[1] != len(locs):
+                    arr = arr[:, locs]
+                    locs = list(range(len(locs)))
+
+                func_name = 'unique_' + utils.convert_kind_to_dtype(dtype) + '_2d'
+                arr_keep = getattr(_uq, func_name)(arr)
+                if keep == 'last':
+                    arr_keep = arr_keep[::-1]
+
+                new_column_info = {}
+                if only_subset:
+                    # no need to check if 1 dim to add np.newaxis, since there are always
+                    # a min of 2 columns here
+                    new_data = {dtype: arr[arr_keep]}
+                    new_columns = dtype_col[dtype]
+                    for col, loc in zip(new_columns, locs):
+                        new_column_info[col] = utils.Column(dtype, loc, new_col_order[col])
+                else:
+                    return keep_all(arr_keep)
+            else:
+                # multiple dtypes
+                arrs = []
+                arr_locs = []
+                for dtype in 'Oibf':
+                    if dtype not in dtype_loc:
+                        np_dtype = utils.convert_kind_to_numpy(dtype)
+                        arrs.append(np.empty((len(self), 0), dtype=np_dtype))
+                        arr_locs.append(np.empty(0, dtype='int64'))
+                        continue
+                    arr = self._data[dtype]
+
+                    if keep == 'last':
+                        arr = arr[::-1]
+
+                    locs = dtype_loc[dtype]
+                    arrs.append(arr)
+                    arr_locs.append(np.array(locs, dtype='int64'))
+
+                arr_keep = _uq.unique_all_sep(*arrs, *arr_locs)
+                if keep == 'last':
+                    arr_keep = arr_keep[::-1]
+
+                if only_subset:
+                    return keep_subset(arr_keep, dtype_col, dtype_loc, new_columns, new_col_order)
+                else:
+                    return keep_all(arr_keep)
+
+        return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def nunique(self, axis: str = 'rows', count_na: bool = False) -> 'DataFrame':
         """
@@ -2748,6 +2901,35 @@ class DataFrame(object):
             dtype_loc[dtype].append(loc)
             dtype_col[dtype].append(col)
         return dtype_col, dtype_loc, dtype_order
+
+    def _get_all_dtype_info_subset(self, subset=None):
+        dtype_col = defaultdict(list)
+        dtype_loc = defaultdict(list)
+        new_col_order = {}
+
+        if subset is None or len(subset) == len(self._columns):
+            for i, col in enumerate(self._columns):
+                dtype, loc, order = self._column_info[col].values
+                dtype_loc[dtype].append(loc)
+                dtype_col[dtype].append(col)
+                new_col_order[col] = i
+
+            new_columns = self._columns.copy()
+        else:
+            col_set = set(subset)
+            new_columns = np.empty(len(col_set), dtype='O')
+            i = 0
+            for col in self._columns:
+                if col not in col_set:
+                    continue
+                new_columns[i] = col
+                new_col_order[col] = i
+                i += 1
+                dtype, loc, order = self._column_info[col].values
+                dtype_loc[dtype].append(loc)
+                dtype_col[dtype].append(col)
+
+        return dtype_col, dtype_loc, new_columns, new_col_order
 
     def rank(self, axis='rows', method='min', na_option='keep', ascending=True):
         if method not in ('min', 'max', 'dense', 'first', 'average'):
@@ -3339,28 +3521,8 @@ class DataFrame(object):
         new_data = utils.concat_stat_arrays(data_dict)
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def drop_duplicates(self, subset=None, keep='first'):
-        if isinstance(subset, list):
-            self._validate_column_name_list(subset)
-        elif isinstance(subset, str):
-            self._validate_column_name(subset)
-        elif subset is not None:
-            raise ValueError('`subset` must be a column name, a list of column names, or `None`')
-
-        if subset is None:
-            all_data = []
-            for dtype in 'Oibf':
-                np_dtype = utils.convert_kind_to_numpy(dtype)
-                cur_arr = self._data.get(dtype, np.empty((len(self), 0), dtype=np_dtype))
-                all_data.append(cur_arr)
-            idx = _sr.drop_duplicates_all(*all_data)
-
-        new_data = {}
-        for dtype, arr in self._data.items():
-            new_data[dtype] = arr[idx]
-        new_columns = self._columns.copy()
-        new_column_info = self._copy_column_info()
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+    def _ipython_key_completions_(self):
+        return self._columns.tolist()
 
 
 class Grouper(object):
