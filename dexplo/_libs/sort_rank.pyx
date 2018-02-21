@@ -18,7 +18,7 @@ def sort_str_map(ndarray[object] a, asc):
     for i in range(n):
         s.add(a[i])
 
-    b = np.sort(np.array(list(s), dtype='O'))
+    b = np.sort(np.array(list(s), dtype='O'), kind='mergesort')
     if not asc:
         b = b[::-1]
     return dict(zip(b, np.arange(len(b))))

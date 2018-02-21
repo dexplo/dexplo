@@ -1,3 +1,4 @@
+# adf
 #cython: boundscheck=False
 #cython: wraparound=False
 import numpy as np
@@ -11,6 +12,7 @@ import cmath
 import groupby as gb
 import math as _math
 from .math import min_max_int, min_max_int2, isna_str, get_first_non_nan
+from cpython.bytes cimport PyBytes_FromStringAndSize
 
 try:
     import bottleneck as bn
@@ -91,62 +93,21 @@ def unique_int_bounded(ndarray[np.int64_t] a, np.int64_t low, np.int64_t high):
             idx[i] = True
     return idx
 
-
 def unique_str_2d(ndarray[object, ndim=2] a):
     cdef int i, j, len_before
     cdef int nr = a.shape[0]
     cdef int nc = a.shape[1]
     cdef set s = set()
     cdef ndarray[np.uint8_t, cast = True] idx = np.zeros(nr, dtype='bool')
+    cdef list val = list(range(nc))
 
-    if nc == 2:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 3:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 4:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2], a[i, 3]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 5:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 6:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 7:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5], a[i, 6]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 8:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5], a[i, 6], a[i, 7]))
-            if len(s) > len_before:
-                idx[i] = True
-    else:
-        for i in range(nr):
-            len_before = len(s)
-            s.add(tuple([a[i, j] for j in range(nc)]))
-            if len(s) > len_before:
-                idx[i] = True
+    for i in range(nr):
+        len_before = len(s)
+        for j in range(nc):
+            val[j] = a[i, j]
+        s.add(tuple(val))
+        if len(s) > len_before:
+            idx[i] = True
     return idx
 
 def unique_int_2d(ndarray[np.int64_t, ndim=2] a):
@@ -157,6 +118,7 @@ def unique_int_2d(ndarray[np.int64_t, ndim=2] a):
     cdef ndarray[np.uint8_t, cast = True] idx = np.zeros(nr, dtype='bool')
     cdef long total_range = 1
     cdef long cur_range = 10 ** 7
+    cdef int size = sizeof(np.int64_t) * nc
 
     lows, highs = min_max_int2(a, 0)
 
@@ -168,54 +130,11 @@ def unique_int_2d(ndarray[np.int64_t, ndim=2] a):
     if cur_range > 1:
         return unique_int_bounded_2d(a, lows, highs, ranges, total_range)
 
-    if nc == 2:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 3:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 4:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2], a[i, 3]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 5:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 6:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 7:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5], a[i, 6]))
-            if len(s) > len_before:
-                idx[i] = True
-    elif nc == 8:
-        for i in range(nr):
-            len_before = len(s)
-            s.add((a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5], a[i, 6], a[i, 7]))
-            if len(s) > len_before:
-                idx[i] = True
-    else:
-        for i in range(nr):
-            len_before = len(s)
-            s.add(tuple([a[i, j] for j in range(nc)]))
-            if len(s) > len_before:
-                idx[i] = True
+    for i in range(nr):
+        len_before = len(s)
+        s.add(PyBytes_FromStringAndSize(<char*>&a[i, 0], size))
+        if len(s) > len_before:
+            idx[i] = True
     return idx
 
 def unique_bool_2d(ndarray[np.uint8_t, cast=True, ndim=2] a):
@@ -248,21 +167,15 @@ def unique_bool_2d(ndarray[np.uint8_t, cast=True, ndim=2] a):
     return idx
 
 def unique_float_2d(ndarray[double, ndim=2] a):
-    cdef int i, j, len_before
+    cdef int i, j, len_before, count = 0
     cdef int nr = a.shape[0]
     cdef int nc = a.shape[1]
     cdef set s = set()
     cdef ndarray[np.uint8_t, cast = True] idx = np.zeros(nr, dtype='bool')
-    cdef list v = list(range(nc))
 
     for i in range(nr):
         len_before = len(s)
-        for j in range(nc):
-            if isnan(a[i, j]):
-                v[j] = None
-            else:
-                v[j] = a[i, j]
-        s.add(tuple(v))
+        s.add(PyBytes_FromStringAndSize(<char*>&a[i, 0], sizeof(np.float64_t) * nc))
         if len(s) > len_before:
             idx[i] = True
     return idx
@@ -371,3 +284,44 @@ def unique_all_none(ndarray[object, ndim = 2] a, ndarray[np.int64_t, ndim = 2] b
         keep[i] = counts[group[i]] == 1
 
     return keep
+
+
+def unique_float_string(ndarray[np.float64_t, ndim=2] f, ndarray[object, ndim=2] o):
+    cdef int i, j, len_before
+    cdef int nr = f.shape[0]
+    cdef int ncf = f.shape[1]
+    cdef int nco = o.shape[1]
+    cdef set s = set()
+    cdef list v = list(range(nco + 1))
+    cdef ndarray[np.uint8_t, cast = True] idx = np.zeros(nr, dtype='bool')
+
+    for i in range(nr):
+        string = PyBytes_FromStringAndSize(<char*>&f[i, 0], sizeof(np.float64_t) * ncf)
+        v[0] = string
+        for j in range(nco):
+            v[j + 1] = o[i, j]
+        len_before = len(s)
+        s.add(tuple(v))
+        if len(s) > len_before:
+            idx[i] = True
+    return idx
+
+def unique_int_string(ndarray[np.int64_t, ndim=2] a, ndarray[object, ndim=2] o):
+    cdef int i, j, len_before
+    cdef int nr = a.shape[0]
+    cdef int nci = a.shape[1]
+    cdef int nco = o.shape[1]
+    cdef set s = set()
+    cdef list v = list(range(nco + 1))
+    cdef ndarray[np.uint8_t, cast = True] idx = np.zeros(nr, dtype='bool')
+
+    for i in range(nr):
+        string = PyBytes_FromStringAndSize(<char*>&a[i, 0], sizeof(np.int64_t) * nci)
+        v[0] = string
+        for j in range(nco):
+            v[j + 1] = o[i, j]
+        len_before = len(s)
+        s.add(tuple(v))
+        if len(s) > len_before:
+            idx[i] = True
+    return idx

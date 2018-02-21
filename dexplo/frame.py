@@ -813,6 +813,7 @@ class DataFrame(object):
             dt_positions[dtype].append(loc)
 
         for dtype, pos in dt_positions.items():
+
             if isinstance(rs, (list, ndarray)):
                 ix = np.ix_(rs, pos)
                 arr = np.atleast_2d(self._data[dtype][ix])
@@ -1497,11 +1498,12 @@ class DataFrame(object):
             loc = self._data[new_kind].shape[1]
         self._column_info[column] = utils.Column(new_kind, loc, order)
         if new_kind in self._data:
-            self._data[new_kind] = np.column_stack((self._data[new_kind], data))
+            self._data[new_kind] = np.asfortranarray(np.column_stack((self._data[new_kind], data)))
         else:
             if data.ndim == 1:
                 data = data[:, np.newaxis]
-            self._data[new_kind] = data
+            self._data[new_kind] = np.asfortranarray(data)
+
 
     def _add_new_column(self, column: str, kind: str, data: ndarray) -> None:
         order: int = len(self._columns)
@@ -2480,7 +2482,7 @@ class DataFrame(object):
         def keep_all(arr_keep):
             new_data = {}
             for dtype, arr in self._data.items():
-                new_data[dtype] = arr[arr_keep]
+                new_data[dtype] = arr[np.ix_(arr_keep)]
             new_columns = self._columns.copy()
             new_column_info = self._copy_column_info()
             return self._construct_from_new(new_data, new_column_info, new_columns)
@@ -2530,26 +2532,22 @@ class DataFrame(object):
             col = subset[0]
             kind, loc, _ = self._column_info[col].values  # type: str, int, int
             arr: ndarray = self._data[kind][:, loc]
+
             if keep == 'last':
                 arr = arr[::-1]
 
-            if kind == 'i':
-                arr_keep = _uq.unique_int(arr)
-            elif kind == 'f':
-                arr_keep = _uq.unique_float(arr)
-            elif kind == 'b':
-                arr_keep = _uq.unique_bool(arr)
-            elif kind == 'O':
-                arr_keep = _uq.unique_str(arr)
+            func_name = 'unique_' + utils.convert_kind_to_dtype(kind)
+            arr_keep = getattr(_uq, func_name)(arr)
 
             if keep == 'last':
                 arr_keep = arr_keep[::-1]
 
             if only_subset:
-                new_data = {kind: arr[arr_keep, np.newaxis]}
+                new_data = {kind: arr[np.ix_(arr_keep)][:, np.newaxis]}
                 new_columns = [col]
                 new_column_info = {col: utils.Column(kind, 0, 0)}
             else:
+
                 return keep_all(arr_keep)
         else:
             # returns columns in order from df regardless of subset order
@@ -2561,15 +2559,18 @@ class DataFrame(object):
                 locs = dtype_loc[dtype]
                 arr = self._data[dtype]
 
-                if keep == 'last':
-                    arr = arr[::-1]
-
                 if arr.shape[1] != len(locs):
                     arr = arr[:, locs]
                     locs = list(range(len(locs)))
 
+                arr = np.ascontiguousarray(arr)
+
+                if keep == 'last':
+                    arr = arr[::-1]
+
                 func_name = 'unique_' + utils.convert_kind_to_dtype(dtype) + '_2d'
                 arr_keep = getattr(_uq, func_name)(arr)
+
                 if keep == 'last':
                     arr_keep = arr_keep[::-1]
 
@@ -2577,32 +2578,46 @@ class DataFrame(object):
                 if only_subset:
                     # no need to check if 1 dim to add np.newaxis, since there are always
                     # a min of 2 columns here
-                    new_data = {dtype: arr[arr_keep]}
+                    new_data = {dtype: arr[np.ix_(arr_keep)]}
                     new_columns = dtype_col[dtype]
                     for col, loc in zip(new_columns, locs):
                         new_column_info[col] = utils.Column(dtype, loc, new_col_order[col])
                 else:
                     return keep_all(arr_keep)
             else:
-                # multiple dtypes
                 arrs = []
-                arr_locs = []
-                for dtype in 'Oibf':
-                    if dtype not in dtype_loc:
-                        np_dtype = utils.convert_kind_to_numpy(dtype)
-                        arrs.append(np.empty((len(self), 0), dtype=np_dtype))
-                        arr_locs.append(np.empty(0, dtype='int64'))
-                        continue
+                has_obj = False
+                for dtype, locs in dtype_loc.items():
                     arr = self._data[dtype]
+                    if dtype == 'O':
+                        has_obj = True
+                        if len(locs) != arr.shape[1]:
+                            arr_obj = arr[:, locs]
+                        else:
+                            arr_obj = arr
+                    else:
+                        if len(locs) != arr.shape[1]:
+                            arrs.append(arr[:, locs])
+                        else:
+                            arrs.append(arr)
 
-                    if keep == 'last':
-                        arr = arr[::-1]
+                if len(arrs) > 1:
+                    arr_numbers = np.column_stack(arrs)
+                else:
+                    arr_numbers = arrs[0]
 
-                    locs = dtype_loc[dtype]
-                    arrs.append(arr)
-                    arr_locs.append(np.array(locs, dtype='int64'))
+                arr_numbers = np.ascontiguousarray(arr_numbers)
+                dtype = arr_numbers.dtype.kind
 
-                arr_keep = _uq.unique_all_sep(*arrs, *arr_locs)
+                if not has_obj:
+                    func_name = 'unique_' + utils.convert_kind_to_dtype(dtype)
+                    if arr_numbers.ndim == 2:
+                        func_name += '_2d'
+                    arr_keep = getattr(_uq, func_name)(arr_numbers)
+                else:
+                    func_name = 'unique_' + utils.convert_kind_to_dtype(dtype) + '_string'
+                    arr_keep = getattr(_uq, func_name)(arr_numbers, arr_obj)
+
                 if keep == 'last':
                     arr_keep = arr_keep[::-1]
 
@@ -2630,6 +2645,19 @@ class DataFrame(object):
         return self._stat_funcs('nunique', axis, count_na=count_na)
 
     def fillna(self, values=None, method=None, limit=None, fill_function=None):
+        """
+
+        Parameters
+        ----------
+        values: numbe, string or  dictionary of column name to fill value
+        method : {'bfill', 'ffill'}
+        limit : positive integer
+        fill_function : {'mean', 'median'}
+
+        Returns
+        -------
+
+        """
         if values is not None:
             if method is not None:
                 raise ValueError('You cannot specify both `values` and and a `method` '
@@ -2639,14 +2667,14 @@ class DataFrame(object):
                                  'at the same time')
         if limit is not None:
             if not isinstance(limit, int) or limit < 1:
-                raise TypeError('`limit` must be a positive integer')
+                raise ValueError('`limit` must be a positive integer')
         else:
             limit = len(self)
 
         if isinstance(values, (int, float, np.number)):
             if self._is_string():
                 raise TypeError("You're DataFrame contains only str columns and you are "
-                                "trying to passed a number to fill in missing values")
+                                "trying to pass a number to fill in missing values")
             new_data = {}
             for dtype, arr in self._data.items():
                 arr = arr.copy('F')
@@ -2847,9 +2875,9 @@ class DataFrame(object):
                     new_order = _sr.get_idx(arr, ct_sum)
                 else:
                     col_arr = col_arr.astype('U')
-                    new_order = np.argsort(col_arr)[::-1 + 2 * asc]
+                    new_order = np.argsort(col_arr, kind='mergesort')[::-1 + 2 * asc]
             else:
-                new_order = np.argsort(col_arr)[::-1 + 2 * asc]
+                new_order = np.argsort(col_arr, kind='mergesort')[::-1 + 2 * asc]
         else:
             single_cols = []
             for col, asc in zip(by, ascending):

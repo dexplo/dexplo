@@ -2598,12 +2598,12 @@ def bfill_float(ndarray[np.float64_t, ndim=2] a, int limit):
 
     if limit == -1:
         for i in range(nc):
-            for j in range(nr - 1, -1, -1):
+            for j in range(nr - 2, -1, -1):
                 if isnan(a[j, i]):
                     a[j, i] = a[j + 1, i]
     else:
         for i in range(nc):
-            for j in range(nr -1, -1, -1):
+            for j in range(nr - 2, -1, -1):
                 if isnan(a[j, i]):
                     if ct == limit:
                         continue
@@ -2620,12 +2620,12 @@ def bfill_str(ndarray[object, ndim=2] a, int limit):
     cdef int ct = 0
     if limit == -1:
         for i in range(nc):
-            for j in range(nr - 1, -1, -1):
+            for j in range(nr - 2, -1, -1):
                 if a[j, i] is None:
                     a[j, i] = a[j + 1, i]
     else:
         for i in range(nc):
-            for j in range(nr - 1, -1, -1):
+            for j in range(nr - 2, -1, -1):
                 if a[j, i] is None:
                     if ct == limit:
                         continue

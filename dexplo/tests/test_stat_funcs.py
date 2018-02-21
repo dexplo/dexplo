@@ -2,7 +2,7 @@ import dexplo as de
 import numpy as np
 from numpy import nan
 import pytest
-from dexplo.testing import assert_frame_equal, assert_array_equal
+from dexplo.testing import assert_frame_equal
 
 
 class TestSimpleAggs(object):
