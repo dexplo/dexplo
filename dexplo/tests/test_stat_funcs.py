@@ -551,115 +551,6 @@ class TestCum(object):
         assert_frame_equal(df1, df2)
 
 
-class TestIsDropNa(object):
-
-    def test_isna(self):
-        df = de.DataFrame({'a': [0, 0, 5],
-                           'b': [0, 1.5, nan],
-                           'c': [nan, 'g', 'b'],
-                           'd': [False, False, True],
-                           'e': [90, 20, 30],
-                           'f': [nan, 10, 4],
-                           'g': ['', None, 'ad'],
-                           'h': [nan] * 3})
-        df1 = df.isna()
-        df2 = de.DataFrame({'a': [False, False, False],
-                            'b': [False, False, True],
-                            'c': [True, False, False],
-                            'd': [False, False, False],
-                            'e': [False, False, False],
-                            'f': [True, False, False],
-                            'g': [False, True, False],
-                            'h': [True, True, True]})
-        assert_frame_equal(df1, df2)
-
-    def test_dropna(self):
-        df = de.DataFrame({'a': [0, 0, 5],
-                           'b': [0, 1.5, nan],
-                           'c': [nan, 'g', 'b'],
-                           'd': [False, False, True],
-                           'e': [90, 20, 30],
-                           'f': [nan, 10, 4],
-                           'g': ['', None, 'ad'],
-                           'h': [nan] * 3})
-        df1 = df.dropna()
-        df2 = de.DataFrame({'a': [],
-                            'b': [],
-                            'c': [],
-                            'd': [],
-                            'e': [],
-                            'f': [],
-                            'g': [],
-                            'h': []})
-        df2 = df2.astype({'a': 'int', 'c': 'str', 'd': 'bool', 'e': 'int', 'g': 'str'})
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna('columns')
-        df2 = de.DataFrame({'a': [0, 0, 5],
-                            'd': [False, False, True],
-                            'e': [90, 20, 30]})
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna(how='all')
-        df2 = df.copy()
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna('columns', how='all')
-        df2 = de.DataFrame({'a': [0, 0, 5],
-                            'b': [0, 1.5, nan],
-                            'c': [nan, 'g', 'b'],
-                            'd': [False, False, True],
-                            'e': [90, 20, 30],
-                            'f': [nan, 10, 4],
-                            'g': ['', None, 'ad']})
-        assert_frame_equal(df1, df2)
-
-        df = de.DataFrame({'a': [0, 0, 5, 1],
-                           'b': [0, 1.5, nan, nan],
-                           'c': [nan, 'g', 'b', 'asdf'],
-                           'd': [False, False, True, True],
-                           'e': [90, 20, 30, 1],
-                           'f': [nan, 10, 4, nan],
-                           'g': ['', None, 'ad', nan],
-                           'h': [nan] * 4})
-
-        df1 = df.dropna(thresh=.5)
-        df2 = df.copy()
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna(thresh=.51)
-        df2 = df[:3, :]
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna(thresh=5)
-        df2 = df[:3, :]
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna(thresh=6)
-        df2 = df[1:3, :]
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna('columns', thresh=.75)
-        df2 = df[:, ['a', 'c', 'd', 'e']]
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna(subset=['a', 'd'])
-        df2 = df.copy()
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna(subset=['a', 'd', 'f'])
-        df2 = df[[1, 2], :]
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna(subset=['a', 'd', 'f', 'c'], thresh=.51)
-        df2 = df[1:, :]
-        assert_frame_equal(df1, df2)
-
-        df1 = df.dropna('columns', subset=[1, 2], thresh=2)
-        df2 = df[:, ['a', 'c', 'd', 'e', 'f']]
-        assert_frame_equal(df1, df2)
-
-
 class TestCovCorr(object):
 
     def test_cov(self):
@@ -1374,6 +1265,9 @@ class TestUnique(object):
         df2 = de.DataFrame({'c': ['b', 'g'],
                             'd': [False, True]})
         assert_frame_equal(df1, df2)
+
+
+class TestNUninque:
 
     def test_nunique(self):
         data = {'a': [0, 0, 5, 9, 3, 4, 5, 1],

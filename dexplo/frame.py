@@ -3028,6 +3028,9 @@ class DataFrame(object):
         return dtype_col, dtype_loc, new_columns, new_col_order
 
     def rank(self, axis='rows', method='min', na_option='keep', ascending=True):
+        axis_num = utils.convert_axis_string(axis)
+        if axis_num == 1:
+            raise NotImplementedError('Can only rank columns for now :(')
         if method not in ('min', 'max', 'dense', 'first', 'average'):
             raise ValueError("`method` must be either 'min', 'max', 'dense', 'first', or 'average'")
         if na_option in ('keep', 'bottom'):
@@ -3113,19 +3116,27 @@ class DataFrame(object):
 
         if normalize:
             counts = counts / counts.sum()
-            kind = 'f'
+            counts_kind = 'f'
         else:
-            kind = 'i'
+            counts_kind = 'i'
 
         if sort:
             order = np.argsort(counts)[::-1]
             uniques = uniques[order]
-            new_data = {'O': uniques[:, np.newaxis], kind: counts[order, np.newaxis]}
+            counts = counts[order]
+
+        unique_kind = uniques.dtype.kind
+        if unique_kind == counts_kind:
+            new_data = {counts_kind: np.asfortranarray(np.column_stack((uniques, counts)))}
+            new_column_info = {col: utils.Column(unique_kind, 0, 0),
+                               'count': utils.Column(counts_kind, 1, 1)}
         else:
-            new_data = {'O': uniques[:, np.newaxis], kind: counts[:, np.newaxis]}
+            new_data = {unique_kind: uniques[:, np.newaxis], counts_kind: counts[:, np.newaxis]}
+            new_column_info = {col: utils.Column(unique_kind, 0, 0),
+                               'count': utils.Column(counts_kind, 0, 1)}
 
         new_columns = [col, 'count']
-        new_column_info = {col: utils.Column('O', 0, 0), 'count': utils.Column(kind, 0, 1)}
+
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def groupby(self, columns):

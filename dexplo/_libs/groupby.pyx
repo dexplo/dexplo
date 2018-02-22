@@ -502,11 +502,15 @@ def value_counts_float(ndarray[np.float64_t] a, dropna):
                 counts[group_num] += 1
     else:
         for i in range(n):
-            group_num = d.get(a[i], -1)
+            if isnan(a[i]):
+                v = nan
+            else:
+                v = a[i]
+            group_num = d.get(v, -1)
             if group_num == -1:
                 counts[count] = 1
                 group_name[count] = i
-                d[a[i]] = count
+                d[v] = count
                 count += 1
             else:
                 counts[group_num] += 1
