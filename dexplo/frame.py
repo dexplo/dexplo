@@ -2912,12 +2912,14 @@ class DataFrame(object):
             hasnans = self._hasnans.get(col, True)
             asc = ascending[0]
             col_arr = self._replace_nans(dtype, col_arr, asc, hasnans)
+            count_sort = False
             if dtype == 'O':
                 if len(col_arr) > 1000 and len(set(np.random.choice(col_arr, 100))) <= 70:
                     d = _sr.sort_str_map(col_arr, asc)
                     arr = _sr.replace_str_int(col_arr, d)
                     counts = _sr.count_int_ordered(arr, len(d))
                     new_order = _sr.get_idx(arr, counts)
+                    count_sort = True
                 else:
                     col_arr = col_arr.astype('U')
                     if asc:
@@ -2935,7 +2937,7 @@ class DataFrame(object):
                 np_dtype = utils.convert_kind_to_numpy(dtype)
                 arr_final = np.empty(arr.shape, dtype=np_dtype, order='F')
                 for i in range(arr.shape[1]):
-                    if asc:
+                    if asc or count_sort:
                         arr_final[:, i] = arr[:, i][new_order]
                     else:
                         arr_final[:, i] = arr[::-1, i][new_order[::-1]]
@@ -2957,13 +2959,13 @@ class DataFrame(object):
                         col_arr = ~col_arr
                     elif dtype == 'O':
                         # TODO: how to avoid mapping to ints for mostly unique string columns?
-                        d = _sr.sort_str_map(col_arr)
-                        col_arr = -_sr.replace_str_int(col_arr, d)
+                        d = _sr.sort_str_map(col_arr, asc)
+                        col_arr = _sr.replace_str_int(col_arr, d)
                     else:
                         col_arr = -col_arr
                 elif dtype == 'O':
-                    if len(set(np.random.choice(col_arr, 100))) <= 30:
-                        d = _sr.sort_str_map(col_arr)
+                    if len(col_arr) > 1000 and len(set(np.random.choice(col_arr, 100))) <= 70:
+                        d = _sr.sort_str_map(col_arr, asc)
                         col_arr = _sr.replace_str_int(col_arr, d)
                     else:
                         col_arr = col_arr.astype('U')

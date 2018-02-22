@@ -4,8 +4,8 @@ import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
 
-def sort_str_map(ndarray[object] a, asc):
-    cdef int    i
+def sort_str_map(ndarray[object] a, np.uint8_t asc):
+    cdef int i
     cdef int n = len(a)
     cdef set s = set()
     cdef ndarray[object] b
