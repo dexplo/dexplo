@@ -106,3 +106,7 @@ class TestSortValues(object):
         assert_frame_equal(df1, df2)
 
         df1 = df.sort_values('b')
+        df2 = de.DataFrame({'a': [nan, 3.0, 2.0, 3.0, 6.0, 4.0],
+                            'b': ['d', 'd', 'er', 'f', 'f', None],
+                            'c': [-5.6, 1.0, 7.0, 444.0, 5.0, 12.0]})
+        assert_frame_equal(df1, df2)

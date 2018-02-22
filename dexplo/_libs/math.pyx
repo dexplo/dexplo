@@ -4,7 +4,6 @@ import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
 from numpy import nan
-from collections import defaultdict
 import cython
 from cpython cimport dict, set, list, tuple
 from libc.math cimport isnan, sqrt, floor, ceil

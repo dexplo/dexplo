@@ -4,8 +4,8 @@ import warnings
 
 import numpy as np
 from numpy import nan, ndarray
-from typing import (Union, Dict, List, Optional, Tuple, Sequence, Callable,
-                    NoReturn, Set, Iterable, Any, TypeVar, Type, cast)
+from typing import (Union, Dict, List, Optional, Tuple, Callable,
+                    NoReturn, Set, Iterable, Any, TypeVar, Type)
 
 import dexplo.options as options
 import dexplo.utils as utils
@@ -742,7 +742,7 @@ class DataFrame(object):
             if rs.dtype.kind == 'b':
                 if len(rs) != len(self):
                     raise ValueError('Length of boolean array must be the same as DataFrame. '
-                                     f'{len(row_array)} != {len(self)}')
+                                     f'{len(rs)} != {len(self)}')
             elif rs.dtype.kind != 'i':
                 raise TypeError('Row selection array data type must be either integer or boolean')
         elif isinstance(rs, DataFrame):
@@ -1106,7 +1106,7 @@ class DataFrame(object):
                     self.shape[0] == 1 or other.shape[0] == 1)):
                 kinds1, kinds2, locs1, locs2, ords1, ords2, cols1, cols2 = \
                     self._get_both_column_info(
-                    other)
+                        other)
                 data_dict = defaultdict(list)
                 new_column_info = {}
                 new_columns = self._columns.copy()
@@ -1503,7 +1503,6 @@ class DataFrame(object):
             if data.ndim == 1:
                 data = data[:, np.newaxis]
             self._data[new_kind] = np.asfortranarray(data)
-
 
     def _add_new_column(self, column: str, kind: str, data: ndarray) -> None:
         order: int = len(self._columns)
@@ -2508,7 +2507,8 @@ class DataFrame(object):
 
         if keep == 'none':
             # todo: have special cases for single columns/dtypes
-            dtype_col, dtype_loc, new_columns, new_col_order = self._get_all_dtype_info_subset(subset)
+            dtype_col, dtype_loc, new_columns, new_col_order = self._get_all_dtype_info_subset(
+                subset)
 
             arrs = []
             has_obj = False
@@ -2590,7 +2590,8 @@ class DataFrame(object):
                 return keep_all(arr_keep)
         else:
             # returns columns in order from df regardless of subset order
-            dtype_col, dtype_loc, new_columns, new_col_order = self._get_all_dtype_info_subset(subset)
+            dtype_col, dtype_loc, new_columns, new_col_order = self._get_all_dtype_info_subset(
+                subset)
             dtypes = list(dtype_col.keys())
 
             if len(dtypes) == 1:
@@ -2912,17 +2913,37 @@ class DataFrame(object):
             asc = ascending[0]
             col_arr = self._replace_nans(dtype, col_arr, asc, hasnans)
             if dtype == 'O':
-                if len(set(np.random.choice(col_arr, 100))) <= 70:
+                if len(col_arr) > 1000 and len(set(np.random.choice(col_arr, 100))) <= 70:
                     d = _sr.sort_str_map(col_arr, asc)
                     arr = _sr.replace_str_int(col_arr, d)
                     counts = _sr.count_int_ordered(arr, len(d))
-                    ct_sum = counts.cumsum()
-                    new_order = _sr.get_idx(arr, ct_sum)
+                    new_order = _sr.get_idx(arr, counts)
                 else:
                     col_arr = col_arr.astype('U')
-                    new_order = np.argsort(col_arr, kind='mergesort')[::-1 + 2 * asc]
+                    if asc:
+                        new_order = np.argsort(col_arr, kind='mergesort')
+                    else:
+                        new_order = np.argsort(col_arr[::-1], kind='mergesort')
             else:
-                new_order = np.argsort(col_arr, kind='mergesort')[::-1 + 2 * asc]
+                if asc:
+                    new_order = np.argsort(col_arr, kind='mergesort')
+                else:
+                    new_order = np.argsort(col_arr[::-1], kind='mergesort')
+
+            new_data = {}
+            for dtype, arr in self._data.items():
+                np_dtype = utils.convert_kind_to_numpy(dtype)
+                arr_final = np.empty(arr.shape, dtype=np_dtype, order='F')
+                for i in range(arr.shape[1]):
+                    if asc:
+                        arr_final[:, i] = arr[:, i][new_order]
+                    else:
+                        arr_final[:, i] = arr[::-1, i][new_order[::-1]]
+                new_data[dtype] = arr_final
+            new_column_info = self._copy_column_info()
+            new_columns = self._columns.copy()
+
+            return self._construct_from_new(new_data, new_column_info, new_columns)
         else:
             single_cols = []
             for col, asc in zip(by, ascending):
@@ -3940,7 +3961,7 @@ class StringClass(object):
     def _create_df(self, arr, dtype):
         arr = arr[:, np.newaxis]
         new_columns = self.df.columns
-        new_data: Block = {'O': None, 'b': None, 'f': None, 'i': None}
+        new_data = {'O': None, 'b': None, 'f': None, 'i': None}
         new_data[dtype] = arr
         # add _column_info
         return self.df._construct_from_new(new_data, new_columns)

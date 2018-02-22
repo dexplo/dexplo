@@ -3,12 +3,6 @@
 import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
-from numpy import nan
-import cython
-from cpython cimport dict, set, list, tuple
-from libc.math cimport isnan, sqrt, floor, ceil
-import cmath
-
 
 def sort_str_map(ndarray[object] a, asc):
     cdef int    i
@@ -18,12 +12,12 @@ def sort_str_map(ndarray[object] a, asc):
     for i in range(n):
         s.add(a[i])
 
-    b = np.sort(np.array(list(s), dtype='O'), kind='mergesort')
+    b = np.sort(np.array(list(s), dtype='O'))
     if not asc:
         b = b[::-1]
     return dict(zip(b, np.arange(len(b))))
 
-def replace_str_int(ndarray[object] a, dict d):
+def replace_str_int(ndarray[object] a, d):
     cdef int i
     cdef int n = len(a)
     cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
@@ -42,9 +36,12 @@ def count_int_ordered(ndarray[np.int64_t] a, int num):
 def get_idx(ndarray[np.int64_t] a, ndarray[np.int64_t] counts):
     cdef int i, n = len(a)
     cdef ndarray[np.int64_t] idx = np.empty(n, dtype='int64')
+
+    counts = counts.cumsum() - counts
+
     for i in range(n):
-        idx[counts[a[i]] - 1] = i
-        counts[a[i]] -= 1
+        idx[counts[a[i]]] = i
+        counts[a[i]] += 1
     return idx
 
 def rank_int_min(ndarray[np.int64_t, ndim=2] arg, ndarray[np.int64_t, ndim=2] act):
