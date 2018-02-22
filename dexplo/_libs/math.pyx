@@ -2814,14 +2814,13 @@ def streak_group_str(ndarray[object] a):
             b[i] = count
     return b
 
-
 def nlargest_int(ndarray[np.int64_t] a, n):
     cdef int i, j, k, prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
     cdef ndarray[np.int64_t] topn = a[topn_arg]
-    cdef list count_arg = []
+    cdef list ties = []
 
     for i in range(n, nr):
         if a[i] < topn[0]:
@@ -2845,12 +2844,16 @@ def nlargest_int(ndarray[np.int64_t] a, n):
                     break
 
             if j == 0:
-                count_arg = []
+                ties = []
+            else:
+                if topn[0] == prev:
+                    ties.append(prev_arg)
+                else:
+                    ties = []
         else:
-            count_arg.append(i)
+            ties.append(i)
 
-    return topn_arg[::-1], count_arg
-
+    return topn_arg[::-1], ties
 
 def nlargest_float(ndarray[np.float64_t] a, n):
     cdef int i, j, k, init_count = 0
@@ -2859,7 +2862,7 @@ def nlargest_float(ndarray[np.float64_t] a, n):
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
     cdef ndarray[np.float64_t] topn = np.empty(n, dtype='float64')
-    cdef list count_arg = []
+    cdef list ties = []
 
     for i in range(n):
         if isnan(a[i]):
@@ -2893,12 +2896,14 @@ def nlargest_float(ndarray[np.float64_t] a, n):
                         prev_arg = prev2_arg
                     break
 
-            if j == 0:
-                count_arg = []
+            if topn[0] == prev:
+                ties.append(prev_arg)
+            else:
+                ties = []
         else:
-            count_arg.append(i)
+            ties.append(i)
 
-    return topn_arg[::-1], count_arg
+    return topn_arg[::-1], ties
 
 def nlargest_str(ndarray[object] a, n):
     cdef int i, j, k, init_count = 0
@@ -2907,7 +2912,7 @@ def nlargest_str(ndarray[object] a, n):
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
     cdef ndarray[object] topn = np.empty(n, dtype='O')
-    cdef list count_arg = []
+    cdef list ties = []
 
     for i in range(n):
         if a[i] is None:
@@ -2941,12 +2946,14 @@ def nlargest_str(ndarray[object] a, n):
                         prev_arg = prev2_arg
                     break
 
-            if j == 0:
-                count_arg = []
+            if topn[0] == prev:
+                ties.append(prev_arg)
+            else:
+                ties = []
         else:
-            count_arg.append(i)
+            ties.append(i)
 
-    return topn_arg[::-1], count_arg
+    return topn_arg[::-1], ties
 
 def nlargest_bool(ndarray[np.uint8_t, cast=True] a, n):
     cdef int i, j, k
@@ -2955,7 +2962,7 @@ def nlargest_bool(ndarray[np.uint8_t, cast=True] a, n):
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
     cdef ndarray[np.uint8_t, cast=True] topn = a[topn_arg]
-    cdef list count_arg = []
+    cdef list ties = []
 
     for i in range(n, nr):
         if a[i] < topn[0]:
@@ -2978,12 +2985,14 @@ def nlargest_bool(ndarray[np.uint8_t, cast=True] a, n):
                         prev_arg = prev2_arg
                     break
 
-            if j == 0:
-                count_arg = []
+            if topn[0] == prev:
+                ties.append(prev_arg)
+            else:
+                ties = []
         else:
-            count_arg.append(i)
+            ties.append(i)
 
-    return topn_arg[::-1], count_arg
+    return topn_arg[::-1], ties
 
 def nsmallest_int(ndarray[np.int64_t] a, n):
     cdef int i, j, k, prev, prev2
@@ -2991,7 +3000,7 @@ def nsmallest_int(ndarray[np.int64_t] a, n):
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
     cdef ndarray[np.int64_t] topn = a[topn_arg]
-    cdef list count_arg = []
+    cdef list ties = []
     cdef int n1 = n - 1
 
     for i in range(n, nr):
@@ -3015,13 +3024,14 @@ def nsmallest_int(ndarray[np.int64_t] a, n):
                         prev_arg = prev2_arg
                     break
 
-            if j == n1:
-                count_arg = []
+            if topn[0] == prev:
+                ties.append(prev_arg)
+            else:
+                ties = []
         else:
-            count_arg.append(i)
+            ties.append(i)
 
-    return topn_arg, count_arg
-
+    return topn_arg, ties
 
 def nsmallest_float(ndarray[np.float64_t] a, n):
     cdef int i, j, k, init_count = 0
@@ -3030,7 +3040,7 @@ def nsmallest_float(ndarray[np.float64_t] a, n):
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
     cdef ndarray[np.float64_t] topn = np.empty(n, dtype='float64')
-    cdef list count_arg = []
+    cdef list ties = []
     cdef int n1 = n - 1
 
     for i in range(n):
@@ -3065,12 +3075,14 @@ def nsmallest_float(ndarray[np.float64_t] a, n):
                         prev_arg = prev2_arg
                     break
 
-            if j == n1:
-                count_arg = []
+            if topn[n1] == prev:
+                ties.append(prev_arg)
+            else:
+                ties = []
         else:
-            count_arg.append(i)
+            ties.append(i)
 
-    return topn_arg, count_arg
+    return topn_arg, ties
 
 def nsmallest_str(ndarray[object] a, n):
     cdef int i, j, k, init_count = 0
@@ -3079,7 +3091,7 @@ def nsmallest_str(ndarray[object] a, n):
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
     cdef ndarray[object] topn = np.empty(n, dtype='O')
-    cdef list count_arg = []
+    cdef list ties = []
     cdef int n1 = n - 1
 
     for i in range(n):
@@ -3089,9 +3101,6 @@ def nsmallest_str(ndarray[object] a, n):
         init_count += 1
         if init_count == n:
             break
-
-    topn_arg = np.argsort(topn_arg)
-    topn = topn[topn_arg]
 
     for i in range(init_count, nr):
         if a[i] is None or a[i] > topn[n1]:
@@ -3114,12 +3123,14 @@ def nsmallest_str(ndarray[object] a, n):
                         prev_arg = prev2_arg
                     break
 
-            if j == n1:
-                count_arg = []
+            if topn[n1] == prev:
+                ties.append(prev_arg)
+            else:
+                ties = []
         else:
-            count_arg.append(i)
+            ties.append(i)
 
-    return topn_arg, count_arg
+    return topn_arg, ties
 
 def nsmallest_bool(ndarray[np.uint8_t, cast=True] a, n):
     cdef int i, j, k
@@ -3128,7 +3139,7 @@ def nsmallest_bool(ndarray[np.uint8_t, cast=True] a, n):
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
     cdef ndarray[np.uint8_t, cast=True] topn = a[topn_arg]
-    cdef list count_arg = []
+    cdef list ties = []
     cdef int n1 = n - 1
 
     for i in range(n, nr):
@@ -3152,10 +3163,12 @@ def nsmallest_bool(ndarray[np.uint8_t, cast=True] a, n):
                         prev_arg = prev2_arg
                     break
 
-            if j == n1:
-                count_arg = []
+            if topn[n1] == prev:
+                ties.append(prev_arg)
+            else:
+                ties = []
         else:
-            count_arg.append(i)
+            ties.append(i)
 
-    return topn_arg, count_arg
+    return topn_arg, ties
 

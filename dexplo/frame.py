@@ -869,8 +869,8 @@ class DataFrame(object):
 
         col: str
         col_obj: utils.Column
-        for col, col_obj in self._column_info.items():
-            dtype, loc, order = col_obj.values  # type: str, int, int
+        for col in self._columns:
+            dtype, loc, order = self._column_info[col].values  # type: str, int, int
             arr = self._data[dtype][:, loc]
             if orient == 'array':
                 data[col] = arr.copy()
@@ -3222,6 +3222,9 @@ class DataFrame(object):
         elif callable(columns):
             new_columns = [columns(col) for col in self._columns]
             new_columns = self._check_column_validity(new_columns)
+        else:
+            raise ValueError('You must pass either a dictionary, list/array, '
+                             'or function to `columns`')
 
         if len(new_columns) != len(self._columns):
             raise ValueError('The number of strings in your list/array of new columns '
@@ -3247,12 +3250,19 @@ class DataFrame(object):
             pass
         elif rows is not None:
             raise TypeError('Rows must either be an int, list/array of ints or None')
+        else:
+            rows = []
 
+        new_rows = []
         for row in rows:
             if not isinstance(row, int):
                 raise TypeError('All the row values in your list must be integers')
             if row < -len(self) or row >= len(self):
                 raise IndexError(f'Integer location {row} for the rows is out of range')
+            if row < 0:
+                new_rows.append(len(self) + row)
+            else:
+                new_rows.append(row)
 
         if isinstance(columns, (int, str, np.integer)):
             columns = [columns]
@@ -3275,7 +3285,8 @@ class DataFrame(object):
         self._validate_column_name_list(column_strings)
         column_set = set(column_strings)
 
-        new_rows = np.isin(np.arange(len(self)), rows, invert=True)
+        # todo: can avoid checking if rows/columns is None
+        new_rows = np.isin(np.arange(len(self)), new_rows, invert=True)
         new_columns = [col for col in self._columns if col not in column_set]
 
         new_column_info = {}
@@ -3299,6 +3310,9 @@ class DataFrame(object):
             raise ValueError('`n` must be a positive integer')
         if keep not in ['first', 'last', 'all']:
             raise ValueError('`keep` must be either "all", "first", or "last"')
+
+        if not isinstance(column, str):
+            raise TypeError('`column` must a name of a column as a string')
 
         self._validate_column_name(column)
         dtype, loc, _ = self._column_info[column].values
