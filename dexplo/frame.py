@@ -2509,20 +2509,59 @@ class DataFrame(object):
         if keep == 'none':
             # todo: have special cases for single columns/dtypes
             dtype_col, dtype_loc, new_columns, new_col_order = self._get_all_dtype_info_subset(subset)
-            arrs = []
-            arr_locs = []
-            for dtype in 'Oibf':
-                if dtype not in dtype_loc:
-                    np_dtype = utils.convert_kind_to_numpy(dtype)
-                    arrs.append(np.empty((len(self), 0), dtype=np_dtype))
-                    arr_locs.append(np.empty(0, dtype='int64'))
-                    continue
-                arr = self._data[dtype]
-                locs = dtype_loc[dtype]
-                arrs.append(arr)
-                arr_locs.append(np.array(locs, dtype='int64'))
 
-            arr_keep = _uq.unique_all_none(*arrs, *arr_locs)
+            arrs = []
+            has_obj = False
+            has_nums = False
+            for dtype, locs in dtype_loc.items():
+                arr = self._data[dtype]
+                if keep == 'last':
+                    arr = arr[::-1]
+                if dtype == 'O':
+                    has_obj = True
+                    if len(locs) != arr.shape[1]:
+                        arr_obj = arr[:, locs]
+                    else:
+                        arr_obj = arr
+                else:
+                    has_nums = True
+                    if len(locs) != arr.shape[1]:
+                        arrs.append(arr[:, locs])
+                    else:
+                        arrs.append(arr)
+
+            if has_nums:
+                if len(arrs) > 1:
+                    arr_numbers = np.column_stack(arrs)
+                else:
+                    arr_numbers = arrs[0]
+                arr_numbers = np.ascontiguousarray(arr_numbers)
+                if arr_numbers.ndim == 2 and arr_numbers.shape[1] == 1:
+                    arr_numbers = arr_numbers.squeeze(1)
+                dtype = arr_numbers.dtype.kind
+
+            if has_obj:
+                if arr_obj.ndim == 2 and arr_obj.shape[1] == 1:
+                    arr_obj = arr_obj.squeeze(1)
+
+            if has_obj and not has_nums:
+                if arr_obj.ndim == 1:
+                    arr_keep = _uq.unique_str_none(arr_obj)
+                else:
+                    arr_keep = _uq.unique_str_none_2d(arr_obj)
+            elif not has_obj and has_nums:
+                func_name = 'unique_' + utils.convert_kind_to_dtype(dtype) + '_none'
+                if arr_numbers.ndim == 2:
+                    func_name += '_2d'
+                arr_keep = getattr(_uq, func_name)(arr_numbers)
+            else:
+                func_name = 'unique_' + utils.convert_kind_to_dtype(dtype) + '_string_none'
+                if arr_numbers.ndim == 2:
+                    func_name += '_2d'
+                if arr_obj.ndim == 1:
+                    arr_obj = arr_obj[:, np.newaxis]
+                arr_keep = getattr(_uq, func_name)(arr_numbers, arr_obj)
+
             if only_subset:
                 return keep_subset(arr_keep, dtype_col, dtype_loc, new_columns, new_col_order)
             else:
@@ -2589,6 +2628,8 @@ class DataFrame(object):
                 has_obj = False
                 for dtype, locs in dtype_loc.items():
                     arr = self._data[dtype]
+                    if keep == 'last':
+                        arr = arr[::-1]
                     if dtype == 'O':
                         has_obj = True
                         if len(locs) != arr.shape[1]:
@@ -2616,6 +2657,10 @@ class DataFrame(object):
                     arr_keep = getattr(_uq, func_name)(arr_numbers)
                 else:
                     func_name = 'unique_' + utils.convert_kind_to_dtype(dtype) + '_string'
+                    if arr_numbers.shape[1] == 1:
+                        arr_numbers = arr_numbers.squeeze(1)
+                    else:
+                        func_name += '_2d'
                     arr_keep = getattr(_uq, func_name)(arr_numbers, arr_obj)
 
                 if keep == 'last':
