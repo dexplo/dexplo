@@ -165,7 +165,6 @@ def any_int(ndarray[np.int64_t] a):
             return True
     return False
 
-
 def any_float(ndarray[np.float64_t] a):
     cdef int i
     cdef int n = len(a)
@@ -173,7 +172,6 @@ def any_float(ndarray[np.float64_t] a):
         if a[i] != 0 and not isnan(a[i]):
             return True
     return False
-
 
 def any_bool(ndarray[np.int8_t, cast=True] a):
     cdef int i
@@ -183,7 +181,6 @@ def any_bool(ndarray[np.int8_t, cast=True] a):
             return True
     return False
 
-
 def any_str(ndarray[object] a):
     cdef int i
     cdef int n = len(a)
@@ -192,7 +189,6 @@ def any_str(ndarray[object] a):
             return True
     return False
 
-
 def convert_nan_to_none(ndarray[object, ndim=2] a, int start, int num):
     cdef int i, j
     cdef int nr = a.shape[0]
@@ -200,3 +196,20 @@ def convert_nan_to_none(ndarray[object, ndim=2] a, int start, int num):
         for j in range(start, start + num):
             if isnan(a[i, j]):
                 a[i, j] = None
+
+def fill_str_none(ndarray[object] a, np.uint8_t high):
+    cdef int i, n = len(a)
+    cdef ndarray[object] b = np.empty(n, dtype='O')
+    cdef str fill
+
+    if high:
+        fill = chr(10 ** 6)
+    else:
+        fill = ''
+
+    for i in range(n):
+        if a[i] is None:
+            b[i] = fill
+        else:
+            b[i] = a[i]
+    return b

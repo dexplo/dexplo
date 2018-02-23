@@ -3319,6 +3319,11 @@ class DataFrame(object):
         col_arr = self._data[dtype][:, loc]
 
         if n >= len(self):
+            if dtype == 'O':
+                if name == 'nlargest':
+                    col_arr = _va.fill_str_none(col_arr, False)
+                else:
+                    col_arr = _va.fill_str_none(col_arr, True)
             order = np.argsort(col_arr)
             if name == 'nlargest':
                 order = order[::-1]

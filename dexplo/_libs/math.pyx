@@ -2818,7 +2818,7 @@ def nlargest_int(ndarray[np.int64_t] a, n):
     cdef int i, j, k, prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
-    cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
+    cdef ndarray[np.int64_t] topn_arg = n - 1 - np.argsort(a[:n][::-1], kind='mergesort')
     cdef ndarray[np.int64_t] topn = a[topn_arg]
     cdef list ties = []
 
@@ -2861,21 +2861,31 @@ def nlargest_float(ndarray[np.float64_t] a, n):
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
-    cdef ndarray[np.float64_t] topn = np.empty(n, dtype='float64')
+    cdef ndarray[np.float64_t] topn = np.full(n, np.inf, dtype='float64')
     cdef list ties = []
+    cdef list none_idx = []
 
-    for i in range(n):
+    for i in range(nr):
         if isnan(a[i]):
+            none_idx.append(i)
             continue
         topn[init_count] = a[i]
+        topn_arg[init_count] = i
         init_count += 1
         if init_count == n:
+            first_row = i + 1
             break
 
-    topn_arg = np.argsort(topn_arg)
-    topn = topn[topn_arg]
+    if init_count < n:
+        temp_arg = np.argsort(topn[:init_count], kind='mergesort')
+        temp_arg = topn_arg[temp_arg]
+        return np.append(temp_arg[::-1], none_idx)[:n], []
+    else:
+        temp_arg = n - 1 - np.argsort(topn[::-1], kind='mergesort')
+        topn = topn[temp_arg]
+        topn_arg = topn_arg[temp_arg]
 
-    for i in range(init_count, nr):
+    for i in range(first_row, nr):
         if a[i] < topn[0] or isnan(a[i]):
             continue
         elif a[i] > topn[0]:
@@ -2906,26 +2916,37 @@ def nlargest_float(ndarray[np.float64_t] a, n):
     return topn_arg[::-1], ties
 
 def nlargest_str(ndarray[object] a, n):
-    cdef int i, j, k, init_count = 0
+    cdef int i, j, k, first_row, init_count = 0
     cdef str prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
+    cdef ndarray[np.int64_t] temp_arg
     cdef ndarray[object] topn = np.empty(n, dtype='O')
     cdef list ties = []
+    cdef list none_idx = []
 
-    for i in range(n):
+    for i in range(nr):
         if a[i] is None:
+            none_idx.append(i)
             continue
         topn[init_count] = a[i]
+        topn_arg[init_count] = i
         init_count += 1
         if init_count == n:
+            first_row = i + 1
             break
 
-    topn_arg = np.argsort(topn_arg)
-    topn = topn[topn_arg]
+    if init_count < n:
+        temp_arg = np.argsort(topn[:init_count], kind='mergesort')
+        temp_arg = topn_arg[temp_arg]
+        return np.append(temp_arg[::-1], none_idx)[:n], []
+    else:
+        temp_arg = n - 1 - np.argsort(topn[::-1], kind='mergesort')
+        topn = topn[temp_arg]
+        topn_arg = topn_arg[temp_arg]
 
-    for i in range(init_count, nr):
+    for i in range(first_row, nr):
         if a[i] is None or a[i] < topn[0]:
             continue
         elif a[i] > topn[0]:
@@ -2960,7 +2981,7 @@ def nlargest_bool(ndarray[np.uint8_t, cast=True] a, n):
     cdef np.uint8_t prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
-    cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
+    cdef ndarray[np.int64_t] topn_arg = n - 1 - np.argsort(a[:n][::-1], kind='mergesort')
     cdef ndarray[np.uint8_t, cast=True] topn = a[topn_arg]
     cdef list ties = []
 
@@ -2998,7 +3019,7 @@ def nsmallest_int(ndarray[np.int64_t] a, n):
     cdef int i, j, k, prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
-    cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
+    cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n], kind='mergesort')
     cdef ndarray[np.int64_t] topn = a[topn_arg]
     cdef list ties = []
     cdef int n1 = n - 1
@@ -3039,22 +3060,32 @@ def nsmallest_float(ndarray[np.float64_t] a, n):
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
-    cdef ndarray[np.float64_t] topn = np.empty(n, dtype='float64')
+    cdef ndarray[np.float64_t] topn = np.full(n, np.inf, dtype='float64')
     cdef list ties = []
+    cdef list none_idx = []
     cdef int n1 = n - 1
 
-    for i in range(n):
+    for i in range(nr):
         if isnan(a[i]):
+            none_idx.append(i)
             continue
         topn[init_count] = a[i]
+        topn_arg[init_count] = i
         init_count += 1
         if init_count == n:
+            first_row = i + 1
             break
 
-    topn_arg = np.argsort(topn_arg)
-    topn = topn[topn_arg]
+    if init_count < n:
+        temp_arg = np.argsort(topn[:init_count], kind='mergesort')
+        temp_arg = topn_arg[temp_arg]
+        return np.append(temp_arg, none_idx)[:n], []
+    else:
+        temp_arg = n - 1 - np.argsort(topn[::-1], kind='mergesort')
+        topn = topn[temp_arg]
+        topn_arg = topn_arg[temp_arg]
 
-    for i in range(init_count, nr):
+    for i in range(first_row, nr):
         if a[i] > topn[n1] or isnan(a[i]):
             continue
         elif a[i] < topn[n1]:
@@ -3085,24 +3116,38 @@ def nsmallest_float(ndarray[np.float64_t] a, n):
     return topn_arg, ties
 
 def nsmallest_str(ndarray[object] a, n):
-    cdef int i, j, k, init_count = 0
+    cdef int i, j, k, first_row, init_count = 0
     cdef str prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
+    cdef ndarray[np.int64_t] temp_arg
     cdef ndarray[object] topn = np.empty(n, dtype='O')
     cdef list ties = []
+    cdef list none_idx = []
     cdef int n1 = n - 1
 
-    for i in range(n):
+    for i in range(nr):
         if a[i] is None:
+            none_idx.append(i)
             continue
         topn[init_count] = a[i]
+        topn_arg[init_count] = i
         init_count += 1
         if init_count == n:
+            first_row = i + 1
             break
 
-    for i in range(init_count, nr):
+    if init_count < n:
+        temp_arg = np.argsort(topn[:init_count], kind='mergesort')
+        temp_arg = topn_arg[temp_arg]
+        return np.append(temp_arg, none_idx)[:n], []
+    else:
+        temp_arg = n - 1 - np.argsort(topn[::-1], kind='mergesort')
+        topn = topn[temp_arg]
+        topn_arg = topn_arg[temp_arg]
+
+    for i in range(first_row, nr):
         if a[i] is None or a[i] > topn[n1]:
             continue
         elif a[i] < topn[n1]:
@@ -3137,7 +3182,7 @@ def nsmallest_bool(ndarray[np.uint8_t, cast=True] a, n):
     cdef np.uint8_t prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
-    cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n])
+    cdef ndarray[np.int64_t] topn_arg = n - 1 - np.argsort(a[:n][::-1], kind='mergesort')
     cdef ndarray[np.uint8_t, cast=True] topn = a[topn_arg]
     cdef list ties = []
     cdef int n1 = n - 1
@@ -3171,4 +3216,3 @@ def nsmallest_bool(ndarray[np.uint8_t, cast=True] a, n):
             ties.append(i)
 
     return topn_arg, ties
-

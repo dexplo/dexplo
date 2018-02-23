@@ -478,3 +478,7 @@ class TestRename:
                             'u': [False, False, True, False], 'y': [0, 20, 30, 4],
                             't': ['a', None, 'ad', 'effd'], 'r': [nan, nan, nan, nan]})
         assert_frame_equal(df1, df2)
+
+class TestNLargest:
+
+    def test_nlargest(self):
