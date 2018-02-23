@@ -479,6 +479,35 @@ class TestRename:
                             't': ['a', None, 'ad', 'effd'], 'r': [nan, nan, nan, nan]})
         assert_frame_equal(df1, df2)
 
+
 class TestNLargest:
 
     def test_nlargest(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.nlargest(3, 'a', keep='all')
+        df2 = de.DataFrame({'a': [10, 10, 9, 9, 9],
+                            'b': [nan, 1.0, 0.0, nan, 0.0],
+                            'c': ['e', 'z', '', 'e', 'a'],
+                            'd': [False, True, False, True, False],
+                            'e': [20, 4, 0, 30, 4],
+                            'f': [None, 'ad', 'a', 'ad', None],
+                            'g': [nan, nan, nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nlargest(3, 'a', keep='first')
+        df2 = de.DataFrame({'a': [10, 10, 9],
+                            'b': [nan, 1.0, 0.0],
+                            'c': ['e', 'z', ''],
+                            'd': [False, True, False],
+                            'e': [20, 4, 0],
+                            'f': [None, 'ad', 'a'],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)

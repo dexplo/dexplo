@@ -2814,46 +2814,127 @@ def streak_group_str(ndarray[object] a):
             b[i] = count
     return b
 
+def quick_select_int(ndarray[np.int64_t] a, int k):
+    cdef int i, n = len(a)
+    cdef int ct1 = 0
+    cdef int ct2 = 0
+
+    cdef int r = np.random.randint(n)
+    cdef int pivot = a[r]
+
+    cdef ndarray[np.int64_t] a1 = np.empty(n, dtype='int64')
+    cdef ndarray[np.int64_t] a2 = np.empty(n, dtype='int64')
+
+    for i in range(len(a)):
+        if a[i] < pivot:
+            a1[ct1] = a[i]
+            ct1 += 1
+        elif a[i] > pivot:
+            a2[ct2] = a[i]
+            ct2 += 1
+
+    if k <= ct1:
+        return quick_select_int(a1[:ct1], k)
+    elif k > len(a) - ct2:
+        return quick_select_int(a2[:ct2], k - (len(a) - ct2))
+    return pivot
+
+def quick_select_float(ndarray[np.float64_t] a, int k):
+    cdef int i, n = len(a)
+    cdef int ct1 = 0
+    cdef int ct2 = 0
+
+    cdef int r = np.random.randint(n)
+    cdef np.float64_t pivot = a[r]
+
+    cdef ndarray[np.float64_t] a1 = np.empty(n, dtype='float64')
+    cdef ndarray[np.float64_t] a2 = np.empty(n, dtype='float64')
+
+    for i in range(len(a)):
+        if a[i] < pivot:
+            a1[ct1] = a[i]
+            ct1 += 1
+        elif a[i] > pivot:
+            a2[ct2] = a[i]
+            ct2 += 1
+
+    if k <= ct1:
+        return quick_select_float(a1[:ct1], k)
+    elif k > len(a) - ct2:
+        return quick_select_float(a2[:ct2], k - (len(a) - ct2))
+    return pivot
+
 def nlargest_int(ndarray[np.int64_t] a, n):
     cdef int i, j, k, prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
-    cdef ndarray[np.int64_t] topn_arg = n - 1 - np.argsort(a[:n][::-1], kind='mergesort')
+    cdef ndarray[np.int64_t] topn_arg = np.argsort(-a[:n], kind='mergesort')
     cdef ndarray[np.int64_t] topn = a[topn_arg]
     cdef list ties = []
+    cdef int n1 = n - 1
 
     for i in range(n, nr):
-        if a[i] < topn[0]:
+        if a[i] < topn[n1]:
             continue
-        elif a[i] > topn[0]:
-            for j in range(n - 1, -1, -1):
-                if a[i] > topn[j]:
-                    prev = topn[j]
-                    prev_arg = topn_arg[j]
-
-                    topn[j] = a[i]
-                    topn_arg[j] = i
-                    for k in range(j - 1, -1, -1):
-                        prev2 = topn[k]
-                        prev2_arg = topn_arg[k]
-
-                        topn[k] = prev
-                        topn_arg[k] = prev_arg
-                        prev = prev2
-                        prev_arg = prev2_arg
-                    break
-
-            if j == 0:
-                ties = []
-            else:
-                if topn[0] == prev:
-                    ties.append(prev_arg)
-                else:
-                    ties = []
-        else:
+        if a[i] == topn[n1]:
             ties.append(i)
+            continue
 
-    return topn_arg[::-1], ties
+        for j in range(n):
+            if a[i] > topn[j]:
+                prev = topn[j]
+                prev_arg = topn_arg[j]
+
+                topn[j] = a[i]
+                topn_arg[j] = i
+                for k in range(j + 1, n):
+                    prev2 = topn[k]
+                    prev2_arg = topn_arg[k]
+
+                    topn[k] = prev
+                    topn_arg[k] = prev_arg
+                    prev = prev2
+                    prev_arg = prev2_arg
+                break
+
+        if topn[n1] == prev:
+            ties = [prev_arg] + ties
+        else:
+            ties = []
+
+    return topn_arg, ties
+
+# saves a bit of time when doing just first
+# def nlargest_int_first(ndarray[np.int64_t] a, n):
+#     cdef int i, j, k, prev, prev2
+#     cdef int prev_arg, prev_arg2
+#     cdef int nr = len(a)
+#     cdef ndarray[np.int64_t] topn_arg = np.argsort(-a[:n], kind='mergesort')
+#     cdef ndarray[np.int64_t] topn = a[topn_arg]
+#     cdef int n1 = n - 1
+#
+#     for i in range(n, nr):
+#         if a[i] <= topn[n1]:
+#             continue
+#
+#         for j in range(n):
+#             if a[i] > topn[j]:
+#                 prev = topn[j]
+#                 prev_arg = topn_arg[j]
+#
+#                 topn[j] = a[i]
+#                 topn_arg[j] = i
+#                 for k in range(j + 1, n):
+#                     prev2 = topn[k]
+#                     prev2_arg = topn_arg[k]
+#
+#                     topn[k] = prev
+#                     topn_arg[k] = prev_arg
+#                     prev = prev2
+#                     prev_arg = prev2_arg
+#                 break
+#
+#     return topn_arg
 
 def nlargest_float(ndarray[np.float64_t] a, n):
     cdef int i, j, k, init_count = 0
@@ -2861,9 +2942,10 @@ def nlargest_float(ndarray[np.float64_t] a, n):
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
-    cdef ndarray[np.float64_t] topn = np.full(n, np.inf, dtype='float64')
+    cdef ndarray[np.float64_t] topn = np.empty(n, dtype='float64')
     cdef list ties = []
     cdef list none_idx = []
+    cdef int n1 = n - 1
 
     for i in range(nr):
         if isnan(a[i]):
@@ -2877,43 +2959,47 @@ def nlargest_float(ndarray[np.float64_t] a, n):
             break
 
     if init_count < n:
-        temp_arg = np.argsort(topn[:init_count], kind='mergesort')
+        temp_arg = np.argsort(-topn[:init_count], kind='mergesort')
         temp_arg = topn_arg[temp_arg]
-        return np.append(temp_arg[::-1], none_idx)[:n], []
+        if none_idx:
+            return np.append(temp_arg, none_idx)[:n], []
+        else:
+            return temp_arg, []
     else:
-        temp_arg = n - 1 - np.argsort(topn[::-1], kind='mergesort')
+        temp_arg = np.argsort(-topn, kind='mergesort')
         topn = topn[temp_arg]
         topn_arg = topn_arg[temp_arg]
 
     for i in range(first_row, nr):
-        if a[i] < topn[0] or isnan(a[i]):
+        if a[i] < topn[n1] or isnan(a[i]):
             continue
-        elif a[i] > topn[0]:
-            for j in range(n - 1, -1, -1):
-                if a[i] > topn[j]:
-                    prev = topn[j]
-                    prev_arg = topn_arg[j]
-
-                    topn[j] = a[i]
-                    topn_arg[j] = i
-                    for k in range(j - 1, -1, -1):
-                        prev2 = topn[k]
-                        prev2_arg = topn_arg[k]
-
-                        topn[k] = prev
-                        topn_arg[k] = prev_arg
-                        prev = prev2
-                        prev_arg = prev2_arg
-                    break
-
-            if topn[0] == prev:
-                ties.append(prev_arg)
-            else:
-                ties = []
-        else:
+        if a[i] == topn[n1]:
             ties.append(i)
+            continue
 
-    return topn_arg[::-1], ties
+        for j in range(n):
+            if a[i] > topn[j]:
+                prev = topn[j]
+                prev_arg = topn_arg[j]
+
+                topn[j] = a[i]
+                topn_arg[j] = i
+                for k in range(j + 1, n):
+                    prev2 = topn[k]
+                    prev2_arg = topn_arg[k]
+
+                    topn[k] = prev
+                    topn_arg[k] = prev_arg
+                    prev = prev2
+                    prev_arg = prev2_arg
+                break
+
+        if topn[n1] == prev:
+            ties = [prev_arg] + ties
+        else:
+            ties = []
+
+    return topn_arg, ties
 
 def nlargest_str(ndarray[object] a, n):
     cdef int i, j, k, first_row, init_count = 0
@@ -2925,6 +3011,7 @@ def nlargest_str(ndarray[object] a, n):
     cdef ndarray[object] topn = np.empty(n, dtype='O')
     cdef list ties = []
     cdef list none_idx = []
+    cdef int n1 = n - 1
 
     for i in range(nr):
         if a[i] is None:
@@ -2938,82 +3025,87 @@ def nlargest_str(ndarray[object] a, n):
             break
 
     if init_count < n:
-        temp_arg = np.argsort(topn[:init_count], kind='mergesort')
+        temp_arg = (init_count - 1 - np.argsort(topn[:init_count][::-1], kind='mergesort'))[::-1]
         temp_arg = topn_arg[temp_arg]
-        return np.append(temp_arg[::-1], none_idx)[:n], []
+        if none_idx:
+            return np.append(temp_arg, none_idx)[:n], []
+        else:
+            return temp_arg, []
     else:
-        temp_arg = n - 1 - np.argsort(topn[::-1], kind='mergesort')
+        temp_arg = (n - 1 - np.argsort(topn[::-1], kind='mergesort'))[::-1]
         topn = topn[temp_arg]
         topn_arg = topn_arg[temp_arg]
 
     for i in range(first_row, nr):
-        if a[i] is None or a[i] < topn[0]:
+        if a[i] is None or a[i] < topn[n1]:
             continue
-        elif a[i] > topn[0]:
-            for j in range(n - 1, -1, -1):
-                if a[i] > topn[j]:
-                    prev = topn[j]
-                    prev_arg = topn_arg[j]
-
-                    topn[j] = a[i]
-                    topn_arg[j] = i
-                    for k in range(j - 1, -1, -1):
-                        prev2 = topn[k]
-                        prev2_arg = topn_arg[k]
-
-                        topn[k] = prev
-                        topn_arg[k] = prev_arg
-                        prev = prev2
-                        prev_arg = prev2_arg
-                    break
-
-            if topn[0] == prev:
-                ties.append(prev_arg)
-            else:
-                ties = []
-        else:
+        if a[i] == topn[n1]:
             ties.append(i)
+            continue
 
-    return topn_arg[::-1], ties
+        for j in range(n):
+            if a[i] > topn[j]:
+                prev = topn[j]
+                prev_arg = topn_arg[j]
+
+                topn[j] = a[i]
+                topn_arg[j] = i
+                for k in range(j + 1, n):
+                    prev2 = topn[k]
+                    prev2_arg = topn_arg[k]
+
+                    topn[k] = prev
+                    topn_arg[k] = prev_arg
+                    prev = prev2
+                    prev_arg = prev2_arg
+                break
+
+        if topn[n1] == prev:
+            ties = [prev_arg] + ties
+        else:
+            ties = []
+
+    return topn_arg, ties
 
 def nlargest_bool(ndarray[np.uint8_t, cast=True] a, n):
-    cdef int i, j, k
-    cdef np.uint8_t prev, prev2
+    cdef int i, j, k, prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
-    cdef ndarray[np.int64_t] topn_arg = n - 1 - np.argsort(a[:n][::-1], kind='mergesort')
+    cdef ndarray[np.int64_t] topn_arg = np.argsort(-a[:n], kind='mergesort')
     cdef ndarray[np.uint8_t, cast=True] topn = a[topn_arg]
     cdef list ties = []
+    cdef int n1 = n - 1
 
     for i in range(n, nr):
-        if a[i] < topn[0]:
+        if a[i] < topn[n1]:
             continue
-        elif a[i] > topn[0]:
-            for j in range(n - 1, -1, -1):
-                if a[i] > topn[j]:
-                    prev = topn[j]
-                    prev_arg = topn_arg[j]
-
-                    topn[j] = a[i]
-                    topn_arg[j] = i
-                    for k in range(j - 1, -1, -1):
-                        prev2 = topn[k]
-                        prev2_arg = topn_arg[k]
-
-                        topn[k] = prev
-                        topn_arg[k] = prev_arg
-                        prev = prev2
-                        prev_arg = prev2_arg
-                    break
-
-            if topn[0] == prev:
-                ties.append(prev_arg)
-            else:
-                ties = []
-        else:
+        if a[i] == topn[n1]:
             ties.append(i)
+            continue
 
-    return topn_arg[::-1], ties
+        for j in range(n):
+            if a[i] > topn[j]:
+                prev = topn[j]
+                prev_arg = topn_arg[j]
+
+                topn[j] = a[i]
+                topn_arg[j] = i
+                for k in range(j + 1, n):
+                    prev2 = topn[k]
+                    prev2_arg = topn_arg[k]
+
+                    topn[k] = prev
+                    topn_arg[k] = prev_arg
+                    prev = prev2
+                    prev_arg = prev2_arg
+                break
+
+        if topn[n1] == prev:
+            ties = [prev_arg] + ties
+        else:
+            ties = []
+
+    return topn_arg, ties
 
 def nsmallest_int(ndarray[np.int64_t] a, n):
     cdef int i, j, k, prev, prev2
@@ -3027,30 +3119,31 @@ def nsmallest_int(ndarray[np.int64_t] a, n):
     for i in range(n, nr):
         if a[i] > topn[n1]:
             continue
-        elif a[i] < topn[n1]:
-            for j in range(n):
-                if a[i] < topn[j]:
-                    prev = topn[j]
-                    prev_arg = topn_arg[j]
-
-                    topn[j] = a[i]
-                    topn_arg[j] = i
-                    for k in range(j + 1, n):
-                        prev2 = topn[k]
-                        prev2_arg = topn_arg[k]
-
-                        topn[k] = prev
-                        topn_arg[k] = prev_arg
-                        prev = prev2
-                        prev_arg = prev2_arg
-                    break
-
-            if topn[0] == prev:
-                ties.append(prev_arg)
-            else:
-                ties = []
-        else:
+        if a[i] == topn[n1]:
             ties.append(i)
+            continue
+
+        for j in range(n):
+            if a[i] < topn[j]:
+                prev = topn[j]
+                prev_arg = topn_arg[j]
+
+                topn[j] = a[i]
+                topn_arg[j] = i
+                for k in range(j + 1, n):
+                    prev2 = topn[k]
+                    prev2_arg = topn_arg[k]
+
+                    topn[k] = prev
+                    topn_arg[k] = prev_arg
+                    prev = prev2
+                    prev_arg = prev2_arg
+                break
+
+        if topn[n1] == prev:
+            ties.append(prev_arg)
+        else:
+            ties = []
 
     return topn_arg, ties
 
@@ -3060,7 +3153,7 @@ def nsmallest_float(ndarray[np.float64_t] a, n):
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
     cdef ndarray[np.int64_t] topn_arg = np.empty(n, dtype='int64')
-    cdef ndarray[np.float64_t] topn = np.full(n, np.inf, dtype='float64')
+    cdef ndarray[np.float64_t] topn = np.empty(n, dtype='float64')
     cdef list ties = []
     cdef list none_idx = []
     cdef int n1 = n - 1
@@ -3079,39 +3172,43 @@ def nsmallest_float(ndarray[np.float64_t] a, n):
     if init_count < n:
         temp_arg = np.argsort(topn[:init_count], kind='mergesort')
         temp_arg = topn_arg[temp_arg]
-        return np.append(temp_arg, none_idx)[:n], []
+        if none_idx:
+            return np.append(temp_arg, none_idx)[:n], []
+        else:
+            return temp_arg, []
     else:
-        temp_arg = n - 1 - np.argsort(topn[::-1], kind='mergesort')
+        temp_arg = np.argsort(topn, kind='mergesort')
         topn = topn[temp_arg]
         topn_arg = topn_arg[temp_arg]
 
     for i in range(first_row, nr):
         if a[i] > topn[n1] or isnan(a[i]):
             continue
-        elif a[i] < topn[n1]:
-            for j in range(n):
-                if a[i] < topn[j]:
-                    prev = topn[j]
-                    prev_arg = topn_arg[j]
-
-                    topn[j] = a[i]
-                    topn_arg[j] = i
-                    for k in range(j + 1, n):
-                        prev2 = topn[k]
-                        prev2_arg = topn_arg[k]
-
-                        topn[k] = prev
-                        topn_arg[k] = prev_arg
-                        prev = prev2
-                        prev_arg = prev2_arg
-                    break
-
-            if topn[n1] == prev:
-                ties.append(prev_arg)
-            else:
-                ties = []
-        else:
+        if a[i] == topn[n1]:
             ties.append(i)
+            continue
+
+        for j in range(n):
+            if a[i] < topn[j]:
+                prev = topn[j]
+                prev_arg = topn_arg[j]
+
+                topn[j] = a[i]
+                topn_arg[j] = i
+                for k in range(j + 1, n):
+                    prev2 = topn[k]
+                    prev2_arg = topn_arg[k]
+
+                    topn[k] = prev
+                    topn_arg[k] = prev_arg
+                    prev = prev2
+                    prev_arg = prev2_arg
+                break
+
+        if topn[n1] == prev:
+            ties = [prev_arg] + ties
+        else:
+            ties = []
 
     return topn_arg, ties
 
@@ -3141,48 +3238,51 @@ def nsmallest_str(ndarray[object] a, n):
     if init_count < n:
         temp_arg = np.argsort(topn[:init_count], kind='mergesort')
         temp_arg = topn_arg[temp_arg]
-        return np.append(temp_arg, none_idx)[:n], []
+        if none_idx:
+            return np.append(temp_arg, none_idx)[:n], []
+        else:
+            return temp_arg, []
     else:
-        temp_arg = n - 1 - np.argsort(topn[::-1], kind='mergesort')
+        temp_arg = np.argsort(topn[:init_count], kind='mergesort')
         topn = topn[temp_arg]
         topn_arg = topn_arg[temp_arg]
 
     for i in range(first_row, nr):
         if a[i] is None or a[i] > topn[n1]:
             continue
-        elif a[i] < topn[n1]:
-            for j in range(n):
-                if a[i] < topn[j]:
-                    prev = topn[j]
-                    prev_arg = topn_arg[j]
-
-                    topn[j] = a[i]
-                    topn_arg[j] = i
-                    for k in range(j + 1, n):
-                        prev2 = topn[k]
-                        prev2_arg = topn_arg[k]
-
-                        topn[k] = prev
-                        topn_arg[k] = prev_arg
-                        prev = prev2
-                        prev_arg = prev2_arg
-                    break
-
-            if topn[n1] == prev:
-                ties.append(prev_arg)
-            else:
-                ties = []
-        else:
+        if a[i] == topn[n1]:
             ties.append(i)
+            continue
+
+        for j in range(n):
+            if a[i] < topn[j]:
+                prev = topn[j]
+                prev_arg = topn_arg[j]
+
+                topn[j] = a[i]
+                topn_arg[j] = i
+                for k in range(j + 1, n):
+                    prev2 = topn[k]
+                    prev2_arg = topn_arg[k]
+
+                    topn[k] = prev
+                    topn_arg[k] = prev_arg
+                    prev = prev2
+                    prev_arg = prev2_arg
+                break
+
+        if topn[n1] == prev:
+            ties = [prev_arg] + ties
+        else:
+            ties = []
 
     return topn_arg, ties
 
-def nsmallest_bool(ndarray[np.uint8_t, cast=True] a, n):
-    cdef int i, j, k
-    cdef np.uint8_t prev, prev2
+def nlargest_bool(ndarray[np.uint8_t, cast=True] a, n):
+    cdef int i, j, k, prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
-    cdef ndarray[np.int64_t] topn_arg = n - 1 - np.argsort(a[:n][::-1], kind='mergesort')
+    cdef ndarray[np.int64_t] topn_arg = np.argsort(a[:n], kind='mergesort')
     cdef ndarray[np.uint8_t, cast=True] topn = a[topn_arg]
     cdef list ties = []
     cdef int n1 = n - 1
@@ -3190,29 +3290,30 @@ def nsmallest_bool(ndarray[np.uint8_t, cast=True] a, n):
     for i in range(n, nr):
         if a[i] > topn[n1]:
             continue
-        elif a[i] < topn[n1]:
-            for j in range(n):
-                if a[i] < topn[j]:
-                    prev = topn[j]
-                    prev_arg = topn_arg[j]
-
-                    topn[j] = a[i]
-                    topn_arg[j] = i
-                    for k in range(j + 1, n):
-                        prev2 = topn[k]
-                        prev2_arg = topn_arg[k]
-
-                        topn[k] = prev
-                        topn_arg[k] = prev_arg
-                        prev = prev2
-                        prev_arg = prev2_arg
-                    break
-
-            if topn[n1] == prev:
-                ties.append(prev_arg)
-            else:
-                ties = []
-        else:
+        if a[i] == topn[n1]:
             ties.append(i)
+            continue
+
+        for j in range(n):
+            if a[i] < topn[j]:
+                prev = topn[j]
+                prev_arg = topn_arg[j]
+
+                topn[j] = a[i]
+                topn_arg[j] = i
+                for k in range(j + 1, n):
+                    prev2 = topn[k]
+                    prev2_arg = topn_arg[k]
+
+                    topn[k] = prev
+                    topn_arg[k] = prev_arg
+                    prev = prev2
+                    prev_arg = prev2_arg
+                break
+
+        if topn[n1] == prev:
+            ties = [prev_arg] + ties
+        else:
+            ties = []
 
     return topn_arg, ties

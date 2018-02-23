@@ -3318,24 +3318,53 @@ class DataFrame(object):
         dtype, loc, _ = self._column_info[column].values
         col_arr = self._data[dtype][:, loc]
 
-        if n >= len(self):
-            if dtype == 'O':
-                if name == 'nlargest':
-                    col_arr = _va.fill_str_none(col_arr, False)
-                else:
-                    col_arr = _va.fill_str_none(col_arr, True)
-            order = np.argsort(col_arr)
-            if name == 'nlargest':
-                order = order[::-1]
-        else:
+        if n < 100:
             func_name = name + '_' + utils.convert_kind_to_dtype(dtype)
             order, ties = getattr(_math, func_name)(col_arr, n)
-
             if keep == 'all' and ties:
                 order = np.append(order, ties)
             elif keep == 'last':
                 if ties:
-                    order[-1] = ties[-1]
+                    tie_val = col_arr[ties[0]]
+                    is_ties = col_arr[order] == tie_val
+                    num_ties = is_ties.sum()
+                    if len(ties) >= num_ties:
+                        order[is_ties] = ties[-num_ties:]
+                    else:
+                        order[-num_ties:] = np.append(order[is_ties], ties)[-num_ties:]
+        else:
+            if n > len(self):
+                asc = name == 'nsmallest'
+                return self.sort_values(column, ascending=asc)
+            func_name = 'quick_select_' + utils.convert_kind_to_dtype(dtype)
+            if col_arr.dtype.kind == 'f':
+                col_arr = col_arr[~np.isnan(col_arr)]
+            if name == 'nlargest':
+                nth = -getattr(_math, func_name)(-col_arr, n)
+                idx = np.where(col_arr >= nth)[0]
+                vals = col_arr[idx]
+                idx_args = np.argsort(-vals, kind='mergesort')
+            else:
+                nth = getattr(_math, func_name)(col_arr, n)
+                idx = np.where(col_arr >= nth)[0]
+                vals = col_arr[idx]
+                idx_args = np.argsort(vals, kind='mergesort')
+
+            if keep == 'first':
+                idx_args = idx_args[:n]
+            elif keep == 'last' and len(idx_args) > n:
+                tie_args = idx_args[n:]
+                idx_args = idx_args[:n]
+                tie_val = vals[tie_args[-1]]
+                is_ties = vals[idx_args] == tie_val
+                num_ties = is_ties.sum()
+
+                if len(tie_args) >= num_ties:
+                    idx_args[is_ties] = tie_args[-num_ties:]
+                else:
+                    idx_args[-num_ties:] = np.append(idx_args[is_ties], tie_args)[-num_ties:]
+
+            order = idx[idx_args]
 
         new_column_info = self._copy_column_info()
         new_columns = self._columns.copy()
