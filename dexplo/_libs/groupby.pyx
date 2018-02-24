@@ -3,13 +3,14 @@
 import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
-from collections import defaultdict
 import cython
 from cpython cimport dict, set, list, tuple
 from libc.math cimport isnan, sqrt
 from numpy import nan
-from .math import min_max_int, min_max_int2, isna_str, get_first_non_nan
+from .math import min_max_int, min_max_int2, get_first_non_nan
 from libc.stdlib cimport malloc, free
+from cpython.bytes cimport PyBytes_FromStringAndSize
+
 try:
     import bottleneck as bn
 except ImportError:
@@ -83,22 +84,9 @@ def get_group_assignment_str_2d(ndarray[object, ndim=2] a):
     cdef tuple t
 
     for i in range(nr):
-        if nc == 2:
-            t = (a[i, 0], a[i, 1])
-        elif nc == 3:
-            t = (a[i, 0], a[i, 1], a[i, 2])
-        elif nc == 4:
-            t = (a[i, 0], a[i, 1], a[i, 2], a[i, 3])
-        elif nc == 5:
-            t = (a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4])
-        elif nc == 6:
-            t = (a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5])
-        elif nc == 7:
-            t = (a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5], a[i, 6])
-        else:
-            for j in range(nc):
-                v[j] = a[i, j]
-            t = tuple(v)
+        for j in range(nc):
+            v[j] = a[i, j]
+        t = tuple(v)
 
         group[i] = d.get(t, -1)
         if group[i] == -1:
@@ -162,10 +150,11 @@ def get_group_assignment_int_2d(ndarray[np.int64_t, ndim=2] a):
     cdef ndarray[np.int64_t] group = np.empty(n, dtype=np.int64)
     cdef ndarray[np.int64_t] group_position = np.empty(n, dtype=np.int64)
     cdef dict d = {}
-    cdef tuple t
     cdef ndarray[np.int64_t] ranges
     cdef np.int64_t total_range = 1
     cdef int cur_range = 10 ** 7
+    cdef int size = sizeof(np.int64_t) * nc
+    cdef bytes string
 
     lows, highs = min_max_int2(a, 0)
 
@@ -177,63 +166,14 @@ def get_group_assignment_int_2d(ndarray[np.int64_t, ndim=2] a):
     if cur_range > 1:
         return get_group_assignment_int_bounded_2d(a, lows, highs, ranges, total_range)
 
-    if nc == 2:
-        for i in range(n):
-            t = (a[i, 0], a[i, 1])
-            group[i] = d.get(t, -1)
-            if group[i] == -1:
-                group_position[count] = i
-                group[i] = count
-                d[t] = count
-                count += 1
-
-    elif nc == 3:
-        for i in range(n):
-            t = (a[i, 0], a[i, 1], a[i, 2])
-            group[i] = d.get(t, -1)
-            if group[i] == -1:
-                group_position[count] = i
-                group[i] = count
-                d[t] = count
-                count += 1
-
-    elif nc == 4:
-        for i in range(n):
-            t = (a[i, 0], a[i, 1], a[i, 2], a[i, 3])
-            group[i] = d.get(t, -1)
-            if group[i] == -1:
-                group_position[count] = i
-                group[i] = count
-                d[t] = count
-                count += 1
-
-    elif nc == 5:
-        for i in range(n):
-            t = (a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4])
-            group[i] = d.get(t, -1)
-            if group[i] == -1:
-                group_position[count] = i
-                group[i] = count
-                d[t] = count
-                count += 1
-    elif nc == 6:
-        for i in range(n):
-            t = (a[i, 0], a[i, 1], a[i, 2], a[i, 3], a[i, 4], a[i, 5])
-            group[i] = d.get(t, -1)
-            if group[i] == -1:
-                group_position[count] = i
-                group[i] = count
-                d[t] = count
-                count += 1
-    else:
-        for i in range(n):
-            t = tuple(a[i])
-            group[i] = d.get(t, -1)
-            if group[i] == -1:
-                group_position[count] = i
-                group[i] = count
-                d[t] = count
-                count += 1
+    for i in range(n):
+        string = PyBytes_FromStringAndSize(<char*>&a[i, 0], size)
+        group[i] = d.get(string, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[string] = count
+            count += 1
 
     return group, group_position[:count]
 
@@ -275,7 +215,6 @@ def get_group_assignment_int_bounded_2d(ndarray[np.int64_t, ndim=2] a, ndarray[n
 
     return group, group_position[:count]
 
-
 def get_group_assignment_float_1d(ndarray[np.float64_t] a):
     cdef int i
     cdef int n = len(a)
@@ -297,7 +236,6 @@ def get_group_assignment_float_1d(ndarray[np.float64_t] a):
             count += 1
     return group, group_position[:count]
 
-
 def get_group_assignment_float_2d(ndarray[np.float64_t, ndim=2] a):
     cdef int i, j
     cdef int n = len(a)
@@ -306,65 +244,18 @@ def get_group_assignment_float_2d(ndarray[np.float64_t, ndim=2] a):
     cdef ndarray[np.int64_t] group = np.empty(n, dtype=np.int64)
     cdef ndarray[np.int64_t] group_position = np.empty(n, dtype=np.int64)
     cdef dict d = {}
-    cdef tuple t
+    cdef str s
+    cdef int size = sizeof(np.float64_t) * nc
 
-    if nc == 2:
-        for i in range(n):
-            if isnan(a[i, 0]):
-                v0 = None
-            else:
-                v0 = a[i, 0]
-            if isnan(a[i, 1]):
-                v1 = None
-            else:
-                v1 = a[i, 1]
-            t = (v0, v1)
-            group[i] = d.get(t, -1)
-            if group[i] == -1:
-                group_position[count] = i
-                group[i] = count
-                d[t] = count
-                count += 1
-    elif nc == 3:
-        for i in range(n):
-            if isnan(a[i, 0]):
-                v0 = None
-            else:
-                v0 = a[i, 0]
-            if isnan(a[i, 1]):
-                v1 = None
-            else:
-                v1 = a[i, 1]
-            if isnan(a[i, 2]):
-                v2 = None
-            else:
-                v2 = a[i, 2]
-
-            t = (v0, v1, v2)
-            group[i] = d.get(t, -1)
-            if group[i] == -1:
-                group_position[count] = i
-                group[i] = count
-                d[t] = count
-                count += 1
-    else:
-        for i in range(n):
-            v = []
-            for j in range(nc):
-                if isnan(a[i, j]):
-                    v.append(None)
-                else:
-                    v.append(a[i, j])
-            t = tuple(v)
-            group[i] = d.get(t, -1)
-            if group[i] == -1:
-                group_position[count] = i
-                group[i] = count
-                d[t] = count
-                count += 1
-
+    for i in range(n):
+        string = PyBytes_FromStringAndSize(<char*>&a[i, 0], size)
+        group[i] = d.get(string, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[string] = count
+            count += 1
     return group, group_position[:count]
-
 
 def get_group_assignment_bool_1d(ndarray[np.uint8_t, cast=True] a):
     cdef int i
@@ -387,7 +278,6 @@ def get_group_assignment_bool_1d(ndarray[np.uint8_t, cast=True] a):
 
     return group, group_position[:count]
 
-
 def get_group_assignment_bool_2d(ndarray[np.uint8_t, cast=True, ndim=2] a):
     cdef int i, j, iloc
     cdef int n = len(a)
@@ -409,6 +299,299 @@ def get_group_assignment_bool_2d(ndarray[np.uint8_t, cast=True, ndim=2] a):
             count += 1
         else:
             group[i] = unique[iloc]
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_1d_int_1d(ndarray[object] a, ndarray[np.int64_t] b):
+    cdef int i
+    cdef int nr = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef tuple t
+
+    for i in range(nr):
+        t = (a[i], b[i])
+
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_1d_float_1d(ndarray[object] a, ndarray[np.float64_t] b):
+    cdef int i
+    cdef int nr = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef tuple t
+
+    for i in range(nr):
+        if isnan(b[i]):
+            t = (a[i], None)
+        else:
+            t = (a[i], b[i])
+
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_1d_bool_1d(ndarray[object] a, ndarray[np.uint8_t, cast=True] b):
+    cdef int i
+    cdef int nr = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef tuple t
+
+    for i in range(nr):
+        t = (a[i], b[i])
+
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_2d_int_1d(ndarray[object, ndim=2] a, ndarray[np.int64_t] b):
+    cdef int i, j
+    cdef int nr = len(a)
+    cdef int nc = a.shape[1]
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef list v = list(range(nc + 1))
+    cdef tuple t
+
+    for i in range(nr):
+        for j in range(nc):
+            v[j] = a[i, j]
+        v[nc] = b[i]
+        t = tuple(v)
+
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_2d_float_1d(ndarray[object, ndim=2] a, ndarray[np.float64_t] b):
+    cdef int i, j
+    cdef int nr = len(a)
+    cdef int nc = a.shape[1]
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef list v = list(range(nc + 1))
+    cdef tuple t
+
+    for i in range(nr):
+        for j in range(nc):
+            v[j] = a[i, j]
+        if isnan(b[i]):
+            v[nc] = None
+        else:
+            v[nc] = b[i]
+        t = tuple(v)
+
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_2d_bool_1d(ndarray[object, ndim=2] a, ndarray[np.uint8_t, cast=True] b):
+    cdef int i, j
+    cdef int nr = len(a)
+    cdef int nc = a.shape[1]
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef list v = list(range(nc + 1))
+    cdef tuple t
+
+    for i in range(nr):
+        for j in range(nc):
+            v[j] = a[i, j]
+        v[nc] = b[i]
+        t = tuple(v)
+
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+
+def get_group_assignment_str_1d_int_2d(ndarray[object] a, ndarray[np.int64_t, ndim=2] b):
+    cdef int i
+    cdef int nr = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef tuple t
+    cdef int size = sizeof(np.int64_t) * b.shape[1]
+
+    for i in range(nr):
+        t = (a[i], PyBytes_FromStringAndSize(<char*>&b[i, 0], size))
+
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_1d_float_2d(ndarray[object] a, ndarray[np.float64_t, ndim=2] b):
+    cdef int i
+    cdef int nr = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef tuple t
+    cdef int size = sizeof(np.float64_t) * b.shape[1]
+
+    for i in range(nr):
+        t = (a[i], PyBytes_FromStringAndSize(<char*>&b[i, 0], size))
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_1d_bool_2d(ndarray[object] a, ndarray[np.uint8_t, ndim=2, cast=True] b):
+    cdef int i
+    cdef int nr = len(a)
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef tuple t
+    cdef int size = sizeof(np.uint8_t) * b.shape[1]
+
+    for i in range(nr):
+        t = (a[i], PyBytes_FromStringAndSize(<char*>&b[i, 0], size))
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_2d_int_2d(ndarray[object, ndim=2] a, ndarray[np.int64_t, ndim=2] b):
+    cdef int i, j
+    cdef int nr = len(a)
+    cdef int nc = a.shape[1]
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef list v = list(range(nc + 1))
+    cdef tuple t
+    cdef int size = sizeof(np.int64_t) * b.shape[1]
+
+    for i in range(nr):
+        for j in range(nc):
+            v[j] = a[i, j]
+        v[nc] = PyBytes_FromStringAndSize(<char*>&b[i, 0], size)
+        t = tuple(v)
+
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_2d_float_2d(ndarray[object, ndim=2] a, ndarray[np.float64_t, ndim=2] b):
+    cdef int i, j
+    cdef int nr = len(a)
+    cdef int nc = a.shape[1]
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef list v = list(range(nc + 1))
+    cdef tuple t
+    cdef int size = sizeof(np.float64_t) * b.shape[1]
+
+    for i in range(nr):
+        for j in range(nc):
+            v[j] = a[i, j]
+        v[nc] = PyBytes_FromStringAndSize(<char*>&b[i, 0], size)
+        t = tuple(v)
+
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
+
+    return group, group_position[:count]
+
+def get_group_assignment_str_2d_bool_2d(ndarray[object, ndim=2] a, ndarray[np.uint8_t, ndim=2, cast=True] b):
+    cdef int i, j
+    cdef int nr = len(a)
+    cdef int nc = a.shape[1]
+    cdef int count = 0
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+    cdef dict d = {}
+    cdef list v = list(range(nc + 1))
+    cdef tuple t
+    cdef int size = sizeof(np.uint8_t) * b.shape[1]
+
+    for i in range(nr):
+        for j in range(nc):
+            v[j] = a[i, j]
+        v[nc] = PyBytes_FromStringAndSize(<char*>&b[i, 0], size)
+        t = tuple(v)
+
+        group[i] = d.get(t, -1)
+        if group[i] == -1:
+            group_position[count] = i
+            group[i] = count
+            d[t] = count
+            count += 1
 
     return group, group_position[:count]
 

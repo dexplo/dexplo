@@ -3716,6 +3716,10 @@ class Grouper(object):
         self._group_labels, self._group_position = self._create_groups(columns)
         self._group_columns = columns
 
+        if len(self._group_position) == self._df.shape[0]:
+            warnings.warn("Each group contains exactly one row of data. "
+                          "Are you sure you are grouping correctly?")
+
     def _create_groups(self, columns: List[str]) -> Tuple:
         self._group_dtype_loc: Dict[str, List[int]] = defaultdict(list)
         self._column_info = {}
@@ -3727,48 +3731,47 @@ class Grouper(object):
 
         if len(columns) == 1:
             # since there is just one column, dtype is from the for-loop
-            final_arr = self._df._data[dtype][:, loc].squeeze()
-            if dtype == 'O':
-                return _gb.get_group_assignment_str_1d(final_arr)
-            if dtype == 'i':
-                return _gb.get_group_assignment_int_1d(final_arr)
-            if dtype == 'f':
-                return _gb.get_group_assignment_float_1d(final_arr)
-            if dtype == 'b':
-                return _gb.get_group_assignment_bool_1d(final_arr)
+            final_arr = self._df._data[dtype][:, loc]
+            dtype = final_arr.dtype.kind
+            func_name = 'get_group_assignment_' + utils.convert_kind_to_dtype(dtype) + '_1d'
+            return getattr(_gb, func_name)(final_arr)
+        elif len(self._group_dtype_loc) == 1 or 'O' not in self._group_dtype_loc:
+            arrs = []
+            for dtype, locs in self._group_dtype_loc.items():
+                arrs.append(self._df._data[dtype][:, locs])
+            if len(arrs) == 1:
+                final_arr = arrs[0]
+            else:
+                final_arr = np.column_stack(arrs)
+
+            dtype = final_arr.dtype.kind
+            func_name = 'get_group_assignment_' + utils.convert_kind_to_dtype(dtype) + '_2d'
+            final_arr = np.ascontiguousarray(final_arr)
+            return getattr(_gb, func_name)(final_arr)
         else:
             arrs = []
+            for dtype, locs in self._group_dtype_loc.items():
+                if dtype == 'O':
+                    arr_str = self._df._data['O'][:, locs]
+                else:
+                    arrs.append(self._df._data[dtype][:, locs])
+            if len(arrs) == 1:
+                arr_numbers = arrs[0]
+            else:
+                arr_numbers = np.column_stack(arrs)
 
-            total_locs = 0
-            start = 0
-            end = 0
-            for i, (dtype, locs) in enumerate(self._group_dtype_loc.items()):
-                # in case there is a mix of floats and objects
-                if dtype == 'f':
-                    start = total_locs
-                    end = start + len(locs)
-                    float_idx = i
-                arrs.append(self._df._data[dtype][:, locs])
-                total_locs += len(locs)
+            dtype = arr_numbers.dtype.kind
+            if arr_str.shape[1] == 1:
+                arr_str = arr_str[:, 0]
+            if arr_numbers.shape[1] == 1:
+                arr_numbers = arr_numbers[:, 0]
 
-            final_arr = np.column_stack(arrs)
-            final_dtype = final_arr.dtype.kind
-
-            if final_dtype == 'O' and end != 0:
-                arr_nan = np.isnan(arrs[float_idx])
-                final_arr[:, start:end][arr_nan] = None
-
-            if final_dtype == 'O':
-                return _gb.get_group_assignment_str_2d(final_arr)
-            if final_dtype == 'i':
-                return _gb.get_group_assignment_int_2d(final_arr)
-            if final_dtype == 'f':
-                return _gb.get_group_assignment_float_2d(final_arr)
-            if final_dtype == 'b':
-                return _gb.get_group_assignment_bool_2d(final_arr)
-        if len(self._group_position) == self._df.shape[0]:
-            warnings.warn("Each group contains exactly one row of data. "
-                          "Are you sure you are grouping correctly?")
+            str_ndim = str(arr_str.ndim) + 'd_'
+            num_ndim = str(arr_numbers.ndim) + 'd'
+            dtype_str = utils.convert_kind_to_dtype(dtype) + '_'
+            func_name = 'get_group_assignment_str_' + str_ndim + dtype_str + num_ndim
+            arr_numbers = np.ascontiguousarray(arr_numbers)
+            return getattr(_gb, func_name)(arr_str, arr_numbers)
 
     def _get_group_col_data(self):
         data_dict = defaultdict(list)
