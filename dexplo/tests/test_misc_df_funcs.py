@@ -482,7 +482,7 @@ class TestRename:
 
 class TestNLargest:
 
-    def test_nlargest(self):
+    def test_nlargest_int(self):
         data = {'a': [9, 10, 9, 9, 10],
                 'b': [0, nan, nan, 0, 1],
                 'c': [''] + list('eeaz'),
@@ -510,4 +510,314 @@ class TestNLargest:
                             'e': [20, 4, 0],
                             'f': [None, 'ad', 'a'],
                             'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nlargest(3, 'a', keep='last')
+        df2 = de.DataFrame({'a': [10, 10, 9],
+                            'b': [nan, 1.0, 0.0],
+                            'c': ['e', 'z', 'a'],
+                            'd': [False, True, False],
+                            'e': [20, 4, 4],
+                            'f': [None, 'ad', None],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nlargest(10, 'a', keep='last')
+        df2 = de.DataFrame({'a': [10, 10, 9, 9, 9],
+                            'b': [nan, 1.0, 0.0, nan, 0.0],
+                            'c': ['e', 'z', '', 'e', 'a'],
+                            'd': [False, True, False, True, False],
+                            'e': [20, 4, 0, 30, 4],
+                            'f': [None, 'ad', 'a', 'ad', None],
+                            'g': [nan, nan, nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+    def test_nlargest_float(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.nlargest(2, 'b')
+        df2 = de.DataFrame({'a': [10, 9, 9],
+                            'b': [1.0, 0.0, 0.0],
+                            'c': ['z', '', 'a'],
+                            'd': [True, False, False],
+                            'e': [4, 0, 4],
+                            'f': ['ad', 'a', None],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nlargest(2, 'b', keep='first')
+        df2 = de.DataFrame({'a': [10, 9],
+                            'b': [1.0, 0.0],
+                            'c': ['z', ''],
+                            'd': [True, False],
+                            'e': [4, 0],
+                            'f': ['ad', 'a'],
+                            'g': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nlargest(2, 'b', keep='last')
+        df2 = de.DataFrame({'a': [10, 9],
+                            'b': [1.0, 0.0],
+                            'c': ['z', 'a'],
+                            'd': [True, False],
+                            'e': [4, 4],
+                            'f': ['ad', None],
+                            'g': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nlargest(1, 'g', keep='all')
+        df2 = de.DataFrame({'a': [9],
+                            'b': [0.0],
+                            'c': [''],
+                            'd': [False],
+                            'e': [0],
+                            'f': ['a'],
+                            'g': [nan]})
+        assert_frame_equal(df1, df2)
+
+    def test_nlargest_str(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.nlargest(2, 'c', keep='all')
+        df2 = de.DataFrame({'a': [10, 10, 9],
+                            'b': [1.0, nan, nan],
+                            'c': ['z', 'e', 'e'],
+                            'd': [True, False, True],
+                            'e': [4, 20, 30],
+                            'f': ['ad', None, 'ad'],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nlargest(2, 'c', keep='first')
+        df2 = de.DataFrame({'a': [10, 10],
+                            'b': [1.0, nan],
+                            'c': ['z', 'e'],
+                            'd': [True, False],
+                            'e': [4, 20],
+                            'f': ['ad', None],
+                            'g': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nlargest(2, 'c', keep='last')
+        df2 = de.DataFrame({'a': [10, 9],
+                            'b': [1.0, nan],
+                            'c': ['z', 'e'],
+                            'd': [True, True],
+                            'e': [4, 30],
+                            'f': ['ad', 'ad'],
+                            'g': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+    def test_nlargest_bool(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.nlargest(3, 'd', keep='all')
+        df2 = de.DataFrame({'a': [9, 10, 9, 10, 9],
+                            'b': [nan, 1.0, 0.0, nan, 0.0],
+                            'c': ['e', 'z', '', 'e', 'a'],
+                            'd': [True, True, False, False, False],
+                            'e': [30, 4, 0, 20, 4],
+                            'f': ['ad', 'ad', 'a', None, None],
+                            'g': [nan, nan, nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nlargest(3, 'd', keep='first')
+        df2 = de.DataFrame({'a': [9, 10, 9],
+                            'b': [nan, 1.0, 0.0],
+                            'c': ['e', 'z', ''],
+                            'd': [True, True, False],
+                            'e': [30, 4, 0],
+                            'f': ['ad', 'ad', 'a'],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nlargest(3, 'd', keep='last')
+        df2 = de.DataFrame({'a': [9, 10, 9],
+                            'b': [nan, 1.0, 0.0],
+                            'c': ['e', 'z', 'a'],
+                            'd': [True, True, False],
+                            'e': [30, 4, 4],
+                            'f': ['ad', 'ad', None],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+    def test_nsmallest_int(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.nsmallest(2, 'a', keep='all')
+        df2 = de.DataFrame({'a': [9, 9, 9],
+                            'b': [0.0, nan, 0.0],
+                            'c': ['', 'e', 'a'],
+                            'd': [False, True, False],
+                            'e': [0, 30, 4],
+                            'f': ['a', 'ad', None],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nsmallest(2, 'a', keep='first')
+        df2 = de.DataFrame({'a': [9, 9],
+                             'b': [0.0, nan],
+                             'c': ['', 'e'],
+                             'd': [False, True],
+                             'e': [0, 30],
+                             'f': ['a', 'ad'],
+                             'g': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nsmallest(2, 'a', keep='last')
+        df2 = de.DataFrame({'a': [9, 9],
+                            'b': [nan, 0.0],
+                            'c': ['e', 'a'],
+                            'd': [True, False],
+                            'e': [30, 4],
+                            'f': ['ad', None],
+                            'g': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+    def test_nsmallest_float(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.nsmallest(1, 'b')
+        df2 = de.DataFrame({'a': [9, 9],
+                            'b': [0.0, 0.0],
+                            'c': ['', 'a'],
+                            'd': [False, False],
+                            'e': [0, 4],
+                            'f': ['a', None],
+                            'g': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nsmallest(1, 'b', keep='first')
+        df2 = de.DataFrame({'a': [9],
+                            'b': [0.0],
+                            'c': [''],
+                            'd': [False],
+                            'e': [0],
+                            'f': ['a'],
+                            'g': [nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nsmallest(1, 'b', keep='last')
+        df2 = de.DataFrame({'a': [9],
+                            'b': [0.0],
+                            'c': ['a'],
+                            'd': [False],
+                            'e': [4],
+                            'f': [None],
+                            'g': [nan]})
+        assert_frame_equal(df1, df2)
+
+    def test_nsmallest_str(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.nsmallest(3, 'c', keep='all')
+        df2 = de.DataFrame({'a': [9, 9, 10, 9],
+                            'b': [0.0, 0.0, nan, nan],
+                            'c': ['', 'a', 'e', 'e'],
+                            'd': [False, False, False, True],
+                            'e': [0, 4, 20, 30],
+                            'f': ['a', None, None, 'ad'],
+                            'g': [nan, nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nsmallest(3, 'c', keep='first')
+        df2 = de.DataFrame({'a': [9, 9, 10],
+                            'b': [0.0, 0.0, nan],
+                            'c': ['', 'a', 'e'],
+                            'd': [False, False, False],
+                            'e': [0, 4, 20],
+                            'f': ['a', None, None],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nsmallest(3, 'c', keep='last')
+        df2 = de.DataFrame({'a': [9, 9, 9],
+                            'b': [0.0, 0.0, nan],
+                            'c': ['', 'a', 'e'],
+                            'd': [False, False, True],
+                            'e': [0, 4, 30],
+                            'f': ['a', None, 'ad'],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+    def test_nsmallest_bool(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.nsmallest(2, 'd', keep='all')
+        df2 = de.DataFrame({'a': [9, 10, 9],
+                            'b': [0.0, nan, 0.0],
+                            'c': ['', 'e', 'a'],
+                            'd': [False, False, False],
+                            'e': [0, 20, 4],
+                            'f': ['a', None, None],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nsmallest(2, 'd', keep='first')
+        df2 = de.DataFrame({'a': [9, 10],
+                            'b': [0.0, nan],
+                            'c': ['', 'e'],
+                            'd': [False, False],
+                            'e': [0, 20],
+                            'f': ['a', None],
+                            'g': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.nsmallest(2, 'd', keep='last')
+        df2 = de.DataFrame({'a': [10, 9],
+                            'b': [nan, 0.0],
+                            'c': ['e', 'a'],
+                            'd': [False, False],
+                            'e': [20, 4],
+                            'f': [None, None],
+                            'g': [nan, nan]})
         assert_frame_equal(df1, df2)
