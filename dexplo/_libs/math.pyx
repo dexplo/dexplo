@@ -2864,6 +2864,31 @@ def quick_select_float(ndarray[np.float64_t] a, int k):
         return quick_select_float(a2[:ct2], k - (len(a) - ct2))
     return pivot
 
+def quick_select_str(ndarray[object] a, int k):
+    cdef int i, n = len(a)
+    cdef int ct1 = 0
+    cdef int ct2 = 0
+
+    cdef int r = np.random.randint(n)
+    cdef str pivot = a[r]
+
+    cdef ndarray[object] a1 = np.empty(n, dtype='O')
+    cdef ndarray[object] a2 = np.empty(n, dtype='O')
+
+    for i in range(len(a)):
+        if a[i] < pivot:
+            a1[ct1] = a[i]
+            ct1 += 1
+        elif a[i] > pivot:
+            a2[ct2] = a[i]
+            ct2 += 1
+
+    if k <= ct1:
+        return quick_select_str(a1[:ct1], k)
+    elif k > len(a) - ct2:
+        return quick_select_str(a2[:ct2], k - (len(a) - ct2))
+    return pivot
+
 def nlargest_int(ndarray[np.int64_t] a, n):
     cdef int i, j, k, prev, prev2
     cdef int prev_arg, prev_arg2

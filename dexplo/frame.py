@@ -3333,21 +3333,50 @@ class DataFrame(object):
                     else:
                         order[-num_ties:] = np.append(order[is_ties], ties)[-num_ties:]
         else:
-            if n > len(self):
+
+            func_name = 'quick_select_' + utils.convert_kind_to_dtype(dtype)
+
+            if col_arr.dtype.kind == 'f':
+                not_na = ~np.isnan(col_arr)
+                col_arr_final = col_arr[not_na]
+            elif col_arr.dtype.kind == 'O':
+                not_na = ~_math.isna_str_1d(col_arr)
+                col_arr_final = col_arr[not_na]
+            elif col_arr.dtype.kind == 'b':
+                col_arr_final = col_arr.astype('int64')
+            else:
+                col_arr_final = col_arr
+
+            dtype = col_arr_final.dtype.kind
+
+            if n > len(col_arr):
                 asc = name == 'nsmallest'
                 return self.sort_values(column, ascending=asc)
-            func_name = 'quick_select_' + utils.convert_kind_to_dtype(dtype)
-            if col_arr.dtype.kind == 'f':
-                col_arr = col_arr[~np.isnan(col_arr)]
+
             if name == 'nlargest':
-                nth = -getattr(_math, func_name)(-col_arr, n)
-                idx = np.where(col_arr >= nth)[0]
-                vals = col_arr[idx]
-                idx_args = np.argsort(-vals, kind='mergesort')
+                if dtype == 'O':
+                    nth = _math.quick_select_str(col_arr_final, len(col_arr_final) - n)
+                    col_arr_final = _va.fill_str_none(col_arr, False)
+                    idx = np.where((col_arr_final >= nth) & not_na)[0]
+                    vals = col_arr_final[idx]
+                    idx_args = (len(vals) - 1 - np.argsort(vals[::-1], kind='mergesort'))[::-1]
+                else:
+                    nth = -getattr(_math, func_name)(-col_arr, n)
+                    if dtype == 'f':
+                        col_arr_final = col_arr
+                    idx = np.where(col_arr_final >= nth)[0]
+                    vals = col_arr_final[idx]
+                    idx_args = np.argsort(-vals, kind='mergesort')
             else:
-                nth = getattr(_math, func_name)(col_arr, n)
-                idx = np.where(col_arr >= nth)[0]
-                vals = col_arr[idx]
+                nth = getattr(_math, func_name)(col_arr_final, n)
+                if dtype == 'O':
+                    col_arr_final = _va.fill_str_none(col_arr, False)
+                    idx = np.where(col_arr_final >= nth & not_na)[0]
+                else:
+                    if dtype == 'f':
+                        col_arr_final = col_arr
+                    idx = np.where(col_arr_final >= nth)[0]
+                vals = col_arr_final[idx]
                 idx_args = np.argsort(vals, kind='mergesort')
 
             if keep == 'first':
