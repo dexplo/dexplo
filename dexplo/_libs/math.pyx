@@ -3096,7 +3096,7 @@ def nlargest_bool(ndarray[np.uint8_t, cast=True] a, n):
     cdef int i, j, k, prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
-    cdef ndarray[np.int64_t] topn_arg = np.argsort(-a[:n], kind='mergesort')
+    cdef ndarray[np.int64_t] topn_arg = np.argsort(~a[:n], kind='mergesort')
     cdef ndarray[np.uint8_t, cast=True] topn = a[topn_arg]
     cdef list ties = []
     cdef int n1 = n - 1
@@ -3303,7 +3303,7 @@ def nsmallest_str(ndarray[object] a, n):
 
     return topn_arg, ties
 
-def nlargest_bool(ndarray[np.uint8_t, cast=True] a, n):
+def nsmallest_bool(ndarray[np.uint8_t, cast=True] a, n):
     cdef int i, j, k, prev, prev2
     cdef int prev_arg, prev_arg2
     cdef int nr = len(a)
