@@ -3510,15 +3510,31 @@ class DataFrame(object):
             return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def isin(self, values):
+        if utils.is_scalar(values):
+            values = [values]
+
+        def separate_value_types(vals):
+            val_numbers = []
+            val_strings = []
+            for val in vals:
+                if isinstance(val, (float, int, np.number)):
+                    val_numbers.append(val)
+                elif isinstance(val, str):
+                    val_strings.append(val)
+            return val_numbers, val_strings
         if isinstance(values, list):
             for value in values:
                 if not utils.is_scalar(value):
                     raise ValueError('All values in list must be either int, float, str, or bool')
             arrs = []
+            val_numbers, val_strings = separate_value_types(values)
             dtype_add = {}
             for dtype, arr in self._data.items():
                 dtype_add[dtype] = utils.get_num_cols(arrs)
-                arrs.append(np.isin(arr, values))
+                if dtype == 'O':
+                    arrs.append(np.isin(arr, val_strings))
+                else:
+                    arrs.append(np.isin(arr, val_numbers))
 
             new_column_info = {}
             for col in self._columns:
@@ -3532,11 +3548,17 @@ class DataFrame(object):
             self._validate_column_name_list(list(values))
             arr_final = np.full(self.shape, False, dtype='bool')
             for col, vals in values.items():
+                if utils.is_scalar(vals):
+                    vals = [vals]
                 if not isinstance(vals, list):
-                    raise TypeError('The dictionary values must be lists')
+                    raise TypeError('The dictionary values must be lists or a scalar')
                 dtype, loc, order = self._column_info[col].values
                 col_arr = self._data[dtype][:, loc]
-                arr_final[:, order] = np.isin(col_arr, vals)
+                val_numbers, val_strings = separate_value_types(vals)
+                if dtype == 'O':
+                    arr_final[:, order] = np.isin(col_arr, val_strings)
+                else:
+                    arr_final[:, order] = np.isin(col_arr, val_numbers)
             new_data = {'b': arr_final}
             new_columns = self._columns.copy()
 
@@ -3544,6 +3566,8 @@ class DataFrame(object):
             for i, col in enumerate(self._columns):
                 new_column_info[col] = utils.Column('b', i, i)
             return self._construct_from_new(new_data, new_column_info, new_columns)
+        else:
+            raise TypeError("`values` must be a scalar, list, or dictionary of scalars/lists")
 
     def iterrows(self):
         values = self._values_c

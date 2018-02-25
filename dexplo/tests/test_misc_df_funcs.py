@@ -920,3 +920,86 @@ class TestFactorize:
                                   'ad'],
                             'g': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan]})
         assert_frame_equal(df1, df2)
+
+
+class TestIsIn:
+
+    def test_is_in_scalar_list(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.isin(0)
+        df2 = de.DataFrame({'a': [False, False, False, False, False],
+                            'b': [True, False, False, True, False],
+                            'c': [False, False, False, False, False],
+                            'd': [True, True, False, True, False],
+                            'e': [True, False, False, False, False],
+                            'f': [False, False, False, False, False],
+                            'g': [False, False, False, False, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.isin([9, 20])
+        df2 = de.DataFrame({'a': [True, False, True, True, False],
+                            'b': [False, False, False, False, False],
+                            'c': [False, False, False, False, False],
+                            'd': [False, False, False, False, False],
+                            'e': [False, True, False, False, False],
+                            'f': [False, False, False, False, False],
+                            'g': [False, False, False, False, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.isin([10, 55, 'e'])
+        df2 = de.DataFrame({'a': [False, True, False, False, True],
+                            'b': [False, False, False, False, False],
+                            'c': [False, True, True, False, False],
+                            'd': [False, False, False, False, False],
+                            'e': [False, False, False, False, False],
+                            'f': [False, False, False, False, False],
+                            'g': [False, False, False, False, False]})
+        assert_frame_equal(df1, df2)
+
+    def test_isin_dict(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.isin({'b': 0})
+        df2 = de.DataFrame({'a': [False, False, False, False, False],
+                            'b': [True, False, False, True, False],
+                            'c': [False, False, False, False, False],
+                            'd': [False, False, False, False, False],
+                            'e': [False, False, False, False, False],
+                            'f': [False, False, False, False, False],
+                            'g': [False, False, False, False, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.isin({'b': [0, 9, 'e', True]})
+        df2 = de.DataFrame({'a': [False, False, False, False, False],
+                            'b': [True, False, False, True, True],
+                            'c': [False, False, False, False, False],
+                            'd': [False, False, False, False, False],
+                            'e': [False, False, False, False, False],
+                            'f': [False, False, False, False, False],
+                            'g': [False, False, False, False, False]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.isin({'b': [0, 9, 'e', True], 'c': ['e', 5, 'z']})
+        df2 = de.DataFrame({'a': [False, False, False, False, False],
+                            'b': [True, False, False, True, True],
+                            'c': [False, True, True, False, True],
+                            'd': [False, False, False, False, False],
+                            'e': [False, False, False, False, False],
+                            'f': [False, False, False, False, False],
+                            'g': [False, False, False, False, False]})
+        assert_frame_equal(df1, df2)
