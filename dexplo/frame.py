@@ -3570,9 +3570,12 @@ class DataFrame(object):
             raise TypeError("`values` must be a scalar, list, or dictionary of scalars/lists")
 
     def iterrows(self):
-        values = self._values_c
-        for row in np.nditer(values, flags=['refs_ok', 'external_loop'], order='C'):
+        for row in np.nditer(self.values, flags=['refs_ok', 'external_loop'], order='C'):
             yield row
+
+    def __iter__(self):
+        raise NotImplementedError('Use the `iterrows` method to iterate row by row. '
+                                  'Manually write a `for` loop to iterate over each column.')
 
     def where(self, cond, x=None, y=None):
         if isinstance(cond, DataFrame):
@@ -3585,11 +3588,11 @@ class DataFrame(object):
                 raise TypeError('The `cond` numpy array must be boolean')
             if cond.shape[0] != self.shape[0]:
                 raise ValueError('`cond` array must have the same number of rows as '
-                                 f'calling DataFrame. {cond.shape[0]} ! {self.shape[0]}')
+                                 f'calling DataFrame. {cond.shape[0]} != {self.shape[0]}')
 
             if cond.shape[1] != self.shape[1] and cond.shape[1] != 1:
                 raise ValueError('`cond` must have either a single column or have the same number '
-                                 'of columns of the calling DataFrame')
+                                 'of columns as the calling DataFrame')
         else:
             raise TypeError('`cond` must be either a DataFrame or a NumPy array')
 
@@ -3688,8 +3691,8 @@ class DataFrame(object):
                     raise TypeError('`x` and `y` arrays have incompatible dtypes. `x` is numeric '
                                     'and `y` is not')
                 elif isinstance(x, str) and not isinstance(y, str):
-                    raise TypeError('`x` and `y` arrays have incompatible dtypes. `y` is str '
-                                    'and `x` is not')
+                    raise TypeError('`x` and `y` arrays have incompatible dtypes. `x` is str '
+                                    'and `y` is not')
                 elif isinstance(x, (bool, np.bool_)) and not isinstance(y, (bool, np.bool_)):
                     raise TypeError('`x` and `y` arrays have incompatible dtypes. `y` is bool '
                                     'and `x` is not')
@@ -3705,6 +3708,8 @@ class DataFrame(object):
         for dtype, arr in self._data.items():
             if cond.shape[1] != 1:
                 cond_dtype = cond[:, dtype_order[dtype]]
+            elif arr.shape[1] != 1:
+                cond_dtype = cond[:, [0] * arr.shape[1]]
             else:
                 cond_dtype = cond
 

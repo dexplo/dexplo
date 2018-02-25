@@ -1003,3 +1003,101 @@ class TestIsIn:
                             'f': [False, False, False, False, False],
                             'g': [False, False, False, False, False]})
         assert_frame_equal(df1, df2)
+
+
+class TestWhere:
+
+    def test_where_numeric_cols(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        cond = df[:, 'e'] > 9
+        df1 = df[:, ['a', 'b', 'd', 'e']].where(cond)
+        df2 = de.DataFrame({'a': [nan, 10.0, 9.0, nan, nan],
+                            'b': [nan, nan, nan, nan, nan],
+                            'd': [nan, 0.0, 1.0, nan, nan],
+                            'e': [nan, 20.0, 30.0, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df[:, ['a', 'b', 'e']].where(cond, 22)
+        df2 = de.DataFrame({'a': [nan, 22.0, 22.0, nan, nan],
+                            'b': [nan, 22.0, 22.0, nan, nan],
+                            'e': [nan, 22.0, 22.0, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df[:, ['a', 'b', 'e']].where(cond, 22, 99)
+        df2 = de.DataFrame({'a': [99, 22, 22, 99, 99],
+                            'b': [99, 22, 22, 99, 99],
+                            'e': [99, 22, 22, 99, 99]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.where(cond)
+        df2 = de.DataFrame({'a': [nan, 10.0, 9.0, nan, nan],
+                            'b': [nan, nan, nan, nan, nan],
+                            'c': [None, 'e', 'e', None, None],
+                            'd': [nan, 0.0, 1.0, nan, nan],
+                            'e': [nan, 20.0, 30.0, nan, nan],
+                            'f': [None, None, 'ad', None, None],
+                            'g': [nan, nan, nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+    def test_where_string_cols(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+        cond = df[:, 'e'] > 9
+
+        df1 = df[:, ['c', 'f']].where(cond)
+        df2 = de.DataFrame({'c': [None, 'e', 'e', None, None],
+                            'f': [None, None, 'ad', None, None]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df[:, ['c', 'f']].where(cond, 22, 99)
+        df2 = de.DataFrame({'c': [99, 22, 22, 99, 99], 'f': [99, 22, 22, 99, 99]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df[:, ['c', 'f']].where(cond, 't')
+        df2 = de.DataFrame({'c': [None, 't', 't', None, None], 'f': [None, 't', 't', None, None]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df[:, ['c', 'f']].where(cond, 't', 'y')
+        df2 = de.DataFrame({'c': ['y', 't', 't', 'y', 'y'], 'f': ['y', 't', 't', 'y', 'y']})
+        assert_frame_equal(df1, df2)
+
+    def test_where_array_xy(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+        cond = df[:, 'e'] > 9
+
+        df1 = df[:, ['c', 'f']].where(cond, np.arange(5), np.arange(10, 15))
+        df2 = de.DataFrame({'c': [10, 1, 2, 13, 14], 'f': [10, 1, 2, 13, 14]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df[:, ['c', 'f']].where(cond, np.arange(5), 99)
+        df2 = de.DataFrame({'c': [99, 1, 2, 99, 99], 'f': [99, 1, 2, 99, 99]})
+        assert_frame_equal(df1, df2)
+
+        with pytest.raises(TypeError):
+            df[:, ['c', 'f']].where(cond, np.arange(5), 'er')
+
+        df1 = df[:, ['c', 'f']].where(cond, y='er')
+        df2 = de.DataFrame({'c': ['er', 'e', 'e', 'er', 'er'], 'f': ['er', None, 'ad', 'er', 'er']})
+        assert_frame_equal(df1, df2)
+
