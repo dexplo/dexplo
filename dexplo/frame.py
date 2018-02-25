@@ -3420,6 +3420,9 @@ class DataFrame(object):
     def sample(self, n=None, frac=None, replace=False, weights=None, random_state=None,
                axis='rows'):
         axis_num = utils.convert_axis_string(axis)
+        if axis_num == 1:
+            raise NotImplementedError('No sampling columns yet')
+
         if not isinstance(replace, (bool, np.bool_)):
             raise TypeError('`replace` must be either True or False')
 

@@ -684,12 +684,12 @@ class TestNLargest:
 
         df1 = df.nsmallest(2, 'a', keep='first')
         df2 = de.DataFrame({'a': [9, 9],
-                             'b': [0.0, nan],
-                             'c': ['', 'e'],
-                             'd': [False, True],
-                             'e': [0, 30],
-                             'f': ['a', 'ad'],
-                             'g': [nan, nan]})
+                            'b': [0.0, nan],
+                            'c': ['', 'e'],
+                            'd': [False, True],
+                            'e': [0, 30],
+                            'f': ['a', 'ad'],
+                            'g': [nan, nan]})
         assert_frame_equal(df1, df2)
 
         df1 = df.nsmallest(2, 'a', keep='last')
@@ -820,4 +820,103 @@ class TestNLargest:
                             'e': [20, 4],
                             'f': [None, None],
                             'g': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+
+class TestFactorize:
+
+    def test_factorize(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        arr11, arr12 = df.factorize('a')
+        arr21, arr22 = (array([0, 1, 0, 0, 1]), array([9, 10]))
+
+        assert_array_equal(arr11, arr21)
+        assert_array_equal(arr12, arr22)
+
+        arr11, arr12 = df.factorize('b')
+        arr21, arr22 = (array([0, 1, 1, 0, 2]), array([0., nan, 1.]))
+
+        assert_array_equal(arr11, arr21)
+        assert_array_equal(arr12, arr22)
+
+        arr11, arr12 = df.factorize('c')
+        arr21, arr22 = (array([0, 1, 1, 2, 3]), array(['', 'e', 'a', 'z'], dtype=object))
+
+        assert_array_equal(arr11, arr21)
+        assert_array_equal(arr12, arr22)
+
+        arr11, arr12 = df.factorize('d')
+        arr21, arr22 = (array([0, 0, 1, 0, 1]), array([False, True]))
+
+        assert_array_equal(arr11, arr21)
+        assert_array_equal(arr12, arr22)
+
+    def test_sample(self):
+        data = {'a': [9, 10, 9, 9, 10],
+                'b': [0, nan, nan, 0, 1],
+                'c': [''] + list('eeaz'),
+                'd': [False, False, True, False, True],
+                'e': [0, 20, 30, 4, 4],
+                'f': ['a', nan, 'ad', None, 'ad'],
+                'g': [np.nan] * 5}
+        df = de.DataFrame(data)
+
+        df1 = df.sample(2, random_state=1)
+        df2 = de.DataFrame({'a': [9, 10],
+                            'b': [nan, nan],
+                            'c': ['e', 'e'],
+                            'd': [True, False],
+                            'e': [30, 20],
+                            'f': ['ad', None],
+                            'g': [nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        with pytest.raises(ValueError):
+            df.sample(10, random_state=1)
+
+        with pytest.raises(ValueError):
+            df.sample(3, frac=.3, random_state=1)
+
+        with pytest.raises(ValueError):
+            df.sample(frac=-1, random_state=1)
+
+        df1 = df.sample(frac=.5, random_state=1)
+        df2 = de.DataFrame({'a': [9, 10, 10],
+                            'b': [nan, nan, 1.0],
+                            'c': ['e', 'e', 'z'],
+                            'd': [True, False, True],
+                            'e': [30, 20, 4],
+                            'f': ['ad', None, 'ad'],
+                            'g': [nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.sample(12, random_state=1, replace=True)
+        df2 = de.DataFrame({'a': [9, 10, 9, 10, 9, 9, 9, 10, 10, 10, 10, 9],
+                            'b': [0.0, 1.0, 0.0, nan, 0.0, 0.0, 0.0, nan, 1.0, 1.0, nan, nan],
+                            'c': ['a', 'z', '', 'e', 'a', '', '', 'e', 'z', 'z', 'e', 'e'],
+                            'd': [False, True, False, False, False, False, False, False, True, True,
+                                  False, True],
+                            'e': [4, 4, 0, 20, 4, 0, 0, 20, 4, 4, 20, 30],
+                            'f': [None, 'ad', 'a', None, None, 'a', 'a', None, 'ad', 'ad', None,
+                                  'ad'],
+                            'g': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan]})
+        assert_frame_equal(df1, df2)
+
+        df1 = df.sample(12, random_state=1, replace=True, weights=[1, 5, 10, 3, 4])
+        df2 = de.DataFrame({'a': [9, 9, 9, 9, 10, 10, 10, 9, 9, 9, 9, 9],
+                            'b': [nan, 0.0, 0.0, nan, nan, nan, nan, nan, nan, nan, nan, nan],
+                            'c': ['e', 'a', '', 'e', 'e', 'e', 'e', 'e', 'e', 'e', 'e', 'e'],
+                            'd': [True, False, False, True, False, False, False, True, True, True,
+                                  True, True], 'e': [30, 4, 0, 30, 20, 20, 20, 30, 30, 30, 30, 30],
+                            'f': ['ad', None, 'a', 'ad', None, None, None, 'ad', 'ad', 'ad', 'ad',
+                                  'ad'],
+                            'g': [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan]})
         assert_frame_equal(df1, df2)

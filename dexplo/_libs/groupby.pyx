@@ -4,12 +4,13 @@ import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
 import cython
-from cpython cimport dict, set, list, tuple
+from cpython cimport set, list, tuple
 from libc.math cimport isnan, sqrt
 from numpy import nan
 from .math import min_max_int, min_max_int2, get_first_non_nan
 from libc.stdlib cimport malloc, free
 from cpython.bytes cimport PyBytes_FromStringAndSize
+from cpython cimport dict
 
 try:
     import bottleneck as bn
@@ -27,14 +28,12 @@ MIN_CHAR = chr(0)
 
 
 def get_group_assignment_str_1d(ndarray[object] a):
-    cdef int i, j, k
+    cdef int i
     cdef int nr = a.shape[0]
-    cdef int nc = a.shape[1]
     cdef int count = 0
     cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
     cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
     cdef dict d = {}
-    cdef tuple t
 
     for i in range(nr):
         group[i] = d.get(a[i], -1)
@@ -120,7 +119,7 @@ def get_group_assignment_int_1d(ndarray[np.int64_t] a):
 
 def get_group_assignment_int_bounded(ndarray[np.int64_t] a, np.int64_t low, np.int64_t high):
     cdef int i
-    cdef count = 0
+    cdef int count = 0
     cdef int n = len(a)
     cdef ndarray[np.int64_t] unique
     cdef np.int64_t rng
@@ -180,7 +179,7 @@ def get_group_assignment_int_2d(ndarray[np.int64_t, ndim=2] a):
 def get_group_assignment_int_bounded_2d(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] lows,
                                         ndarray[np.int64_t] highs, ndarray[np.int64_t] ranges, int total_range):
     cdef int i, j
-    cdef count = 0
+    cdef int count = 0
     cdef int n = len(a)
     cdef int nc = a.shape[1]
 
