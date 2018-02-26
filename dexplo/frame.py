@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 from numpy import nan, ndarray
 from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
-                    NoReturn, Set, Iterable, Any, TypeVar, Type)
+                    NoReturn, Set, Iterable, Any, TypeVar, Type, Generator)
 
 import dexplo.options as options
 import dexplo.utils as utils
@@ -397,7 +397,7 @@ class DataFrame(object):
                 i += 1
         return v
 
-    def _values_number_drop(self, columns: list, dtype_loc: Dict[str, List[int]],
+    def _values_number_drop(self, columns: List[str], dtype_loc: List[Tuple[str, int]],
                             np_dtype: str) -> ndarray:
         """
         Retrieve the array that consists only of integer and floats
@@ -3358,7 +3358,7 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def _nest(self, n: int, column: str, keep: bool, name: str) -> 'DataFrame':
+    def _nest(self, n: int, column: str, keep: str, name: str) -> 'DataFrame':
         if not isinstance(n, (int, np.integer)):
             raise TypeError('`n` must be an integer')
         if n < 1:
@@ -3472,8 +3472,10 @@ class DataFrame(object):
         groups, first_pos = getattr(_gb, func_name)(col_arr)
         return groups, col_arr[first_pos]
 
-    def sample(self, n=None, frac=None, replace=False, weights=None, random_state=None,
-               axis='rows'):
+    def sample(self, n: Optional[int] = None, frac: Optional[float] = None, replace: bool = False,
+               weights: Union[List, ndarray, None] = None,
+               random_state: Optional[Any] = None,
+               axis: str = 'rows') -> 'DataFrame':
         axis_num = utils.convert_axis_string(axis)
         if axis_num == 1:
             raise NotImplementedError('No sampling columns yet')
@@ -3544,8 +3546,8 @@ class DataFrame(object):
                 new_data[dtype] = arr[new_idx]
             return self._construct_from_new(new_data, new_column_info, new_columns)
         else:
-            column_ints = defaultdict(int)
-            data_dict = defaultdict(list)
+            column_ints: Dict[str, int] = defaultdict(int)
+            data_dict: Dict[str, List[ndarray]] = defaultdict(list)
             new_columns = []
             new_column_info = {}
             for i, num in enumerate(new_idx):
@@ -3564,11 +3566,13 @@ class DataFrame(object):
             new_data = utils.concat_stat_arrays(data_dict)
             return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def isin(self, values):
+    def isin(self, values: Union[
+        Scalar, List[Scalar], Dict[str, Union[Scalar, List[Scalar]]]]) -> 'DataFrame':
         if utils.is_scalar(values):
-            values = [values]
+            values = [values]  # type: ignore
 
-        def separate_value_types(vals):
+        def separate_value_types(vals: List[Scalar]) -> Tuple[
+            List[Union[float, int, bool]], List[str]]:
             val_numbers = []
             val_strings = []
             for val in vals:
@@ -3582,7 +3586,7 @@ class DataFrame(object):
             for value in values:
                 if not utils.is_scalar(value):
                     raise ValueError('All values in list must be either int, float, str, or bool')
-            arrs = []
+            arrs: List[ndarray] = []
             val_numbers, val_strings = separate_value_types(values)
             dtype_add = {}
             for dtype, arr in self._data.items():
@@ -3605,7 +3609,7 @@ class DataFrame(object):
             arr_final = np.full(self.shape, False, dtype='bool')
             for col, vals in values.items():
                 if utils.is_scalar(vals):
-                    vals = [vals]
+                    vals = [vals]  # type: ignore
                 if not isinstance(vals, list):
                     raise TypeError('The dictionary values must be lists or a scalar')
                 dtype, loc, order = self._column_info[col].values
@@ -3625,15 +3629,18 @@ class DataFrame(object):
         else:
             raise TypeError("`values` must be a scalar, list, or dictionary of scalars/lists")
 
-    def iterrows(self):
+    def iterrows(self) -> Generator:
         for row in np.nditer(self.values, flags=['refs_ok', 'external_loop'], order='C'):
             yield row
 
-    def __iter__(self):
+    def __iter__(self) -> NoReturn:
         raise NotImplementedError('Use the `iterrows` method to iterate row by row. '
                                   'Manually write a `for` loop to iterate over each column.')
 
-    def where(self, cond, x=None, y=None):
+    def where(self, cond: Union[ndarray, 'DataFrame'],
+              x: Union[Scalar, ndarray, 'DataFrame', None] = None,
+              y: Union[Scalar, ndarray, 'DataFrame', None] = None) -> 'DataFrame':
+
         if isinstance(cond, DataFrame):
             cond = cond.values
         if isinstance(cond, ndarray):
@@ -3672,16 +3679,17 @@ class DataFrame(object):
                     raise ValueError(f'`{name}` must have either a single column '
                                      'or have the same number of columns of the calling DataFrame')
 
-        def get_arr(arr):
+        def get_arr(arr: ndarray) -> ndarray:
             if arr.shape[1] == 1:
                 return arr
             else:
                 return arr[:, dtype_order[dtype]]
 
-        def get_curr_var(var, dtype, name):
+        def get_curr_var(var: Optional[ndarray], dtype: str, name: str) -> Optional[ndarray]:
             if var is None:
                 return None if dtype == 'O' else nan
 
+            types: Any
             if dtype == 'O':
                 good_dtypes = ['O', 'U']
                 types = str
@@ -3706,7 +3714,9 @@ class DataFrame(object):
             return var_curr
 
         # called when both x and y are given
-        def check_x_y_types(x, y):
+        def check_x_y_types(x: Union[Scalar, ndarray, 'DataFrame', None],
+                            y: Union[Scalar, ndarray, 'DataFrame', None]) -> Tuple[
+            ndarray, ndarray]:
             if isinstance(x, ndarray):
                 x = get_arr(x)
 
@@ -3759,7 +3769,7 @@ class DataFrame(object):
 
         dtype_col, dtype_loc, dtype_order = self._get_all_dtype_info()
 
-        data_dict = defaultdict(list)
+        data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         new_column_info = {}
         for dtype, arr in self._data.items():
             if cond.shape[1] != 1:
@@ -3799,7 +3809,7 @@ class DataFrame(object):
 
 class Grouper(object):
 
-    def __init__(self, df: DataFrame, columns: Union[str, List[str]]) -> None:
+    def __init__(self, df: DataFrame, columns: List[str]) -> None:
         self._df: DataFrame = df
         self._group_labels, self._group_position = self._create_groups(columns)
         self._group_columns = columns
@@ -3808,9 +3818,9 @@ class Grouper(object):
             warnings.warn("Each group contains exactly one row of data. "
                           "Are you sure you are grouping correctly?")
 
-    def _create_groups(self, columns: List[str]) -> Tuple:
+    def _create_groups(self, columns: Union[str, List[str]]) -> Tuple[ndarray, ndarray]:
         self._group_dtype_loc: Dict[str, List[int]] = defaultdict(list)
-        self._column_info = {}
+        self._column_info: ColInfoT = {}
         for i, col in enumerate(columns):
             dtype, loc, _ = self._df._column_info[col].values  # type: str, int, int
             cur_loc = len(self._group_dtype_loc[dtype])
@@ -3861,8 +3871,8 @@ class Grouper(object):
             arr_numbers = np.ascontiguousarray(arr_numbers)
             return getattr(_gb, func_name)(arr_str, arr_numbers)
 
-    def _get_group_col_data(self):
-        data_dict = defaultdict(list)
+    def _get_group_col_data(self) -> Dict[str, List[ndarray]]:
+        data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         for dtype, locs in self._group_dtype_loc.items():
             ix = np.ix_(self._group_position, locs)
             arr = self._df._data[dtype][ix]
@@ -3871,8 +3881,8 @@ class Grouper(object):
             data_dict[dtype].append(arr)
         return data_dict
 
-    def _get_group_col_data_all(self):
-        data_dict = defaultdict(list)
+    def _get_group_col_data_all(self) -> Dict[str, List[ndarray]]:
+        data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         for dtype, locs in self._group_dtype_loc.items():
             arr = self._df._data[dtype][:, locs]
             if arr.ndim == 1:
@@ -3880,36 +3890,36 @@ class Grouper(object):
             data_dict[dtype].append(arr)
         return data_dict
 
-    def _get_agg_name(self, name):
+    def _get_agg_name(self, name: str) -> str:
         i = 1
         while name in self._group_columns:
             name = name + str(i)
         return name
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return ("This is a groupby object. Here is some info on it:\n"
                 f"Grouping Columns: {self._group_columns}\n"
                 f"Number of Groups: {len(self._group_position)}")
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._group_position)
 
-    def _get_new_column_info(self):
-        new_column_info = {}
+    def _get_new_column_info(self) -> ColInfoT:
+        new_column_info: ColInfoT = {}
         for col, col_obj in self._column_info.items():
             new_column_info[col] = utils.Column(*col_obj.values)
         return new_column_info
 
     @property
-    def ngroups(self):
+    def ngroups(self) -> int:
         return len(self._group_position)
 
-    def _group_agg(self, name, ignore_str=True, add_positions=False, keep_group_cols=True,
-                   **kwargs):
+    def _group_agg(self, name: str, ignore_str:bool=True, add_positions:bool=False, keep_group_cols:bool=True,
+                   **kwargs) -> DataFrame:
         labels = self._group_labels
         size = len(self._group_position)
 
-        old_dtype_col = defaultdict(list)
+        old_dtype_col: Dict[str, List[str]] = defaultdict(list)
         for col, col_obj in self._df._column_info.items():
             if col not in self._group_columns:
                 old_dtype_col[col_obj.dtype].append(col)
@@ -3980,10 +3990,10 @@ class Grouper(object):
                                              len(new_columns) - 1)
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
-    def count(self):
+    def count(self) -> DataFrame:
         return self._group_agg('count', ignore_str=False)
 
-    def cumcount(self):
+    def cumcount(self) -> DataFrame:
         name = self._get_agg_name('cumcount')
         new_columns = np.array(self._group_columns + [name], dtype='O')
         cumcount = _gb.cumcount(self._group_labels, len(self._group_position))[:, np.newaxis]
@@ -3995,22 +4005,22 @@ class Grouper(object):
                                              len(new_columns) - 1)
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
-    def sum(self):
+    def sum(self) -> DataFrame:
         return self._group_agg('sum')
 
-    def prod(self):
+    def prod(self) -> DataFrame:
         return self._group_agg('prod')
 
-    def mean(self):
+    def mean(self) -> DataFrame:
         return self._group_agg('mean')
 
-    def max(self):
+    def max(self) -> DataFrame:
         return self._group_agg('max', False)
 
-    def min(self):
+    def min(self) -> DataFrame:
         return self._group_agg('min', False)
 
-    def first(self):
+    def first(self) -> DataFrame:
         new_columns = self._group_columns.copy()
         for col in self._df._columns:
             if col in self._group_columns:
@@ -4018,21 +4028,21 @@ class Grouper(object):
             new_columns.append(col)
         return self._df[self._group_position, new_columns]
 
-    def last(self):
+    def last(self) -> DataFrame:
         return self._group_agg('last', False)
 
-    def var(self, ddof=1):
-        return self._group_agg('var', add_positions=True, ddof=1)
+    def var(self, ddof=1) -> DataFrame:
+        return self._group_agg('var', add_positions=True, ddof=ddof)
 
-    def cov(self):
+    def cov(self) -> DataFrame:
         return self._cov_corr('cov')
 
-    def corr(self):
+    def corr(self) -> DataFrame:
         return self._cov_corr('corr')
 
-    def _cov_corr(self, name):
-        calc_columns = []
-        calc_dtype_loc = []
+    def _cov_corr(self, name: str) -> DataFrame:
+        calc_columns: List[str] = []
+        calc_dtype_loc: List[Tuple[str, int]] = []
         np_dtype = 'int64'
         for col in self._df._columns:
             if col in self._group_columns:
@@ -4050,7 +4060,7 @@ class Grouper(object):
         result = func(self._group_labels, len(self), data, [])
 
         data_dict = self._get_group_col_data()
-        data_dict_final = defaultdict(list)
+        data_dict_final: Dict[str, List[ndarray]] = defaultdict(list)
         for dtype, arrs in data_dict.items():
             data_dict_final[dtype] = [np.repeat(arrs[0], len(calc_columns), axis=0)]
 
@@ -4075,36 +4085,36 @@ class Grouper(object):
 
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
-    def any(self):
+    def any(self) -> DataFrame:
         return self._group_agg('any', False)
 
-    def all(self):
+    def all(self) -> DataFrame:
         return self._group_agg('all', False)
 
-    def median(self):
+    def median(self) -> DataFrame:
         return self._group_agg('median')
 
-    def nunique(self):
+    def nunique(self) -> DataFrame:
         return self._group_agg('nunique', False)
 
-    def head(self, n=5):
+    def head(self, n=5) -> DataFrame:
         row_idx = _gb.head(self._group_labels, len(self), n=n)
         return self._df[row_idx, :]
 
-    def tail(self, n=5):
+    def tail(self, n=5) -> DataFrame:
         row_idx = _gb.tail(self._group_labels, len(self), n=n)
         return self._df[row_idx, :]
 
-    def cummax(self):
+    def cummax(self) -> DataFrame:
         return self._group_agg('cummax', keep_group_cols=False)
 
-    def cummin(self):
+    def cummin(self) -> DataFrame:
         return self._group_agg('cummin', keep_group_cols=False)
 
-    def cumsum(self):
+    def cumsum(self) -> DataFrame:
         return self._group_agg('cumsum', keep_group_cols=False)
 
-    def cumprod(self):
+    def cumprod(self) -> DataFrame:
         return self._group_agg('cumprod', keep_group_cols=False)
 
 
