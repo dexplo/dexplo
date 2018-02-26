@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 from numpy import nan, ndarray
-from typing import (Union, Dict, List, Optional, Tuple, Callable,
+from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
                     NoReturn, Set, Iterable, Any, TypeVar, Type)
 
 import dexplo.options as options
@@ -29,7 +29,7 @@ ListIntNone = List[IntNone]
 
 ScalarT = TypeVar('ScalarT', int, float, str, bool)
 
-ColSelection = Union[int, str, slice, List[IntStr]]
+ColSelection = Union[int, str, slice, List[IntStr], 'DataFrame']
 RowSelection = Union[int, slice, List[int], 'DataFrame']
 Scalar = Union[int, str, bool, float]
 
@@ -738,13 +738,14 @@ class DataFrame(object):
                 raise ValueError('Length of boolean array must be the same as DataFrame. '
                                  f'{len(rs)} != {len(self)}')
         elif isinstance(rs, ndarray):
-            rs = utils.try_to_squeeze_array(rs)
-            if rs.dtype.kind == 'b':
-                if len(rs) != len(self):
+            row_array: ndarray = utils.try_to_squeeze_array(rs)
+            if row_array.dtype.kind == 'b':
+                if len(row_array) != len(self):
                     raise ValueError('Length of boolean array must be the same as DataFrame. '
                                      f'{len(rs)} != {len(self)}')
-            elif rs.dtype.kind != 'i':
+            elif row_array.dtype.kind != 'i':
                 raise TypeError('Row selection array data type must be either integer or boolean')
+            rs = row_array
         elif isinstance(rs, DataFrame):
             if rs.shape[0] != 1 and rs.shape[1] != 1:
                 raise ValueError('When using a DataFrame for selecting rows, it must have '
@@ -823,6 +824,22 @@ class DataFrame(object):
             new_data[dtype] = np.asfortranarray(arr)
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    @overload
+    def __getitem__(self, value: Tuple[List, slice]) -> 'DataFrame':
+        pass
+
+    @overload
+    def __getitem__(self, value: Tuple[slice, List]) -> 'DataFrame':
+        pass
+
+    @overload
+    def __getitem__(self, value: Tuple['DataFrame', slice]) -> 'DataFrame':
+        pass
+
+    @overload
+    def __getitem__(self, value: Tuple[slice, 'DataFrame']) -> 'DataFrame':
+        pass
 
     def __getitem__(self, value: Tuple[RowSelection,
                                        ColSelection]) -> Union[Scalar, 'DataFrame']:
@@ -1032,22 +1049,22 @@ class DataFrame(object):
         return data_dict, new_column_info
 
     def _get_both_column_info(self, other: 'DataFrame') -> Tuple:
-        kinds1 = []
-        kinds2 = []
-        locs1 = defaultdict(list)
-        locs2 = defaultdict(list)
-        ords1 = defaultdict(list)
-        ords2 = defaultdict(list)
-        cols1 = defaultdict(list)
-        cols2 = defaultdict(list)
+        kinds1: List[str] = []
+        kinds2: List[str] = []
+        locs1: Dict[str, List[int]] = defaultdict(list)
+        locs2: Dict[str, List[int]] = defaultdict(list)
+        ords1: Dict[str, List[int]] = defaultdict(list)
+        ords2: Dict[str, List[int]] = defaultdict(list)
+        cols1: Dict[str, List[str]] = defaultdict(list)
+        cols2: Dict[str, List[str]] = defaultdict(list)
 
-        columns1, columns2 = self._columns, other._columns
+        columns1, columns2 = self._columns, other._columns  # type: ndarray, ndarray
         if len(columns1) > len(columns2):
             columns2 = columns2.repeat(len(columns1))
         elif len(columns1) < len(columns2):
             columns1 = columns1.repeat(len(columns2))
 
-        for col1, col2 in zip(columns1, columns2):
+        for col1, col2 in zip(columns1, columns2):  # type: str, str
             dtype1, loc1, order1 = self._column_info[col1].values
             dtype2, loc2, order2 = other._column_info[col2].values
             kinds1.append(dtype1)
@@ -1060,9 +1077,9 @@ class DataFrame(object):
             cols2[dtype2].append(col2)
         return kinds1, kinds2, locs1, locs2, ords1, ords2, cols1, cols2
 
-    def _get_single_column_values(self, iloc):
+    def _get_single_column_values(self, iloc: int) -> ndarray:
         col = self._columns[iloc]
-        dtype, loc, order = self._column_info[col].values
+        dtype, loc, order = self._column_info[col].values  # type: str, int, int
         return self._data[dtype][:, loc]
 
     def _op(self, other: Any, op_string: str) -> 'DataFrame':
@@ -1083,10 +1100,12 @@ class DataFrame(object):
                                 'operating with a string')
 
         elif isinstance(other, DataFrame):
-            def get_cur_arr(self, other, dtype1, dtype2, locs1, locs2):
-                data1 = self._data[dtype1]
-                data2 = other._data[dtype2]
-                cur_locs1, cur_locs2 = locs1[dtype1], locs2[dtype2]
+            def get_cur_arr(self, other: 'DataFrame', dtype1: str, dtype2: str,
+                            locs1: Dict[str, List[int]],
+                            locs2: Dict[str, List[int]]):
+                data1: ndarray = self._data[dtype1]
+                data2: ndarray = other._data[dtype2]
+                cur_locs1, cur_locs2 = locs1[dtype1], locs2[dtype2]  # type: List[int], List[int]
                 if cur_locs1 != cur_locs2:
                     data1 = data1[:, cur_locs1]
                     data2 = data2[:, cur_locs2]
@@ -1094,7 +1113,7 @@ class DataFrame(object):
                 # TODO: multiply string by number dataframe. very rare occurrence
                 if dtype1 == 'O':
                     if self.shape == other.shape and op_string in stat.funcs_str2:
-                        func = stat.funcs_str2[op_string]
+                        func: Callable = stat.funcs_str2[op_string]
                         return func(data1, data2), cur_locs1
                     elif (self.shape[0] == 1 or other.shape[
                         0] == 1) and op_string in stat.funcs_str2_bc:
@@ -1104,24 +1123,33 @@ class DataFrame(object):
 
             if self.shape == other.shape or (self.shape[1] == other.shape[1] and (
                     self.shape[0] == 1 or other.shape[0] == 1)):
+                kinds1: List[str]
+                kinds2: List[str]
+                locs1: Dict[str, List[int]]
+                locs2: Dict[str, List[int]]
+                ords1: Dict[str, List[int]]
+                ords2: Dict[str, List[int]]
+                cols1: Dict[str, List[str]]
+                cols2: Dict[str, List[str]]
+
                 kinds1, kinds2, locs1, locs2, ords1, ords2, cols1, cols2 = \
-                    self._get_both_column_info(
-                        other)
-                data_dict = defaultdict(list)
-                new_column_info = {}
-                new_columns = self._columns.copy()
+                    self._get_both_column_info(other)
+                data_dict: Dict[str, List[ndarray]] = defaultdict(list)
+                new_column_info: ColInfoT = {}
+                new_columns: ndarray = self._columns.copy()
                 if kinds1 == kinds2:
                     # fast path for similar data frames
                     for dtype1 in self._data:
-                        arr_new, cur_locs1 = get_cur_arr(self, other, dtype1, dtype1, locs1, locs2)
-                        new_dtype = arr_new.dtype.kind
-                        cur_len = utils.get_num_cols(data_dict.get(new_dtype, []))
+                        arr_new, cur_locs1 = get_cur_arr(self, other, dtype1, dtype1, locs1,
+                                                         locs2)  # type: ndarray, List[int]
+                        new_dtype: str = arr_new.dtype.kind
+                        cur_len: int = utils.get_num_cols(data_dict.get(new_dtype, []))
                         data_dict[new_dtype].append(arr_new)
-                        old_info = zip(cols1[dtype1], cur_locs1, ords1[dtype1])
-                        for col, loc, order in old_info:
+                        old_info: Iterable = zip(cols1[dtype1], cur_locs1, ords1[dtype1])
+                        for col, loc, order in old_info:  # type: str, int, int
                             new_column_info[col] = utils.Column(new_dtype, loc + cur_len, order)
 
-                    new_data = utils.concat_stat_arrays(data_dict)
+                    new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
                     return self._construct_from_new(new_data, new_column_info, new_columns)
                 elif utils.check_compatible_kinds(kinds1, kinds2, [False] * len(kinds1)):
                     # fast path for single dtype frames
@@ -1145,8 +1173,8 @@ class DataFrame(object):
                             for col, loc, order in zip(cols1['O'], cur_locs1, ords1['O']):
                                 new_column_info[col] = utils.Column('O', loc, order)
 
-                        col_arrs1 = defaultdict(list)
-                        col_arrs2 = defaultdict(list)
+                        col_arrs1: Dict[str, List[ndarray]] = defaultdict(list)
+                        col_arrs2: Dict[str, List[ndarray]] = defaultdict(list)
 
                         for i, (kind1, kind2) in enumerate(zip(kinds1, kinds2)):
                             if kind1 == 'O':
@@ -1178,7 +1206,7 @@ class DataFrame(object):
                             new_data[dtype] = arr_new
                         return self._construct_from_new(new_data, new_column_info, new_columns)
                 else:
-                    for i, kind1, kind2 in enumerate(zip(kinds1, kinds2)):
+                    for i, (kind1, kind2) in enumerate(zip(kinds1, kinds2)):
                         if kind1 == 'O' and kind1 != 'O':
                             break
                         if kind1 in 'ifb' and kind2 not in 'ifb':
@@ -1186,10 +1214,17 @@ class DataFrame(object):
                     raise ValueError(f'Column {self._columns[i]} has an incompatible type '
                                      f'with column {other._columns[i]}')
             elif self.shape[0] == other.shape[0]:
-                ncol_self, ncol_other = self.shape[1], other.shape[1]
+                ncol_self, ncol_other = self.shape[1], other.shape[1]  # type: int, int
                 if ncol_self == 1 or ncol_other == 1:
                     kinds1, kinds2, locs1, locs2, ords1, ords2, cols1, cols2 = \
                         self._get_both_column_info(other)
+
+                    larger_df: 'DataFrame'
+                    smaller_df: 'DataFrame'
+                    cols_final: Dict[str, List[str]]
+                    locs_final: Dict[str, List[int]]
+                    ords_final: Dict[str, List[int]]
+                    ncol_larger: int
 
                     if ncol_self > ncol_other:
                         larger_df, cols_final, locs_final, ords_final = self, cols1, locs1, ords1
@@ -1266,7 +1301,7 @@ class DataFrame(object):
         else:
             raise TypeError('other must be int, float, str, bool, array or DataFrame')
 
-        new_data: Dict[str, ndarray] = {}
+        new_data = {}
         for dt, arrs in dd.items():
             if len(arrs) == 1:
                 new_data[dt] = arrs[0]
@@ -1479,7 +1514,7 @@ class DataFrame(object):
         Removes column from _colum_dtype, and _data
         Keeps column name in _columns
         """
-        dtype, loc, order = self._column_info.pop(column).values  # type: str, int, int
+        dtype, loc, order = self._column_info.pop(column).values
         self._data[dtype] = np.delete(self._data[dtype], loc, axis=1)
         if self._data[dtype].shape[1] == 0:
             del self._data[dtype]
@@ -1727,7 +1762,7 @@ class DataFrame(object):
             raise KeyError(f'Column {column} does not exist')
 
     def _validate_column_name_list(self, columns: list) -> None:
-        col_set = set()
+        col_set: Set[str] = set()
         for col in columns:
             self._validate_column_name(col)
             if col in col_set:
@@ -2221,7 +2256,7 @@ class DataFrame(object):
                   for col in self._columns]
         return np.array(dtypes, dtype='O')
 
-    def _null_pct(self):
+    def _null_pct(self) -> 'DataFrame':
         return self.isna().mean()
 
     def describe(self, percentiles: List[float] = [.25, .5, .75],
@@ -2337,7 +2372,7 @@ class DataFrame(object):
             return self[:, criteria]
         return self[criteria, :]
 
-    def cov(self):
+    def cov(self) -> 'DataFrame':
         """
         Computes the covariance between each column.
 
@@ -2388,7 +2423,7 @@ class DataFrame(object):
         new_data['O'] = np.asfortranarray(new_columns[1:])[:, np.newaxis]
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def corr(self):
+    def corr(self) -> 'DataFrame':
         """
         Computes the correlation between each column. Only does pearson correlation for now.
 
@@ -2446,8 +2481,8 @@ class DataFrame(object):
         new_data['O'] = np.asfortranarray(new_columns[1:])[:, np.newaxis]
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def unique(self, subset: Union[str, List[str], None] = None, only_subset=False,
-               keep='first') -> ndarray:
+    def unique(self, subset: Union[str, List[str], None] = None, only_subset: bool = False,
+               keep: str = 'first') -> ndarray:
         """
         Finds the unique elements of a single column in the order that they appeared
 
@@ -2478,24 +2513,29 @@ class DataFrame(object):
         if keep not in ('first', 'last', 'none'):
             raise ValueError('`keep` must be either "first", "last", or "none"')
 
-        def keep_all(arr_keep):
-            new_data = {}
-            for dtype, arr in self._data.items():
+        def keep_all(arr_keep: ndarray) -> 'DataFrame':
+            new_data: Dict[str, ndarray] = {}
+            for dtype, arr in self._data.items():  # type: str, ndarray
                 new_data[dtype] = arr[np.ix_(arr_keep)]
-            new_columns = self._columns.copy()
-            new_column_info = self._copy_column_info()
+            new_columns: ndarray = self._columns.copy()
+            new_column_info: ColInfoT = self._copy_column_info()
             return self._construct_from_new(new_data, new_column_info, new_columns)
 
-        def keep_subset(arr_keep, dtype_col, dtype_loc, new_columns, new_col_order):
-            new_data = {}
-            new_column_info = {}
-            for dtype, locs in dtype_loc.items():
-                arr = self._data[dtype]
+        def keep_subset(arr_keep: ndarray,
+                        dtype_col: Dict[str, List[str]],
+                        dtype_loc: Dict[str, List[int]],
+                        new_columns: ndarray,
+                        new_col_order: Dict[str, int]) -> 'DataFrame':
+
+            new_data: Dict[str, ndarray] = {}
+            new_column_info: ColInfoT = {}
+            for dtype, locs in dtype_loc.items():  # type: str, List[int]
+                arr: ndarray = self._data[dtype]
                 if arr.shape[1] == len(locs):
                     new_data[dtype] = arr[arr_keep]
-                    cur_locs = locs
+                    cur_locs: List[int] = locs
                 else:
-                    arr_new = arr[np.ix_(arr_keep, locs)]
+                    arr_new: ndarray = arr[np.ix_(arr_keep, locs)]
                     if arr_new.ndim == 1:
                         arr_new = arr_new[:, np.newaxis]
                     new_data[dtype] = arr_new
@@ -2510,17 +2550,17 @@ class DataFrame(object):
             dtype_col, dtype_loc, new_columns, new_col_order = self._get_all_dtype_info_subset(
                 subset)
 
-            arrs = []
-            has_obj = False
-            has_nums = False
+            arrs: List[ndarray] = []
+            has_obj: bool = False
+            has_nums: bool = False
             for dtype, locs in dtype_loc.items():
-                arr = self._data[dtype]
+                arr: ndarray = self._data[dtype]
                 if keep == 'last':
                     arr = arr[::-1]
                 if dtype == 'O':
                     has_obj = True
                     if len(locs) != arr.shape[1]:
-                        arr_obj = arr[:, locs]
+                        arr_obj: ndarray = arr[:, locs]
                     else:
                         arr_obj = arr
                 else:
@@ -2532,7 +2572,7 @@ class DataFrame(object):
 
             if has_nums:
                 if len(arrs) > 1:
-                    arr_numbers = np.column_stack(arrs)
+                    arr_numbers: ndarray = np.column_stack(arrs)
                 else:
                     arr_numbers = arrs[0]
                 arr_numbers = np.ascontiguousarray(arr_numbers)
@@ -2550,7 +2590,7 @@ class DataFrame(object):
                 else:
                     arr_keep = _uq.unique_str_none_2d(arr_obj)
             elif not has_obj and has_nums:
-                func_name = 'unique_' + utils.convert_kind_to_dtype(dtype) + '_none'
+                func_name: str = 'unique_' + utils.convert_kind_to_dtype(dtype) + '_none'
                 if arr_numbers.ndim == 2:
                     func_name += '_2d'
                 arr_keep = getattr(_uq, func_name)(arr_numbers)
@@ -2568,9 +2608,9 @@ class DataFrame(object):
                 return keep_all(arr_keep)
 
         if len(subset) == 1:
-            col = subset[0]
+            col: str = subset[0]
             kind, loc, _ = self._column_info[col].values  # type: str, int, int
-            arr: ndarray = self._data[kind][:, loc]
+            arr = self._data[kind][:, loc]
 
             if keep == 'last':
                 arr = arr[::-1]
@@ -2690,12 +2730,16 @@ class DataFrame(object):
         """
         return self._stat_funcs('nunique', axis, count_na=count_na)
 
-    def fillna(self, values=None, method=None, limit=None, fill_function=None):
+    def fillna(self,
+               values: Union[Scalar, Dict[str, Scalar], None] = None,
+               method: Optional[str] = None,
+               limit: Optional[int] = None,
+               fill_function: Optional[str] = None) -> 'DataFrame':
         """
 
         Parameters
         ----------
-        values: numbe, string or  dictionary of column name to fill value
+        values: number, string or  dictionary of column name to fill value
         method : {'bfill', 'ffill'}
         limit : positive integer
         fill_function : {'mean', 'median'}
@@ -2721,7 +2765,7 @@ class DataFrame(object):
             if self._is_string():
                 raise TypeError("You're DataFrame contains only str columns and you are "
                                 "trying to pass a number to fill in missing values")
-            new_data = {}
+            new_data: Dict[str, ndarray] = {}
             for dtype, arr in self._data.items():
                 arr = arr.copy('F')
                 if dtype == 'f':
@@ -2732,7 +2776,7 @@ class DataFrame(object):
                             dtype2, loc, _ = self._column_info[col].values
                             if dtype2 == 'f':
                                 col_arr = arr[:, loc]
-                                idx = np.where(np.isnan(col_arr))[0][:limit]
+                                idx: ndarray = np.where(np.isnan(col_arr))[0][:limit]
                                 # the following operation is a view of arr
                                 col_arr[idx] = values
                         new_data['f'] = arr
@@ -2750,7 +2794,7 @@ class DataFrame(object):
                         dtype2, loc, _ = self._column_info[col].values
                         if dtype2 == 'O':
                             col_arr = arr[:, loc]
-                            na_arr = _math.isna_str_1d(col_arr)
+                            na_arr: ndarray = _math.isna_str_1d(col_arr)
                             idx = np.where(na_arr)[0][:limit]
                             col_arr[idx] = values
 
@@ -2759,7 +2803,7 @@ class DataFrame(object):
                     new_data[dtype] = arr
         elif isinstance(values, dict):
             self._validate_column_name_list(list(values))
-            dtype_locs = defaultdict(list)
+            dtype_locs: Dict[str, List[Tuple[str, int, Scalar]]] = defaultdict(list)
             for col, val in values.items():
                 dtype, loc, _ = self._column_info[col].values
                 if dtype in 'fO':
@@ -2772,8 +2816,8 @@ class DataFrame(object):
                 if not isinstance(new_val, str):
                     raise TypeError(f'Column {col} has dtype {dtype}. Must set with a str')
 
-            arr_float = self._data.get('f', []).copy('F')
-            arr_str = self._data.get('O', []).copy('F')
+            arr_float: ndarray = self._data.get('f', []).copy('F')
+            arr_str: ndarray = self._data.get('O', []).copy('F')
             for col, loc, new_val in dtype_locs['f']:
                 if limit >= len(self):
                     arr_float[:, loc] = np.where(np.isnan(arr_float[:, loc]), new_val,
@@ -2849,7 +2893,8 @@ class DataFrame(object):
         new_column_info = self._copy_column_info()
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def _replace_nans(self, dtype, col_arr, asc, hasnans, return_na_arr=False):
+    def _replace_nans(self, dtype: str, col_arr: ndarray, asc: bool, hasnans: ndarray,
+                      return_na_arr: bool = False):
         if dtype == 'O':
             if hasnans or hasnans is None:
                 if asc:
@@ -2857,8 +2902,8 @@ class DataFrame(object):
                 else:
                     nan_value = ''
                 if col_arr.ndim == 1:
-                    na_arr = _math.isna_str_1d(col_arr)
-                    arr_final = np.where(na_arr, nan_value, col_arr)
+                    na_arr: ndarray = _math.isna_str_1d(col_arr)
+                    arr_final: ndarray = np.where(na_arr, nan_value, col_arr)
                 else:
                     hasnans = np.array([True] * col_arr.shape[1])
                     na_arr = _math.isna_str(col_arr, hasnans)
@@ -2880,7 +2925,7 @@ class DataFrame(object):
             return arr_final
 
     def sort_values(self, by: Union[str, List[str]], axis: str = 'rows',
-                    ascending: Union[bool, List[bool]] = True):
+                    ascending: Union[bool, List[bool]] = True) -> 'DataFrame':
         axis_num = utils.convert_axis_string(axis)
         if axis_num == 1:
             raise NotImplementedError('Not implemented for sorting rows')
@@ -2909,16 +2954,16 @@ class DataFrame(object):
             col = by[0]
             dtype, loc, _ = self._column_info[col].values
             col_arr = self._data[dtype][:, loc]
-            hasnans = self._hasnans.get(col, True)
+            hasnans: ndarray = self._hasnans.get(col, True)
             asc = ascending[0]
             col_arr = self._replace_nans(dtype, col_arr, asc, hasnans)
-            count_sort = False
+            count_sort: bool = False
             if dtype == 'O':
                 if len(col_arr) > 1000 and len(set(np.random.choice(col_arr, 100))) <= 70:
-                    d = _sr.sort_str_map(col_arr, asc)
-                    arr = _sr.replace_str_int(col_arr, d)
-                    counts = _sr.count_int_ordered(arr, len(d))
-                    new_order = _sr.get_idx(arr, counts)
+                    d: ndarray = _sr.sort_str_map(col_arr, asc)
+                    arr: ndarray = _sr.replace_str_int(col_arr, d)
+                    counts: ndarray = _sr.count_int_ordered(arr, len(d))
+                    new_order: ndarray = _sr.get_idx(arr, counts)
                     count_sort = True
                 else:
                     col_arr = col_arr.astype('U')
@@ -2932,7 +2977,7 @@ class DataFrame(object):
                 else:
                     new_order = np.argsort(col_arr[::-1], kind='mergesort')
 
-            new_data = {}
+            new_data: Dict[str, ndarray] = {}
             for dtype, arr in self._data.items():
                 np_dtype = utils.convert_kind_to_numpy(dtype)
                 arr_final = np.empty(arr.shape, dtype=np_dtype, order='F')
@@ -2947,7 +2992,7 @@ class DataFrame(object):
 
             return self._construct_from_new(new_data, new_column_info, new_columns)
         else:
-            single_cols = []
+            single_cols: List[ndarray] = []
             for col, asc in zip(by, ascending):
                 dtype, loc, _ = self._column_info[col].values
                 col_arr = self._data[dtype][:, loc]
@@ -2986,10 +3031,13 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def _get_all_dtype_info(self):
-        dtype_col = defaultdict(list)
-        dtype_loc = defaultdict(list)
-        dtype_order = defaultdict(list)
+    def _get_all_dtype_info(self) -> Tuple[Dict[str, List[str]],
+                                           Dict[str, List[int]],
+                                           Dict[str, List[int]]]:
+
+        dtype_col: Dict[str, List[str]] = defaultdict(list)
+        dtype_loc: Dict[str, List[int]] = defaultdict(list)
+        dtype_order: Dict[str, List[int]] = defaultdict(list)
 
         for col in self._columns:
             dtype, loc, order = self._column_info[col].values
@@ -2998,10 +3046,12 @@ class DataFrame(object):
             dtype_col[dtype].append(col)
         return dtype_col, dtype_loc, dtype_order
 
-    def _get_all_dtype_info_subset(self, subset=None):
-        dtype_col = defaultdict(list)
-        dtype_loc = defaultdict(list)
-        new_col_order = {}
+    def _get_all_dtype_info_subset(self, subset: Optional[List[str]] = None) -> Tuple[
+        Dict[str, List[str]], Dict[str, List[int]], ndarray, Dict[str, int]]:
+
+        dtype_col: Dict[str, List[str]] = defaultdict(list)
+        dtype_loc: Dict[str, List[int]] = defaultdict(list)
+        new_col_order: Dict[str, int] = {}
 
         if subset is None or len(subset) == len(self._columns):
             for i, col in enumerate(self._columns):
@@ -3027,7 +3077,8 @@ class DataFrame(object):
 
         return dtype_col, dtype_loc, new_columns, new_col_order
 
-    def rank(self, axis='rows', method='min', na_option='keep', ascending=True):
+    def rank(self, axis: str = 'rows', method: str = 'min', na_option: str = 'keep',
+             ascending: bool = True) -> 'DataFrame':
         axis_num = utils.convert_axis_string(axis)
         if axis_num == 1:
             raise NotImplementedError('Can only rank columns for now :(')
@@ -3046,13 +3097,13 @@ class DataFrame(object):
         else:
             raise ValueError("`na_option must be 'keep', 'top', or 'bottom'")
 
-        def get_cur_rank(dtype, arr):
+        def get_cur_rank(dtype: str, arr: ndarray) -> ndarray:
             if na_option == 'keep' and dtype in 'fO':
                 arr, na_arr = self._replace_nans(dtype, arr, na_asc, True, True)
             else:
                 arr = self._replace_nans(dtype, arr, na_asc, True)
 
-            func_name = 'rank_' + utils.convert_kind_to_dtype(dtype) + '_' + method
+            func_name: str = 'rank_' + utils.convert_kind_to_dtype(dtype) + '_' + method
 
             if not ascending:
                 if dtype == 'O':
@@ -3077,8 +3128,8 @@ class DataFrame(object):
             return cur_rank
 
         dtype_col, dtype_loc, dtype_order = self._get_all_dtype_info()
-        data_dict = defaultdict(list)
-        new_column_info = {}
+        data_dict: Dict[str, List[ndarray]] = defaultdict(list)
+        new_column_info: ColInfoT = {}
         for dtype, arr in self._data.items():
             cur_rank = get_cur_rank(dtype, arr)
             new_dtype = cur_rank.dtype.kind
@@ -3092,7 +3143,8 @@ class DataFrame(object):
         new_columns = self._columns.copy()
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def value_counts(self, col, normalize=False, sort=True, dropna=True):
+    def value_counts(self, col: str, normalize: bool = False, sort: bool = True,
+                     dropna: bool = True) -> 'DataFrame':
         if not isinstance(col, str):
             raise TypeError('`col` must be the name of a column')
         self._validate_column_name(col)
@@ -3139,7 +3191,7 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def groupby(self, columns):
+    def groupby(self, columns: Union[str, List[str]]) -> 'Grouper':
         if isinstance(columns, list):
             self._validate_column_name_list(columns)
         elif isinstance(columns, str):
@@ -3149,7 +3201,8 @@ class DataFrame(object):
             raise ValueError('Must pass in grouping column(s) as a string or list of strings')
         return Grouper(self, columns)
 
-    def streak(self, column=None, value=None, group=False):
+    def streak(self, column: Optional[str] = None, value: Optional[Scalar] = None,
+               group: bool = False) -> ndarray:
         """
         Three types of streaks for a single column. Must specify Column
         All values - begin at 1, value=None
@@ -3201,7 +3254,7 @@ class DataFrame(object):
             func = getattr(_math, func_name)
             return func(col_arr)
 
-    def rename(self, columns):
+    def rename(self, columns: Union[str, List[str]]) -> 'DataFrame':
         """
         pass in a list to rename all columns
         use a dictionary to rename specific columns
@@ -3241,7 +3294,9 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def drop(self, rows=None, columns=None):
+    def drop(self,
+             rows: Union[int, List[int], ndarray, None] = None,
+             columns: Union[int, List[IntStr], ndarray, None] = None):
         if isinstance(rows, int):
             rows = [rows]
         elif isinstance(rows, ndarray):
@@ -3253,7 +3308,7 @@ class DataFrame(object):
         else:
             rows = []
 
-        new_rows = []
+        new_rows: List[int] = []
         for row in rows:
             if not isinstance(row, int):
                 raise TypeError('All the row values in your list must be integers')
@@ -3275,7 +3330,7 @@ class DataFrame(object):
         else:
             columns = []
 
-        column_strings = []
+        column_strings: List[str] = []
         for col in columns:
             if isinstance(col, str):
                 column_strings.append(col)
@@ -3283,14 +3338,14 @@ class DataFrame(object):
                 column_strings.append(self._columns[col])
 
         self._validate_column_name_list(column_strings)
-        column_set = set(column_strings)
+        column_set: Set[str] = set(column_strings)
 
         # todo: can avoid checking if rows/columns is None
         new_rows = np.isin(np.arange(len(self)), new_rows, invert=True)
         new_columns = [col for col in self._columns if col not in column_set]
 
-        new_column_info = {}
-        data_dict = defaultdict(list)
+        new_column_info: ColInfoT = {}
+        data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         for i, col in enumerate(new_columns):
             dtype, loc, _ = self._column_info[col].values
             cur_loc = len(data_dict[dtype])
@@ -3303,7 +3358,7 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def _nest(self, n, column, keep, name):
+    def _nest(self, n: int, column: str, keep: bool, name: str) -> 'DataFrame':
         if not isinstance(n, (int, np.integer)):
             raise TypeError('`n` must be an integer')
         if n < 1:
@@ -3403,13 +3458,13 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def nlargest(self, n, column, keep='all'):
+    def nlargest(self, n: int, column: str, keep: str = 'all'):
         return self._nest(n, column, keep, 'nlargest')
 
-    def nsmallest(self, n, column, keep='all'):
+    def nsmallest(self, n: int, column: str, keep: str = 'all'):
         return self._nest(n, column, keep, 'nsmallest')
 
-    def factorize(self, column):
+    def factorize(self, column: str) -> Tuple[ndarray, ndarray]:
         self._validate_column_name(column)
         dtype, loc, _ = self._column_info[column].values
         func_name = 'get_group_assignment_' + utils.convert_kind_to_dtype(dtype) + '_1d'
@@ -3522,6 +3577,7 @@ class DataFrame(object):
                 elif isinstance(val, str):
                     val_strings.append(val)
             return val_numbers, val_strings
+
         if isinstance(values, list):
             for value in values:
                 if not utils.is_scalar(value):
