@@ -84,7 +84,13 @@ funcs = {'i': {'min': m.min_int,
                'cummin': m.cummin_str,
                'cummax': m.cummax_str,
                'cumsum': m.cumsum_str,
-               'nunique': m.nunique_str}}
+               'nunique': m.nunique_str},
+
+         'M': {'min': m.min_int,
+               'max': m.max_int},
+
+         'm': {'min': m.min_int,
+               'max': m.max_int}}
 
 funcs_columns = {'sum': mc.sum_columns,
                  'max': mc.max_columns,

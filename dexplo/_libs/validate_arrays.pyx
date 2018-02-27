@@ -213,3 +213,19 @@ def fill_str_none(ndarray[object] a, np.uint8_t high):
         else:
             b[i] = a[i]
     return b
+
+def make_object_datetime_array(ndarray[object, ndim=2] a, ndarray[np.uint64_t] b, int j, str unit):
+    cdef int i
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+
+    for i in range(nr):
+        a[i, j] = np.datetime64(b[i], unit)
+
+def make_object_timedelta_array(ndarray[object, ndim=2] a, ndarray[np.uint64_t] b, int j, str unit):
+    cdef int i
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+
+    for i in range(nr):
+        a[i, j] = np.timedelta64(b[i], unit)

@@ -240,7 +240,7 @@ class DataFrame(object):
         -------
         None
         """
-        data_dict: Dict[str, List[ndarray]] = {'f': [], 'i': [], 'b': [], 'O': []}
+        data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         for i, (col, values) in enumerate(data.items()):
             if isinstance(values, list):
                 arr: ndarray = utils.convert_list_to_single_arr(values)
@@ -274,10 +274,12 @@ class DataFrame(object):
         None
         """
         kind: str = data.dtype.kind
-        if kind == 'S':
-            data = data.astype('U').astype('O')
-        elif kind == 'U':
+        if kind == 'U':
             data = data.astype('O')
+        elif kind == 'M':
+            data = data.astype('datetime64[ns]')
+        elif kind == 'm':
+            data = data.astype('timedelta64[ns]')
 
         if data.ndim == 1:
             data = data[:, np.newaxis]
@@ -338,7 +340,7 @@ class DataFrame(object):
             order = [self._column_info[col].loc for col in self._columns]
             return self._data[kind][:, order]
 
-        if 'b' in self._data or 'O' in self._data:
+        if 'b' in self._data or 'O' in self._data or 'm' in self._data or 'M' in self._data:
             arr_dtype: str = 'O'
         else:
             arr_dtype = 'float64'
@@ -347,29 +349,16 @@ class DataFrame(object):
 
         for col, col_obj in self._column_info.items():
             dtype, loc, order2 = col_obj.values  # type: str, int, int
-            v[:, order2] = self._data[dtype][:, loc]
-        return v
-
-    @property
-    def _values_c(self) -> ndarray:
-        """
-        Retrieve a single 2-d array of all the data in the correct column order
-        """
-        if len(self._data) == 1:
-            kind: str = list(self._data.keys())[0]
-            order = [col_obj.loc for col, col_obj in self._column_info.items()]
-            return np.ascontiguousarray(self._data[kind][:, order])
-
-        if 'b' in self._data or 'O' in self._data:
-            arr_dtype: str = 'O'
-        else:
-            arr_dtype = 'float64'
-
-        v: ndarray = np.empty(self.shape, dtype=arr_dtype, order='C')
-
-        for col, col_obj in self._column_info.items():
-            dtype, loc, order2 = col_obj.values  # type: str, int, int
-            v[:, order2] = self._data[dtype][:, loc]
+            col_arr = self._data[dtype][:, loc]
+            if dtype == 'M':
+                unit = col_arr.dtype.name.replace(']', '').split('[')[1]
+                # changes array in place
+                _va.make_object_datetime_array(v, col_arr.view('uint64'), order2, unit)
+            elif dtype == 'm':
+                unit = col_arr.dtype.name.replace(']', '').split('[')[1]
+                _va.make_object_timedelta_array(v, col_arr.view('uint64'), order2, unit)
+            else:
+                v[:, order2] = col_arr
         return v
 
     def _values_number(self) -> ndarray:
@@ -417,10 +406,6 @@ class DataFrame(object):
         """
         Retrieve all the DataFrame values into an array. Booleans will be coerced to ints
         """
-        # if len(self._data) == 1:
-        #     kind: str = list(self._data.keys())[0]
-        #     return self._data[kind]
-
         if 'O' in self._data and 'O' in kinds:
             arr_dtype: str = 'O'
         elif 'f' in self._data and 'f' in kinds:
@@ -478,7 +463,20 @@ class DataFrame(object):
 
         for column in columns:
             if column != '...':
-                data = [column] + self._get_column_values(column)[idx].tolist()
+                vals = self._get_column_values(column)[idx]
+                dtype = self._column_info[column].dtype
+                if dtype == 'M':
+                    unit = utils.get_datetime_str(vals)
+                    vals = vals.astype(f'datetime64[{unit}]')
+                    data = [column] + [str(val).replace('T', ' ') if not np.isnat(val)
+                                       else str(val) for val in vals]
+                elif dtype == 'm':
+                    unit = utils.get_timedelta_str(vals)
+                    vals = vals.astype(f'timedelta64[{unit}]')
+                    data = [column] + [str(val).replace('T', ' ') if not np.isnat(val)
+                                       else str(val) for val in vals]
+                else:
+                    data = [column] + vals.tolist()
             else:
                 data = ['...'] * (len(idx) + 1)
                 long_len.append(3)
@@ -514,6 +512,9 @@ class DataFrame(object):
                 decimal_len.append(0)
             elif self._column_info[column].dtype == 'b':
                 long_len.append(max(len(column), 5))
+                decimal_len.append(0)
+            elif self._column_info[column].dtype in 'Mm':
+                long_len.append(max(len(column), len(data[1])))
                 decimal_len.append(0)
 
             data_list.append(data)
@@ -904,6 +905,9 @@ class DataFrame(object):
     def _is_string(self) -> bool:
         return set(self._data.keys()) == {'O'}
 
+    def _is_date(self) -> bool:
+        return set(self._data.keys()) <= {'m', 'M'}
+
     def _is_only_numeric_or_string(self) -> bool:
         dtypes: Set[str] = set(self._data.keys())
         return dtypes <= {'i', 'f'} or dtypes == {'O'}
@@ -1087,18 +1091,62 @@ class DataFrame(object):
             if self._is_numeric_or_bool() or op_string in ['__mul__', '__rmul__']:
                 dd, ncd = self._do_eval(op_string, other)
             else:
-                raise TypeError('You have a mix of numeric and string data '
-                                'types. Operation is ambiguous.')
-
+                raise TypeError('This operation only works when all the columns are numeric.')
         elif isinstance(other, str):
             if self._is_string():
                 if op_string in ['__add__', '__radd__', '__gt__', '__ge__',
                                  '__lt__', '__le__', '__ne__', '__eq__']:
                     dd, ncd = self._do_eval(op_string, other)
+                else:
+                    special_method_name = utils.convert_special_method(op_string)
+                    raise TypeError(f'Cannot do {special_method_name} with string types')
             else:
                 raise TypeError('All columns in DataFrame must be string if '
                                 'operating with a string')
-
+        elif isinstance(other, np.timedelta64):
+            dtypes = set(self._data.keys())
+            if dtypes == {'M', 'm'} or dtypes == {'M'}:
+                if op_string in ['__add__', '__radd__', '__sub__']:
+                    dd, ncd = self._do_eval(op_string, other)
+                else:
+                    special_method_name = utils.convert_special_method(op_string)
+                    raise TypeError(f'Cannot do {special_method_name} with datetime/timedelta'
+                                    f' types')
+            elif dtypes == {'m'}:
+                if op_string in ['__add__', '__radd__', '__gt__', '__ge__',
+                                 '__lt__', '__le__', '__ne__', '__eq__']:
+                    dd, ncd = self._do_eval(op_string, other)
+                else:
+                    special_method_name = utils.convert_special_method(op_string)
+                    raise TypeError(f'Cannot do {special_method_name} with timedelta types')
+            else:
+                raise TypeError('When operating with a timedelta, all columns in the DataFrame '
+                                'must be either datetime64 or timedelta64 ')
+        elif isinstance(other, np.datetime64):
+            dtypes = set(self._data.keys())
+            if dtypes == {'M'}:
+                if op_string in ['__sub__', '__gt__', '__ge__', '__lt__',
+                                 '__le__', '__ne__', '__eq__']:
+                    dd, ncd = self._do_eval(op_string, other)
+                else:
+                    special_method_name = utils.convert_special_method(op_string)
+                    raise TypeError(f'Cannot do {special_method_name} with datetime/timedelta'
+                                    f' types')
+            elif dtypes == {'m'}:
+                if op_string in ['__add__', '__radd__', '__sub__', '__rsub__']:
+                    dd, ncd = self._do_eval(op_string, other)
+                else:
+                    special_method_name = utils.convert_special_method(op_string)
+                    raise TypeError(f'Cannot do {special_method_name} with string types')
+            elif dtypes == {'M', 'm'}:
+                if op_string in ['__sub__', '__rsub__']:
+                    dd, ncd = self._do_eval(op_string, other)
+                else:
+                    special_method_name = utils.convert_special_method(op_string)
+                    raise TypeError(f'Cannot do {special_method_name} with string types')
+            else:
+                raise TypeError('When operating with a timedelta, all columns in the DataFrame '
+                                'must be either datetime64 or timedelta64 ')
         elif isinstance(other, DataFrame):
             def get_cur_arr(self, other: 'DataFrame', dtype1: str, dtype2: str,
                             locs1: Dict[str, List[int]],
@@ -1117,6 +1165,7 @@ class DataFrame(object):
                         return func(data1, data2), cur_locs1
                     elif (self.shape[0] == 1 or other.shape[
                         0] == 1) and op_string in stat.funcs_str2_bc:
+
                         func = stat.funcs_str2_bc[op_string]
                         return func(data1, data2), cur_locs1
                 return eval(f"{'data1'} .{op_string}({'data2'})"), cur_locs1
@@ -1299,7 +1348,8 @@ class DataFrame(object):
                 other = self._construct_from_new(new_data, new_column_info, new_columns)
             return eval(f"{'self'} .{op_string}({'other'})")
         else:
-            raise TypeError('other must be int, float, str, bool, array or DataFrame')
+            raise TypeError('other must be int, float, str, bool, timedelta, '
+                            'datetime, array or DataFrame')
 
         new_data = {}
         for dt, arrs in dd.items():
@@ -1497,7 +1547,8 @@ class DataFrame(object):
         """
         new_kind: str = utils.convert_numpy_to_kind(numpy_dtype)
         dtype, loc, order = self._column_info[column].values  # type: str, int, int
-        if dtype == new_kind:
+
+        if dtype == new_kind and dtype not in 'mM':
             return None
         col_data: ndarray = self._data[dtype][:, loc]
         if numpy_dtype == 'O':
@@ -1506,6 +1557,12 @@ class DataFrame(object):
             col_data[nulls] = None
         else:
             col_data = col_data.astype(numpy_dtype)
+
+        if col_data.dtype.kind == 'M':
+            col_data = col_data.astype('datetime64[ns]')
+        elif col_data.dtype.kind == 'm':
+            col_data = col_data.astype('timedelta64[ns]')
+
         self._remove_column(column)
         self._write_new_column_data(column, new_kind, col_data, order)
 
@@ -1537,6 +1594,7 @@ class DataFrame(object):
         else:
             if data.ndim == 1:
                 data = data[:, np.newaxis]
+
             self._data[new_kind] = np.asfortranarray(data)
 
     def _add_new_column(self, column: str, kind: str, data: ndarray) -> None:
@@ -1595,6 +1653,10 @@ class DataFrame(object):
 
         if isinstance(value, bool):
             utils.check_set_value_type(dtype, 'b', 'bool')
+        elif isinstance(value, np.datetime64):
+            utils.check_set_value_type(dtype, 'M', 'datetime64')
+        elif isinstance(value, np.timedelta64):
+            utils.check_set_value_type(dtype, 'm', 'timedelta64')
         elif isinstance(value, (int, np.integer)):
             utils.check_set_value_type(dtype, 'if', 'int')
         elif isinstance(value, (float, np.floating)):
@@ -1805,6 +1867,7 @@ class DataFrame(object):
                 kind_shape[old_kind] = total_shape
                 total_shape += arr.shape[1]
                 arr = arr.astype(new_dtype)
+
                 if arr.dtype.kind == 'U':
                     arr = arr.astype('O')
                 new_kind = arr.dtype.kind
@@ -1858,10 +1921,12 @@ class DataFrame(object):
             kind: str
             arr: ndarray
             for kind, arr in self._data.items():
-                if kind == 'f':
+                if kind in 'f':
                     self._hasnans['f'] = np.isnan(arr).any(0)
                 elif kind == 'O':
                     self._hasnans['O'] = _va.isnan_object(arr)
+                elif kind in 'mM':
+                    self._hasnans[kind] = np.isnat(arr).any(0)
                 else:
                     self._hasnans[kind] = np.zeros(arr.shape[1], dtype='bool')
 
@@ -1885,7 +1950,7 @@ class DataFrame(object):
         if self._is_string():
             if name in ['std', 'var', 'mean', 'median', 'quantile']:
                 raise TypeError('Your DataFrame consists entirely of strings. '
-                                f'The `{name}` only works with numeric columns.')
+                                f'The `{name}` method only works with numeric columns.')
             return {'O'}
         if axis == 0:
             if name in ['std', 'var', 'mean', 'median', 'quantile', 'prod', 'cumprod']:
@@ -1894,7 +1959,11 @@ class DataFrame(object):
             if name in ['std', 'var', 'mean', 'median', 'quantile', 'sum', 'max', 'min', 'mode',
                         'cumsum', 'cummax', 'cummin', 'argmin', 'argmax', 'prod', 'cumprod']:
                 return {'i', 'f', 'b'}
-        return {'i', 'f', 'b', 'O'}
+
+        if name in ['max', 'min']:
+            return {'i', 'f', 'b', 'O', 'm', 'M'}
+        else:
+            return {'i', 'f', 'b', 'O'}
 
     def _get_stat_func_result(self, func: Callable, arr: ndarray,
                               axis: int, kwargs: Dict) -> ndarray:
@@ -1945,7 +2014,14 @@ class DataFrame(object):
                 func = stat.funcs[kind][name]
                 hasnans = self._hasnans_dtype(kind)
                 kwargs.update({'hasnans': hasnans})
+                if kind == 'm' or kind == 'M':
+                    arr = arr.view('int64')
                 arr_new = self._get_stat_func_result(func, arr, 0, kwargs)
+
+                if kind == 'm':
+                    arr_new = arr_new.astype('timedelta64[ns]')
+                elif kind == 'M':
+                    arr_new = arr_new.astype('datetime64[ns]')
 
                 new_kind = arr_new.dtype.kind
                 cur_loc = utils.get_num_cols(data_dict.get(new_kind, []))
@@ -2053,7 +2129,7 @@ class DataFrame(object):
         dt: str
         arr: ndarray
         for dt, arr in df._data.items():
-            if dt in 'ifb':
+            if dt in 'ifbm':
                 new_data[dt] = np.abs(arr)
             else:
                 new_data[dt] = arr.copy()
@@ -2063,9 +2139,10 @@ class DataFrame(object):
     __abs__ = abs
 
     def _get_numeric(self) -> 'DataFrame':
-        if not self._has_numeric_or_bool():
+        if ('i' not in self._data and 'f' not in self._data and
+                'b' in self._data and 'm' not in self._data):
             raise TypeError('All columns must be either integer, float, or boolean')
-        return self.select_dtypes(['number', 'bool'])
+        return self.select_dtypes(['number', 'bool', 'timedelta'])
 
     def any(self, axis: str = 'rows') -> 'DataFrame':
         return self._stat_funcs('any', axis)
@@ -3914,7 +3991,8 @@ class Grouper(object):
     def ngroups(self) -> int:
         return len(self._group_position)
 
-    def _group_agg(self, name: str, ignore_str:bool=True, add_positions:bool=False, keep_group_cols:bool=True,
+    def _group_agg(self, name: str, ignore_str: bool = True, add_positions: bool = False,
+                   keep_group_cols: bool = True,
                    **kwargs) -> DataFrame:
         labels = self._group_labels
         size = len(self._group_position)

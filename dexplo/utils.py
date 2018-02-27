@@ -4,10 +4,22 @@ import numpy as np
 from numpy import ndarray
 from dexplo._libs import validate_arrays as va
 
-_DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str'}
+_DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str', 'M': 'datetime64[ns]', 'm': 'timedelta64[ns]'}
 _KIND = {'int': 'i', 'float': 'f', 'bool': 'b', 'str': 'O'}
-_KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'], 'str': ['O'], 'number': ['i', 'f']}
-_DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'O'}
+_KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'], 'str': ['O'], 'number': ['i', 'f'],
+              'datetime': 'M', 'timedelta': 'm'}
+_DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'O',
+           'datetime64[ns]': 'datetime64[ns]', 'datetime64[us]': 'datetime64[us]',
+           'datetime64[ms]': 'datetime64[ms]', 'datetime64[s]': 'datetime64[s]',
+           'datetime64[m]': 'datetime64[m]', 'datetime64[h]': 'datetime64[h]',
+           'datetime64[D]': 'datetime64[D]', 'datetime64[W]': 'datetime64[W]',
+           'datetime64[M]': 'datetime64[M]', 'datetime64[Y]': 'datetime64[Y]',
+           'timedelta64[ns]': 'timedelta64[ns]', 'timedelta64[us]': 'timedelta64[us]',
+           'timedelta64[ms]': 'timedelta64[ms]', 'timedelta64[s]': 'timedelta64[s]',
+           'timedelta64[m]': 'timedelta64[m]', 'timedelta64[h]': 'timedelta64[h]',
+           'timedelta64[D]': 'timedelta64[D]', 'timedelta64[W]': 'timedelta64[W]',
+           'timedelta64[M]': 'timedelta64[M]', 'timedelta64[Y]': 'timedelta64[Y]'
+           }
 _KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'O': 'O'}
 _NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'O': 'O'}
 
@@ -15,6 +27,9 @@ _AXIS = {'rows': 0, 'columns': 1}
 _NON_AGG_FUNCS = {'cumsum', 'cummin', 'cummax', 'cumprod'}
 _COLUMN_STACK_FUNCS = {'cumsum', 'cummin', 'cummax', 'mean', 'median', 'var', 'std',
                        'argmax', 'argmin', 'quantile', 'nunique', 'prod', 'cumprod', 'mode'}
+
+_SPECIAL_METHODS = {'__sub__': 'subtraction', '__mul__': 'multiplication',
+                    '__pow__': 'exponentiation', '__rsub__': '(right) subtraction'}
 
 ColumnSelection = Union[int, str, slice, List[Union[str, int]]]
 RowSelection = Union[int, slice, List[int], 'DataFrame']
@@ -87,7 +102,8 @@ def convert_bytes_or_unicode(arr: ndarray) -> ndarray:
 
 
 def is_scalar(value: Any) -> bool:
-    return isinstance(value, (int, str, float, np.number, bool, bytes))
+    return isinstance(value, (int, str, float, np.number, bool, bytes,
+                              np.datetime64, np.timedelta64))
 
 
 def is_number(value: Any) -> bool:
@@ -135,14 +151,60 @@ def maybe_convert_1d_array(arr: ndarray, column: Optional[str]=None) -> ndarray:
     kind: str = arr.dtype.kind
     if kind in 'ifb':
         return arr
+    elif kind == 'M':
+        return arr.astype('datetime64[ns]')
+    elif kind == 'm':
+        return arr.astype('timedelta64[ns]')
     elif kind == 'U':
         return arr.astype('O')
-    elif kind == 'S':
-        return arr.astype('U').astype('O')
     elif kind == 'O':
         return va.validate_strings_in_object_array(arr, column)
     else:
         raise NotImplementedError(f'Data type {kind} unknown')
+
+
+def get_datetime_str(arr: ndarray):
+    dt = {0: 'ns', 1: 'us', 2: 'ms', 3: 's', 4: 'D'}
+    counts = np.zeros(len(arr), dtype='int64')
+    for i, val in enumerate(arr.view('int64')):
+        if val == 0:
+            counts[i] = 4
+            continue
+        dec = decimal.Decimal(int(val)).as_tuple()
+        ct = 0
+
+        for digit in dec.digits[::-1]:
+            if digit == 0:
+                ct += 1
+            else:
+                break
+
+        if ct >= 11:
+            counts[i] = 4
+        else:
+            counts[i] = ct // 3
+
+    return dt[counts.min()]
+
+
+def get_timedelta_str(arr: ndarray):
+    max_val = np.abs(arr.view('int64')).max()
+    if max_val < 10 ** 3:
+        unit = 'ns'
+    elif max_val < 10 ** 6:
+        unit = 'us'
+    elif max_val < 10 ** 9:
+        unit = 'ms'
+    elif max_val < 60 * 10 ** 9:
+        unit = 's'
+    elif max_val < 3600 * 10 ** 9:
+        unit = 'm'
+    elif max_val < 3600 * 24 * 10 ** 9:
+        unit = 'h'
+    else:
+        unit = 'D'
+
+    return unit
 
 
 def validate_array_type_and_dim(data: ndarray) -> int:
@@ -158,7 +220,7 @@ def validate_array_type_and_dim(data: ndarray) -> int:
     -------
     The number of columns as an integer
     """
-    if data.dtype.kind not in 'bifSUO':
+    if data.dtype.kind not in 'bifUOMm':
         raise TypeError('Array must be of type boolean, integer, float, string, or unicode')
     if data.ndim == 1:
         return 1
@@ -241,8 +303,13 @@ def check_set_value_type(dtype: str, good_dtypes: str, name: str) -> None:
 def check_valid_dtype_convert(dtype: str) -> str:
     if dtype not in _DTYPES:
         raise ValueError(f'{dtype} is not a valid type. Must be one '
-                         f'of {list(_DTYPES.keys())}')
-    return _DTYPES[dtype]
+                         'of int, float, bool, str, datetime64[X], timedelta64[X], '
+                         'where `X` is one of ns, us, ms, s, m, h, D, W, M, Y')
+    dtype = _DTYPES[dtype]
+    if dtype == 'O':
+        return 'U'
+    else:
+        return dtype
 
 
 def convert_kind_to_dtype(kind: str) -> str:
@@ -254,7 +321,14 @@ def convert_kind_to_numpy(kind: str) -> str:
 
 
 def convert_numpy_to_kind(dtype: str) -> str:
-    return _NP_KIND[dtype]
+    try:
+        return _NP_KIND[dtype]
+    except KeyError:
+        dt = dtype.split('[')[0]
+        if dt == 'datetime64':
+            return 'M'
+        elif dt == 'timedelta64':
+            return 'm'
 
 
 def convert_dtype_to_kind(dtype: str) -> str:
@@ -272,6 +346,10 @@ def get_kind_from_scalar(s: Any) -> str:
         return 'O'
     else:
         return ''
+
+
+def convert_special_method(name):
+    return _SPECIAL_METHODS.get(name, 'unknown')
 
 
 def validate_array_size(arr: ndarray, num_rows: int) -> None:
@@ -303,6 +381,8 @@ def check_compatible_kinds(kinds1: List[str], kinds2: List[str], all_nans: List[
         if k1 in 'ifb' and k2 in 'ifb':
             continue
         if k1 in 'O' and an:
+            continue
+        if k1 in 'mM' and k2 in 'mM':
             continue
         raise TypeError(f'Incompaitble dtypes {_DT[k1]} and {_DT[k2]}')
     return True
@@ -347,7 +427,7 @@ def try_to_convert_dtype(dtype: str) -> List[str]:
     except KeyError:
         raise KeyError(f"{dtype} must be one/list of "
                        "either ('float', 'integer', 'bool',"
-                       "'str', 'number')")
+                       "'str', 'number', 'datetime', 'timedelta')")
 
 
 def swap_axis_name(axis: str) -> str:
