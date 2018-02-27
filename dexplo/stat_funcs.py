@@ -3,6 +3,7 @@ import dexplo.math_columns as mc
 import numpy as np
 from numpy import ndarray
 from typing import Any
+import dexplo._date_funcs as df
 
 
 def _nanpercentile(a: ndarray, q: float, axis: int, **kwargs: Any) -> ndarray:
@@ -86,11 +87,27 @@ funcs = {'i': {'min': m.min_int,
                'cumsum': m.cumsum_str,
                'nunique': m.nunique_str},
 
-         'M': {'min': m.min_int,
-               'max': m.max_int},
+         'M': {'min': df.min_date,
+               'max': df.max_date,
+               'any': df.any_date,
+               'all': df.all_date,
+               'argmax': df.argmax_date,
+               'argmin': df.argmin_date,
+               'count': df.count_date,
+               'cummax': df.cummax_date,
+               'cummin': df.cummin_date,
+               'nunique': df.nunique_date},
 
-         'm': {'min': m.min_int,
-               'max': m.max_int}}
+         'm': {'min': df.min_date,
+               'max': df.max_date,
+               'any': df.any_date,
+               'all': df.all_date,
+               'argmax': df.argmax_date,
+               'argmin': df.argmin_date,
+               'count': df.count_date,
+               'cummax': df.cummax_date,
+               'cummin': df.cummin_date,
+               'nunique': df.nunique_date}}
 
 funcs_columns = {'sum': mc.sum_columns,
                  'max': mc.max_columns,

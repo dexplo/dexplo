@@ -1960,7 +1960,8 @@ class DataFrame(object):
                         'cumsum', 'cummax', 'cummin', 'argmin', 'argmax', 'prod', 'cumprod']:
                 return {'i', 'f', 'b'}
 
-        if name in ['max', 'min']:
+        if name in ['max', 'min', 'any', 'all', 'argmin', 'argmax', 'count',
+                    'cummax', 'cummin', 'nunique']:
             return {'i', 'f', 'b', 'O', 'm', 'M'}
         else:
             return {'i', 'f', 'b', 'O'}
@@ -2014,14 +2015,7 @@ class DataFrame(object):
                 func = stat.funcs[kind][name]
                 hasnans = self._hasnans_dtype(kind)
                 kwargs.update({'hasnans': hasnans})
-                if kind == 'm' or kind == 'M':
-                    arr = arr.view('int64')
                 arr_new = self._get_stat_func_result(func, arr, 0, kwargs)
-
-                if kind == 'm':
-                    arr_new = arr_new.astype('timedelta64[ns]')
-                elif kind == 'M':
-                    arr_new = arr_new.astype('datetime64[ns]')
 
                 new_kind = arr_new.dtype.kind
                 cur_loc = utils.get_num_cols(data_dict.get(new_kind, []))
@@ -2144,7 +2138,7 @@ class DataFrame(object):
             raise TypeError('All columns must be either integer, float, or boolean')
         return self.select_dtypes(['number', 'bool', 'timedelta'])
 
-    def any(self, axis: str = 'rows') -> 'DataFrame':
+    def any(self, axis: str = 'rows') -> 'DataFrame':  # todo add for ft
         return self._stat_funcs('any', axis)
 
     def all(self, axis: str = 'rows') -> 'DataFrame':
@@ -2276,8 +2270,10 @@ class DataFrame(object):
         return self._stat_funcs('mode', axis, keep=keep)
 
     def _hasnans_dtype(self, kind: str) -> ndarray:
-        hasnans: ndarray = np.ones(self._data[kind].shape[1], dtype='bool')
-        return self._hasnans.get(kind, hasnans)
+        try:
+            return self._hasnans[kind]
+        except KeyError:
+            return np.ones(self._data[kind].shape[1], dtype='bool')
 
     def isna(self) -> 'DataFrame':
         """
@@ -2304,6 +2300,9 @@ class DataFrame(object):
             elif kind == 'f':
                 hasnans = self._hasnans_dtype('f')
                 data_dict['b'].append(_math.isna_float(arr, hasnans))
+            elif kind in 'mM':
+                # hasnans = self._hasnans_dtype('f')
+                data_dict['b'].append(np.isnat(arr))
 
         new_column_info: ColInfoT = self._new_cd_from_kind_shape(kind_shape, 'b')
         new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
@@ -2352,7 +2351,7 @@ class DataFrame(object):
         if summary_type == 'numeric':
             df = self.select_dtypes('number')
         elif summary_type == 'non-numeric':
-            df = self.select_dtypes(['str', 'bool'])
+            df = self.select_dtypes(['str', 'bool', 'datetime'])
         else:
             raise ValueError('`summary_type` must be either "numeric" or "non-numeric"')
         data_dict: Dict[str, List[ndarray]] = defaultdict(list)
@@ -2692,8 +2691,12 @@ class DataFrame(object):
             if keep == 'last':
                 arr = arr[::-1]
 
-            func_name = 'unique_' + utils.convert_kind_to_dtype(kind)
-            arr_keep = getattr(_uq, func_name)(arr)
+            if kind in 'mM':
+                nans = np.isnat(arr)
+                arr_keep = _uq.unique_date(arr.view('int64'), nans)
+            else:
+                func_name = 'unique_' + utils.convert_kind_to_dtype(kind)
+                arr_keep = getattr(_uq, func_name)(arr)
 
             if keep == 'last':
                 arr_keep = arr_keep[::-1]
@@ -2725,8 +2728,11 @@ class DataFrame(object):
                 if keep == 'last':
                     arr = arr[::-1]
 
-                func_name = 'unique_' + utils.convert_kind_to_dtype(dtype) + '_2d'
-                arr_keep = getattr(_uq, func_name)(arr)
+                if dtype in 'mM':
+                    arr_keep = _uq.unique_date_2d(arr.view('int64'))
+                else:
+                    func_name = 'unique_' + utils.convert_kind_to_dtype(dtype) + '_2d'
+                    arr_keep = getattr(_uq, func_name)(arr)
 
                 if keep == 'last':
                     arr_keep = arr_keep[::-1]
@@ -2746,6 +2752,9 @@ class DataFrame(object):
                 has_obj = False
                 for dtype, locs in dtype_loc.items():
                     arr = self._data[dtype]
+                    if dtype in 'mM':
+                        arr = arr.view('int64')
+
                     if keep == 'last':
                         arr = arr[::-1]
                     if dtype == 'O':
@@ -2838,10 +2847,14 @@ class DataFrame(object):
         else:
             limit = len(self)
 
-        if isinstance(values, (int, float, np.number)):
+        if isinstance(values, (int, float, np.number)) and not isinstance(values, np.timedelta64):
             if self._is_string():
-                raise TypeError("You're DataFrame contains only str columns and you are "
+                raise TypeError("Your DataFrame contains only str columns and you are "
                                 "trying to pass a number to fill in missing values")
+            if self._is_date():
+                raise TypeError("Your DataFrame contains only datetime/timedelta columns "
+                                "and you are trying to pass a number to fill in missing values")
+
             new_data: Dict[str, ndarray] = {}
             for dtype, arr in self._data.items():
                 arr = arr.copy('F')
@@ -2876,6 +2889,44 @@ class DataFrame(object):
                             col_arr[idx] = values
 
                     new_data['O'] = arr
+                else:
+                    new_data[dtype] = arr
+        elif isinstance(values, np.datetime64):
+            if 'M' not in self._data:
+                raise TypeError('You passed a `datetime64` value to the `values` parameter but '
+                                'your DataFrame contains no datetime64 columns')
+            new_data = {}
+            for dtype, arr in self._data.items():
+                arr = arr.copy('F')
+                if dtype == 'M':
+                    for col in self._columns:
+                        dtype2, loc, _ = self._column_info[col].values
+                        if dtype2 == 'M':
+                            col_arr = arr[:, loc]
+                            na_arr: ndarray = np.isnat(col_arr)
+                            idx = np.where(na_arr)[0][:limit]
+                            col_arr[idx] = values.astype('datetime64[ns]')
+
+                    new_data['M'] = arr
+                else:
+                    new_data[dtype] = arr
+        elif isinstance(values, np.timedelta64):
+            if 'm' not in self._data:
+                raise TypeError('You passed a `timedelta64` value to the `values` parameter but '
+                                'your DataFrame contains no timedelta64 columns')
+            new_data = {}
+            for dtype, arr in self._data.items():
+                arr = arr.copy('F')
+                if dtype == 'm':
+                    for col in self._columns:
+                        dtype2, loc, _ = self._column_info[col].values
+                        if dtype2 == 'm':
+                            col_arr = arr[:, loc]
+                            na_arr: ndarray = np.isnat(col_arr)
+                            idx = np.where(na_arr)[0][:limit]
+                            col_arr[idx] = values.astype('timedelta64[ns]')
+
+                    new_data['m'] = arr
                 else:
                     new_data[dtype] = arr
         elif isinstance(values, dict):
@@ -2935,6 +2986,11 @@ class DataFrame(object):
                             new_data['f'] = _math.ffill_float(arr, limit)
                         elif dtype == 'O':
                             new_data['O'] = _math.ffill_str(arr, limit)
+                        elif dtype in 'mM':
+                            nans = np.isnat(arr)
+                            dtype_name = 'datetime64[ns]' if dtype == 'M' else 'timedelta64[ns]'
+                            new_data[dtype] = _math.ffill_date(arr.view('int64'), limit,
+                                                               nans).astype(dtype_name)
                         else:
                             new_data[dtype] = arr
                 elif method == 'bfill':
@@ -2945,6 +3001,11 @@ class DataFrame(object):
                             new_data['f'] = _math.bfill_float(arr, limit)
                         elif dtype == 'O':
                             new_data['O'] = _math.bfill_str(arr, limit)
+                        elif dtype in 'mM':
+                            nans = np.isnat(arr)
+                            dtype_name = 'datetime64[ns]' if dtype == 'M' else 'timedelta64[ns]'
+                            new_data[dtype] = _math.bfill_date(arr.view('int64'), limit,
+                                                               nans).astype(dtype_name)
                         else:
                             new_data[dtype] = arr
                 else:
@@ -2994,8 +3055,24 @@ class DataFrame(object):
                 # TODO: check individual columns for nans for speed increase
                 na_arr = np.isnan(col_arr)
                 arr_final = np.where(na_arr, nan_value, col_arr)
+        elif dtype in 'mM':
+            if hasnans or hasnans is None:
+                if asc:
+                    if dtype == 'M':
+                        nan_value = np.datetime64(np.iinfo('int64').max, 'ns')
+                    else:
+                        nan_value = np.timedelta64(np.iinfo('int64').max, 'ns')
+                else:
+                    if dtype == 'M':
+                        nan_value = np.datetime64(np.iinfo('int64').min, 'ns')
+                    else:
+                        nan_value = np.timedelta64(np.iinfo('int64').min, 'ns')
+                # TODO: check individual columns for nans for speed increase
+                na_arr = np.isnat(col_arr)
+                arr_final = np.where(na_arr, nan_value, col_arr)
         else:
             return col_arr
+
         if return_na_arr:
             return arr_final, na_arr
         else:
@@ -3083,6 +3160,10 @@ class DataFrame(object):
                         # TODO: how to avoid mapping to ints for mostly unique string columns?
                         d = _sr.sort_str_map(col_arr, asc)
                         col_arr = _sr.replace_str_int(col_arr, d)
+                    elif dtype == 'M':
+                        col_arr = (-(col_arr.view('int64') + 1)).astype('datetime64[ns]')
+                    elif dtype == 'm':
+                        col_arr = (-(col_arr.view('int64') + 1)).astype('timedelta64[ns]')
                     else:
                         col_arr = -col_arr
                 elif dtype == 'O':
@@ -3175,18 +3256,21 @@ class DataFrame(object):
             raise ValueError("`na_option must be 'keep', 'top', or 'bottom'")
 
         def get_cur_rank(dtype: str, arr: ndarray) -> ndarray:
-            if na_option == 'keep' and dtype in 'fO':
+            if na_option == 'keep' and dtype in 'fOmM':
                 arr, na_arr = self._replace_nans(dtype, arr, na_asc, True, True)
             else:
                 arr = self._replace_nans(dtype, arr, na_asc, True)
 
-            func_name: str = 'rank_' + utils.convert_kind_to_dtype(dtype) + '_' + method
+            func_name: str = 'rank_' + utils.convert_kind_to_dtype_generic(dtype) + '_' + method
 
             if not ascending:
                 if dtype == 'O':
                     arg = np.argsort(arr, 0, kind='mergesort')[::-1]
                 elif dtype == 'b':
                     arg = np.argsort(~arr, 0, kind='mergesort')
+                elif dtype in 'mM':
+                    # np.nat evaluates as min possible int
+                    arg = np.argsort(-(arr.view('int64') + 1), 0, kind='mergesort')
                 else:
                     arg = np.argsort(-arr, 0, kind='mergesort')
             else:
@@ -3196,9 +3280,11 @@ class DataFrame(object):
                 cur_rank = _sr.rank_str_min(arg, arr)
                 cur_rank = _sr.rank_str_min_to_first(cur_rank, arg, arr)
             else:
+                if dtype in 'mM':
+                    arr = arr.view('int64')
                 cur_rank = getattr(_sr, func_name)(arg, arr)
 
-            if na_option == 'keep' and dtype in 'fO' and na_arr.sum() > 0:
+            if na_option == 'keep' and dtype in 'fOmM' and na_arr.sum() > 0:
                 # TODO: only convert columns with nans to floats
                 cur_rank = cur_rank.astype('float64')
                 cur_rank[na_arr] = nan
@@ -3242,6 +3328,13 @@ class DataFrame(object):
             uniques = arr[groups]
         elif dtype == 'b':
             uniques, counts = _gb.value_counts_bool(arr)
+        elif dtype in 'mM':
+            groups, counts = _gb.value_counts_int(arr.view('int64'))
+            uniques = arr[groups]
+            if dropna:
+                keep = ~np.isnat(uniques)
+                counts = counts[keep]
+                uniques = uniques[keep]
 
         if normalize:
             counts = counts / counts.sum()
@@ -3299,9 +3392,12 @@ class DataFrame(object):
 
         if not group:
             if value is None:
-                func_name = 'streak_' + utils.convert_kind_to_dtype(dtype)
+                func_name = 'streak_' + utils.convert_kind_to_dtype_generic(dtype)
                 func = getattr(_math, func_name)
-                return func(col_arr)
+                if dtype in 'mM':
+                    return func(col_arr.view('int64'))
+                else:
+                    return func(col_arr)
             else:
                 if dtype == 'i':
                     if not isinstance(value, (int, np.integer)):
@@ -3323,12 +3419,25 @@ class DataFrame(object):
                         raise TypeError(f'Column {column} has dtype bool and `value` is a '
                                         f'{type(value).__name__}.')
                     return _math.streak_value_bool(col_arr, value)
+                elif dtype == 'M':
+                    if not isinstance(value, np.datetime64):
+                        raise TypeError(f'Column {column} has dtype datetime64 and `value` is a '
+                                        f'{type(value).__name__}.')
+                    return _math.streak_value_int(col_arr.view('int64'), value.astype('int64'))
+                elif dtype == 'm':
+                    if not isinstance(value, np.timedelta64):
+                        raise TypeError(f'Column {column} has dtype timedelta64 and `value` is a '
+                                        f'{type(value).__name__}.')
+                    value = value.astype('timedelta64[ns]').astype('int64')
+                    return _math.streak_value_int(col_arr.view('int64'), value)
         else:
             if value is not None:
                 raise ValueError('If `group` is True then `value` must be None')
 
-            func_name = 'streak_group_' + utils.convert_kind_to_dtype(dtype)
+            func_name = 'streak_group_' + utils.convert_kind_to_dtype_generic(dtype)
             func = getattr(_math, func_name)
+            if dtype in 'mM':
+                col_arr = col_arr.view('int64')
             return func(col_arr)
 
     def rename(self, columns: Union[str, List[str]]) -> 'DataFrame':
@@ -3450,7 +3559,12 @@ class DataFrame(object):
         dtype, loc, _ = self._column_info[column].values
         col_arr = self._data[dtype][:, loc]
 
-        if n < 100:
+        if n < 1:
+            if dtype in 'mM':
+                dtype = 'f'
+                na_arr = np.isnat(col_arr)
+                col_arr = col_arr.astype('float64')
+                col_arr[na_arr] = nan
             func_name = name + '_' + utils.convert_kind_to_dtype(dtype)
             order, ties = getattr(_math, func_name)(col_arr, n)
             if keep == 'all' and ties:
@@ -3465,8 +3579,10 @@ class DataFrame(object):
                     else:
                         order[-num_ties:] = np.append(order[is_ties], ties)[-num_ties:]
         else:
-
-            func_name = 'quick_select_' + utils.convert_kind_to_dtype(dtype)
+            if dtype in 'mM':
+                func_name = 'quick_select_int'
+            else:
+                func_name = 'quick_select_' + utils.convert_kind_to_dtype(dtype)
 
             if col_arr.dtype.kind == 'f':
                 not_na = ~np.isnan(col_arr)
@@ -3476,10 +3592,15 @@ class DataFrame(object):
                 col_arr_final = col_arr[not_na]
             elif col_arr.dtype.kind == 'b':
                 col_arr_final = col_arr.astype('int64')
+            elif col_arr.dtype.kind in 'mM':
+                not_na = ~np.isnat(col_arr)
+                col_arr = col_arr.view('int64')
+                col_arr_final = col_arr[not_na]
             else:
                 col_arr_final = col_arr
 
-            dtype = col_arr_final.dtype.kind
+            if dtype not in 'mM':
+                dtype = col_arr_final.dtype.kind
 
             if n > len(col_arr):
                 asc = name == 'nsmallest'
@@ -3493,10 +3614,11 @@ class DataFrame(object):
                     vals = col_arr_final[idx]
                     idx_args = (len(vals) - 1 - np.argsort(vals[::-1], kind='mergesort'))[::-1]
                 else:
-                    nth = -getattr(_math, func_name)(-col_arr, n)
-                    if dtype == 'f':
+                    nth = -getattr(_math, func_name)(-col_arr_final, n)
+                    if dtype in 'fmM':
                         col_arr_final = col_arr
-                    idx = np.where(col_arr_final >= nth)[0]
+                    with np.errstate(invalid='ignore'):
+                        idx = np.where(col_arr_final >= nth)[0]
                     vals = col_arr_final[idx]
                     idx_args = np.argsort(-vals, kind='mergesort')
             else:
@@ -3505,7 +3627,7 @@ class DataFrame(object):
                     col_arr_final = _va.fill_str_none(col_arr, False)
                     idx = np.where(col_arr_final >= nth & not_na)[0]
                 else:
-                    if dtype == 'f':
+                    if dtype in 'fmM':
                         col_arr_final = col_arr
                     idx = np.where(col_arr_final >= nth)[0]
                 vals = col_arr_final[idx]
@@ -3652,24 +3774,34 @@ class DataFrame(object):
             List[Union[float, int, bool]], List[str]]:
             val_numbers = []
             val_strings = []
+            val_datetimes = []
+            val_timedeltas = []
             for val in vals:
-                if isinstance(val, (float, int, np.number)):
+                if isinstance(val, np.datetime64):
+                    val_datetimes.append(val)
+                elif isinstance(val, np.timedelta64):
+                    val_timedeltas.append(val)
+                elif isinstance(val, (float, int, np.number)):
                     val_numbers.append(val)
                 elif isinstance(val, str):
                     val_strings.append(val)
-            return val_numbers, val_strings
+            return val_numbers, val_strings, val_datetimes, val_timedeltas
 
         if isinstance(values, list):
             for value in values:
                 if not utils.is_scalar(value):
                     raise ValueError('All values in list must be either int, float, str, or bool')
             arrs: List[ndarray] = []
-            val_numbers, val_strings = separate_value_types(values)
+            val_numbers, val_strings, val_datetimes, val_timedeltas = separate_value_types(values)
             dtype_add = {}
             for dtype, arr in self._data.items():
                 dtype_add[dtype] = utils.get_num_cols(arrs)
                 if dtype == 'O':
                     arrs.append(np.isin(arr, val_strings))
+                elif dtype == 'M':
+                    arrs.append(np.isin(arr, val_datetimes))
+                elif dtype == 'm':
+                    arrs.append(np.isin(arr, val_timedeltas))
                 else:
                     arrs.append(np.isin(arr, val_numbers))
 
@@ -3691,9 +3823,13 @@ class DataFrame(object):
                     raise TypeError('The dictionary values must be lists or a scalar')
                 dtype, loc, order = self._column_info[col].values
                 col_arr = self._data[dtype][:, loc]
-                val_numbers, val_strings = separate_value_types(vals)
+                val_numbers, val_strings, val_datetimes, val_timedeltas = separate_value_types(vals)
                 if dtype == 'O':
                     arr_final[:, order] = np.isin(col_arr, val_strings)
+                elif dtype == 'M':
+                    arr_final[:, order] = np.isin(col_arr, val_datetimes)
+                elif dtype == 'm':
+                    arr_final[:, order] = np.isin(col_arr, val_timedeltas)
                 else:
                     arr_final[:, order] = np.isin(col_arr, val_numbers)
             new_data = {'b': arr_final}
@@ -3776,6 +3912,12 @@ class DataFrame(object):
             elif dtype == 'b':
                 good_dtypes = ['b']
                 types = (bool, np.bool_)
+            elif dtype == 'M':
+                good_dtypes = ['M']
+                types = np.datetime64
+            elif dtype == 'm':
+                good_dtypes = ['m']
+                types = np.timedelta64
 
             if isinstance(var, ndarray):
                 var_curr = get_arr(var)

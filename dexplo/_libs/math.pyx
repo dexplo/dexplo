@@ -2634,6 +2634,52 @@ def bfill_str(ndarray[object, ndim=2] a, int limit):
                     ct = 0
     return a
 
+def ffill_date(ndarray[np.int64_t, ndim=2] a, int limit, ndarray[np.uint8_t, cast=True, ndim=2] nans):
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef int ct = 0
+
+    if limit == -1:
+        for i in range(nc):
+            for j in range(1, nr):
+                if nans[j, i]:
+                    a[j, i] = a[j - 1, i]
+    else:
+        for i in range(nc):
+            for j in range(1, nr):
+                if nans[j, i]:
+                    if ct == limit:
+                        continue
+                    a[j, i] = a[j - 1, i]
+                    ct += 1
+                else:
+                    ct = 0
+    return a
+
+def bfill_date(ndarray[np.int64_t, ndim=2] a, int limit, ndarray[np.uint8_t, cast=True, ndim=2] nans):
+    cdef int i, j
+    cdef int nc = a.shape[1]
+    cdef int nr = a.shape[0]
+    cdef int ct = 0
+
+    if limit == -1:
+        for i in range(nc):
+            for j in range(nr - 2, -1, -1):
+                if nans[j, i]:
+                    a[j, i] = a[j + 1, i]
+    else:
+        for i in range(nc):
+            for j in range(nr - 2, -1, -1):
+                if nans[j, i]:
+                    if ct == limit:
+                        continue
+                    a[j, i] = a[j + 1, i]
+                    ct += 1
+                else:
+                    ct = 0
+    return a
+
 def streak_int(ndarray[np.int64_t] a):
     cdef int i, n = len(a)
     cdef int count = 1
@@ -2698,7 +2744,24 @@ def streak_str(ndarray[object] a):
             b[i] = 1
     return b
 
-def streak_value_int(ndarray[np.int64_t] a, int value):
+def streak_date(ndarray[np.int64_t] a):
+    cdef int i, n = len(a)
+    cdef int count = 1
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+    cdef np.int64_t nat = np.datetime64('nat').astype('int64')
+
+    b[0] = 1
+
+    for i in range(1, n):
+        if a[i] == a[i - 1] and a[i] != nat:
+            b[i] = count + 1
+            count += 1
+        else:
+            count = 1
+            b[i] = 1
+    return b
+
+def streak_value_int(ndarray[np.int64_t] a, long value):
     cdef int i, n = len(a)
     cdef int count = 0
     cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
@@ -2814,13 +2877,29 @@ def streak_group_str(ndarray[object] a):
             b[i] = count
     return b
 
+def streak_group_date(ndarray[np.int64_t] a):
+    cdef int i, n = len(a)
+    cdef int count = 1
+    cdef ndarray[np.int64_t] b = np.empty(n, dtype='int64')
+    cdef np.int64_t nat = np.datetime64('nat').astype('int64')
+
+    b[0] = 1
+
+    for i in range(1, n):
+        if a[i] == a[i -1] and a[i] != nat:
+            b[i] = count
+        else:
+            count += 1
+            b[i] = count
+    return b
+
 def quick_select_int(ndarray[np.int64_t] a, int k):
     cdef int i, n = len(a)
     cdef int ct1 = 0
     cdef int ct2 = 0
 
-    cdef int r = np.random.randint(n)
-    cdef int pivot = a[r]
+    cdef long r = np.random.randint(n)
+    cdef long pivot = a[r]
 
     cdef ndarray[np.int64_t] a1 = np.empty(n, dtype='int64')
     cdef ndarray[np.int64_t] a2 = np.empty(n, dtype='int64')

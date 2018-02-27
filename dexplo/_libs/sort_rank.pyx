@@ -152,6 +152,24 @@ def rank_bool_max(ndarray[np.int64_t, ndim=2] arg, ndarray[np.uint8_t, ndim=2, c
                 rank = j + 1
     return result
 
+def rank_date_min(ndarray[np.int64_t, ndim=2] arg, ndarray[np.int64_t, ndim=2] act):
+    cdef int i, j
+    cdef nr = arg.shape[0]
+    cdef nc = arg.shape[1]
+    cdef int rank
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        result[arg[0, i], i] = 1
+        rank = 1
+        for j in range(1, nr):
+            if act[arg[j, i], i] == act[arg[j - 1, i], i]:
+                result[arg[j, i], i] = rank
+            else:
+                result[arg[j, i], i] = j + 1
+                rank = j + 1
+    return result
+
 def rank_int_first(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t, ndim=2] act):
     cdef int i, j
     cdef nr = a.shape[0]

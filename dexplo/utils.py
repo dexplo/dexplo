@@ -5,6 +5,7 @@ from numpy import ndarray
 from dexplo._libs import validate_arrays as va
 
 _DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str', 'M': 'datetime64[ns]', 'm': 'timedelta64[ns]'}
+_DT_GENERIC = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str', 'M': 'date', 'm': 'date'}
 _KIND = {'int': 'i', 'float': 'f', 'bool': 'b', 'str': 'O'}
 _KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'], 'str': ['O'], 'number': ['i', 'f'],
               'datetime': 'M', 'timedelta': 'm'}
@@ -20,7 +21,8 @@ _DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'O',
            'timedelta64[D]': 'timedelta64[D]', 'timedelta64[W]': 'timedelta64[W]',
            'timedelta64[M]': 'timedelta64[M]', 'timedelta64[Y]': 'timedelta64[Y]'
            }
-_KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'O': 'O'}
+_KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'O': 'O',
+            'M': 'datetime64[ns]', 'm': 'timedelta64[ns]' }
 _NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'O': 'O'}
 
 _AXIS = {'rows': 0, 'columns': 1}
@@ -165,8 +167,9 @@ def maybe_convert_1d_array(arr: ndarray, column: Optional[str]=None) -> ndarray:
 
 def get_datetime_str(arr: ndarray):
     dt = {0: 'ns', 1: 'us', 2: 'ms', 3: 's', 4: 'D'}
+    arr = arr[~np.isnat(arr)].view('int64')
     counts = np.zeros(len(arr), dtype='int64')
-    for i, val in enumerate(arr.view('int64')):
+    for i, val in enumerate(arr):
         if val == 0:
             counts[i] = 4
             continue
@@ -188,7 +191,7 @@ def get_datetime_str(arr: ndarray):
 
 
 def get_timedelta_str(arr: ndarray):
-    max_val = np.abs(arr.view('int64')).max()
+    max_val = np.abs(arr[~np.isnat(arr)].view('int64')).max()
     if max_val < 10 ** 3:
         unit = 'ns'
     elif max_val < 10 ** 6:
@@ -314,6 +317,10 @@ def check_valid_dtype_convert(dtype: str) -> str:
 
 def convert_kind_to_dtype(kind: str) -> str:
     return _DT[kind]
+
+
+def convert_kind_to_dtype_generic(kind: str) -> str:
+    return _DT_GENERIC[kind]
 
 
 def convert_kind_to_numpy(kind: str) -> str:

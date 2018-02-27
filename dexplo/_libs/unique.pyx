@@ -71,6 +71,22 @@ def unique_float(ndarray[double] a):
             idx[i] = True
     return idx
 
+def unique_date(ndarray[np.int64_t] a, ndarray[np.uint8_t, cast=True] nans):
+    cdef int i, len_before
+    cdef int n = len(a)
+    cdef set s = set()
+    cdef ndarray[np.uint8_t, cast = True] idx = np.zeros(n, dtype='bool')
+
+    for i in range(n):
+        len_before = len(s)
+        if nans[i]:
+            s.add(None)
+        else:
+            s.add(a[i])
+        if len(s) > len_before:
+            idx[i] = True
+    return idx
+
 def unique_int_bounded(ndarray[np.int64_t] a, np.int64_t low, np.int64_t high):
     cdef int i
     cdef int n = len(a)
@@ -198,6 +214,20 @@ def unique_int_bounded_2d(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] low
             unique[iloc] = True
             pos[i] = True
     return pos
+
+def unique_date_2d(ndarray[np.int64_t, ndim=2] a):
+    cdef int i, j, len_before, count = 0
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef set s = set()
+    cdef ndarray[np.uint8_t, cast = True] idx = np.zeros(nr, dtype='bool')
+
+    for i in range(nr):
+        len_before = len(s)
+        s.add(PyBytes_FromStringAndSize(<char*>&a[i, 0], sizeof(np.float64_t) * nc))
+        if len(s) > len_before:
+            idx[i] = True
+    return idx
 
 def unique_float_string(ndarray[np.float64_t] f, ndarray[object, ndim=2] o):
     cdef int i, j, len_before
