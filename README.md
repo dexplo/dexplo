@@ -174,3 +174,58 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] sum
 - [x] tail
 - [x] var
+
+
+**str** - `df.str.<method>`
+- [x] capitalize
+- [x] cat
+- [x] center
+- [ ] contains      
+- [ ] count         
+- [ ] decode        
+- [ ] encode        
+- [ ] endswith      
+- [ ] extract       
+- [ ] extractall    
+- [ ] find         
+- [ ] findall
+- [ ] get           
+- [ ] get_dummies
+- [ ] index
+- [ ] isalnum
+- [ ] isalpha
+- [ ] isdecimal
+- [ ] isdigit
+- [ ] islower
+- [ ] isnumeric
+- [ ] isspace
+- [ ] istitle
+- [ ] isupper
+- [ ] join
+- [ ] len
+- [ ] ljust
+- [ ] lower         
+- [ ] lstrip
+- [ ] match
+- [ ] normalize
+- [ ] pad
+- [ ] partition
+- [ ] repeat
+- [ ] replace
+- [ ] rfind
+- [ ] rindex
+- [ ] rjust
+- [ ] rpartition
+- [ ] rsplit
+- [ ] rstrip
+- [ ] slice
+- [ ] slice_replace
+- [ ] split
+- [ ] startswith
+- [ ] strip
+- [ ] swapcase
+- [ ] title
+- [ ] translate
+- [ ] upper         
+- [ ] wrap
+- [ ] zfill

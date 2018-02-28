@@ -1,55 +1,4 @@
-# 'capitalize',     x
-#  'cat',           x
-#  'center',        x
-#  'contains',      x
-#  'count',         x
-#  'decode',        x
-#  'encode',        x
-#  'endswith',      x
-#  'extract',       
-#  'extractall',    
-#  'find',          x
-#  'findall',
-#  'get',           x
-#  'get_dummies',
-#  'index',
-#  'isalnum',
-#  'isalpha',
-#  'isdecimal',
-#  'isdigit',
-#  'islower',
-#  'isnumeric',
-#  'isspace',
-#  'istitle',
-#  'isupper',
-#  'join',
-#  'len',
-#  'ljust',
-#  'lower',         x
-#  'lstrip',
-#  'match',
-#  'normalize',
-#  'pad',
-#  'partition',
-#  'repeat',
-#  'replace',
-#  'rfind',
-#  'rindex',
-#  'rjust',
-#  'rpartition',
-#  'rsplit',
-#  'rstrip',
-#  'slice',
-#  'slice_replace',
-#  'split',
-#  'startswith',
-#  'strip',
-#  'swapcase',
-#  'title',
-#  'translate',
-#  'upper',         x
-#  'wrap',
-#  'zfill'
+
 
 # check for valid regex
 # look up the except at end def double evaluate(self, double x) except *:
@@ -71,7 +20,23 @@ def capitalize(ndarray[object] arr):
     cdef int n = len(arr)
     cdef ndarray[object] result = np.empty(n, dtype='object')
     for i in range(n):
-        result[i] = arr[i].capitalize()
+        if arr[i] is not None:
+            result[i] = arr[i].capitalize()
+        else:
+            result[i] = None
+    return result
+
+def capitalize_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].capitalize()
+            else:
+                arr[i, j] = None
     return result
 
 def center(ndarray[object] arr, int width, str fill_character=' '):
@@ -79,7 +44,23 @@ def center(ndarray[object] arr, int width, str fill_character=' '):
     cdef int n = len(arr)
     cdef ndarray[object] result = np.empty(n, dtype='object')
     for i in range(n):
-        result[i] = arr[i].center(width, fill_character)
+        if arr[i] is not None:
+            result[i] = arr[i].center(width, fill_character)
+        else:
+            result[i] = None
+    return result
+
+def center_2d(ndarray[object, ndim=2] arr, int width, str fill_character=' '):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].center(width, fill_character)
+            else:
+                result[i, j] = None
     return result
 
 def contains(ndarray[object] arr, str pat, case=True, flags=0, na=nan, regex=True):
