@@ -1,8 +1,8 @@
 import numpy as np
 from numpy import ndarray
-from . import utils
+import dexplo._utils as utils
 import dexplo._libs.validate_arrays as va
-from dexplo.frame import DataFrame
+from dexplo._frame import DataFrame
 
 
 def _check_1d_arrays(a: ndarray, b: ndarray, kind: str, tol: float = 10 ** -4) -> bool:

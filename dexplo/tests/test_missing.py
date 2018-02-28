@@ -4,6 +4,7 @@ from numpy import nan
 import pytest
 from dexplo.testing import assert_frame_equal
 
+
 class TestIsDropNa(object):
 
     def test_isna(self):

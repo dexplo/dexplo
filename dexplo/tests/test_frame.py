@@ -15,7 +15,6 @@ df = de.DataFrame({'a': [1, 2, 5, 9, 3, 4, 5, 1],
                   columns=list('abcdefgh'))
 
 
-
 class TestFrameConstructor(object):
 
     def setup_method(self, method):

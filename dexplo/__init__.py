@@ -1,2 +1,2 @@
-from .frame import DataFrame
+from ._frame import DataFrame
 from . import testing

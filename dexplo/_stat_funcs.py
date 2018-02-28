@@ -1,5 +1,5 @@
 import dexplo._libs.math as m
-import dexplo.math_columns as mc
+import dexplo._math_columns as mc
 import numpy as np
 from numpy import ndarray
 from typing import Any

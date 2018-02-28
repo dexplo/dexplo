@@ -23,7 +23,7 @@ _DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'O',
            }
 _KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'O': 'O',
             'M': 'datetime64[ns]', 'm': 'timedelta64[ns]' }
-_NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'O': 'O'}
+_NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'O': 'O', 'U': 'U'}
 
 _AXIS = {'rows': 0, 'columns': 1}
 _NON_AGG_FUNCS = {'cumsum', 'cummin', 'cummax', 'cumprod'}
@@ -308,11 +308,7 @@ def check_valid_dtype_convert(dtype: str) -> str:
         raise ValueError(f'{dtype} is not a valid type. Must be one '
                          'of int, float, bool, str, datetime64[X], timedelta64[X], '
                          'where `X` is one of ns, us, ms, s, m, h, D, W, M, Y')
-    dtype = _DTYPES[dtype]
-    if dtype == 'O':
-        return 'U'
-    else:
-        return dtype
+    return _DTYPES[dtype]
 
 
 def convert_kind_to_dtype(kind: str) -> str:
