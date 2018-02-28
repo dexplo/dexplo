@@ -66,21 +66,63 @@ def center_2d(ndarray[object, ndim=2] arr, int width, str fill_character=' '):
 def contains(ndarray[object] arr, str pat, case=True, flags=0, na=nan, regex=True):
     cdef int i
     cdef int n = len(arr)
-    cdef ndarray[DTYPE_t, ndim=1] result = np.empty(n, dtype=DTYPE)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
     if regex:
-        if case == False:
-            flags = flags | re.IGNORE_CASE
+        if not case:
+            flags = flags | re.IGNORECASE
         pattern = re.compile(pat, flags=flags)
         for i in range(n):
-            result[i] = bool(pattern.search(arr[i]))
+            if arr[i] is not None:
+                result[i] = bool(pattern.search(arr[i]))
+            else:
+                result[i] = False
     else:
         if case:
             for i in range(n):
-                result[i] = pat in arr[i]
+                if arr[i] is not None:
+                    result[i] = pat in arr[i]
+                else:
+                    result[i] = False
         else:
             pat = pat.lower()
             for i in range(n):
-                result[i] = pat in arr[i].lower()
+                if arr[i] is not None:
+                    result[i] = pat in arr[i].lower()
+                else:
+                    result[i] = False
+    return result.view(dtype=np.bool)
+
+def contains_2d(ndarray[object, ndim=2] arr, str pat, case=True, flags=0, na=nan, regex=True):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    if regex:
+        if not case:
+            flags = flags | re.IGNORECASE
+        pattern = re.compile(pat, flags=flags)
+        for i in range(nr):
+            for j in range(nc):
+                if arr[i, j] is not None:
+                    result[i, j] = bool(pattern.search(arr[i, j]))
+                else:
+                    result[i, j] = False
+    else:
+        if case:
+            for i in range(nr):
+                for j in range(nc):
+                    if arr[i, j] is not None:
+                        result[i, j] = pat in arr[i, j]
+                    else:
+                        result[i, j] = False
+        else:
+            pat = pat.lower()
+            for i in range(nr):
+                for j in range(nc):
+                    if arr[i, j] is not None:
+                        result[i, j] = pat in arr[i, j].lower()
+                    else:
+                        result[i, j] = False
     return result.view(dtype=np.bool)
 
 def count(ndarray[object] arr, str pattern):
