@@ -180,11 +180,9 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] capitalize
 - [x] cat
 - [x] center
-- [ ] contains      
-- [ ] count         
-- [ ] decode        
-- [ ] encode        
-- [ ] endswith      
+- [x] contains      
+- [x] count         
+- [x] endswith      
 - [ ] extract       
 - [ ] extractall    
 - [ ] find         

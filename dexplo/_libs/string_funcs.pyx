@@ -4,9 +4,9 @@
 # look up the except at end def double evaluate(self, double x) except *:
 import numpy as np
 from numpy import nan
-from numpy cimport ndarray, uint8_t
-from libc.string cimport strcat
+from numpy cimport ndarray
 import re
+from typing import Pattern
 
 cimport cython
 cimport numpy as np
@@ -63,14 +63,19 @@ def center_2d(ndarray[object, ndim=2] arr, int width, str fill_character=' '):
                 result[i, j] = None
     return result
 
-def contains(ndarray[object] arr, str pat, case=True, flags=0, na=nan, regex=True):
+def contains(ndarray[object] arr, pat, case=True, flags=0, na=nan, regex=True):
     cdef int i
     cdef int n = len(arr)
     cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+
     if regex:
-        if not case:
-            flags = flags | re.IGNORECASE
-        pattern = re.compile(pat, flags=flags)
+        if isinstance(pat, Pattern):
+            pattern = pat
+        else:
+            if not case:
+                flags = flags | re.IGNORECASE
+            pattern = re.compile(pat, flags=flags)
+
         for i in range(n):
             if arr[i] is not None:
                 result[i] = bool(pattern.search(arr[i]))
@@ -90,17 +95,22 @@ def contains(ndarray[object] arr, str pat, case=True, flags=0, na=nan, regex=Tru
                     result[i] = pat in arr[i].lower()
                 else:
                     result[i] = False
-    return result.view(dtype=np.bool)
+    return result
 
-def contains_2d(ndarray[object, ndim=2] arr, str pat, case=True, flags=0, na=nan, regex=True):
+def contains_2d(ndarray[object, ndim=2] arr, pat, case=True, flags=0, na=nan, regex=True):
     cdef int i, j
     cdef int nr = len(arr)
     cdef int nc = arr.shape[1]
     cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+
     if regex:
-        if not case:
-            flags = flags | re.IGNORECASE
-        pattern = re.compile(pat, flags=flags)
+        if isinstance(pat, Pattern):
+            pattern = pat
+        else:
+            if not case:
+                flags = flags | re.IGNORECASE
+            pattern = re.compile(pat, flags=flags)
+
         for i in range(nr):
             for j in range(nc):
                 if arr[i, j] is not None:
@@ -123,22 +133,62 @@ def contains_2d(ndarray[object, ndim=2] arr, str pat, case=True, flags=0, na=nan
                         result[i, j] = pat in arr[i, j].lower()
                     else:
                         result[i, j] = False
-    return result.view(dtype=np.bool)
+    return result
 
-def count(ndarray[object] arr, str pattern):
+def count(ndarray[object] arr, pat, case=True, flags=0, na=nan, regex=True):
     cdef int i
     cdef int n = len(arr)
-    cdef ndarray[np.int64_t, ndim=1] result = np.empty(n, dtype=np.int64)
-    
-    meta_chars = r'^[^.()\\$*^?{}\[\]|]+$'
-    if re.match(meta_chars, pattern) is not None:
+    cdef ndarray[np.float64_t] result = np.empty(n, dtype=np.float64)
+
+    if regex:
+        if isinstance(pat, Pattern):
+            pattern = pat
+        else:
+            if not case:
+                flags = flags | re.IGNORECASE
+            pattern = re.compile(pat, flags=flags)
         for i in range(n):
-            result[i] = arr[i].count(pattern)
+            if arr[i] is not None:
+                result[i] = len(pattern.findall(arr[i]))
+            else:
+                result[i] = na
         return result
     else:
-        pat = re.compile(pattern)
         for i in range(n):
-            result[i] = len(pat.findall(arr[i]))
+            if arr[i] is not None:
+                result[i] = arr[i].count(pat)
+            else:
+                result[i] = na
+        return result
+
+def count_2d(ndarray[object, ndim=2] arr, pat, case=True, flags=0, na=nan, regex=True):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype=np.float64)
+
+    if regex:
+        if isinstance(pat, Pattern):
+            pattern = pat
+        else:
+            if not case:
+                flags = flags | re.IGNORECASE
+            pattern = re.compile(pat, flags=flags)
+
+        for i in range(nr):
+            for j in range(nc):
+                if arr[i, j] is not None:
+                    result[i, j] = len(pattern.findall(arr[i, j]))
+                else:
+                    result[i, j] = na
+        return result
+    else:
+        for i in range(nr):
+            for j in range(nc):
+                if arr[i, j] is not None:
+                    result[i, j] = arr[i, j].count(pat)
+                else:
+                    result[i, j] = na
         return result
 
 def decode(ndarray[object] arr, str encoding, str errors='strict'):
@@ -160,12 +210,28 @@ def encode(ndarray[object] arr, str encoding, str errors='strict'):
         result[i] = arr[i].encode(encoding, errors)
     return result
 
-def endswith(ndarray[object] arr, str pat, na=nan):
+def endswith(ndarray[object] arr, str pat):
     cdef int i
     cdef int n = len(arr)
-    cdef ndarray[DTYPE_t] result = np.empty(n, dtype=DTYPE)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
     for i in range(n):
-        result[i] = arr[i].endswith(pat)
+        if arr[i] is not None:
+            result[i] = arr[i].endswith(pat)
+        else:
+            result[i] = False
+    return result
+
+def endswith_2d(ndarray[object, ndim=2] arr, str pat):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].endswith(pat)
+            else:
+                result[i, j] = False
     return result
 
 def find(ndarray[object] arr, str sub, int start=0, end=None):

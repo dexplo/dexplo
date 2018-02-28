@@ -7,6 +7,7 @@ import numpy as np
 from numpy import nan, ndarray
 from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
                     NoReturn, Set, Iterable, Any, TypeVar, Type, Generator)
+from typing import Pattern
 
 
 class StringClass(object):
@@ -19,9 +20,9 @@ class StringClass(object):
             try:
                 dtype, loc, _ = self._df._column_info[column].values
             except KeyError:
-                raise KeyError(f'Column {column} does not exist in the DataFrame')
+                raise KeyError(f'Column "{column}" does not exist in the DataFrame')
             if dtype != 'O':
-                raise ValueError(f'Column name {column} is not a str column')
+                raise ValueError(f'Column name "{column}" is not a str column')
             return [column], [loc]
         elif isinstance(column, list):
             locs = []
@@ -205,14 +206,14 @@ class StringClass(object):
             return DataFrame(data)
 
     def center(self, column=None, width=None, fill_character=' ', keep=False):
-        columns, locs = self._validate_columns(column)
         if not isinstance(fill_character, str):
             raise TypeError('`fill_character` must be a string')
         elif len(fill_character) != 1:
             raise ValueError('`fill_character` must be exactly one character long')
-
         if not isinstance(width, (int, np.integer)):
             raise TypeError('`width` must be an integer')
+
+        columns, locs = self._validate_columns(column)
         data = self._df._data['O']
 
         if len(locs) == 1:
@@ -227,27 +228,96 @@ class StringClass(object):
             return self._create_df_all(data, 'O')
         return self._create_df(arr, 'O', columns)
 
-    def contains(self, column, pat, case=True, flags=0, na=nan, regex=True, keep=False):
-        if keep:
-            columns, locs, other_columns, other_locs = self._validate_columns_others(column)
-        else:
-            columns, locs = self._validate_columns(column)
-
+    def contains(self, column=None, pat=None, case=True, flags=0, na=nan, regex=True, keep=False):
         if not isinstance(case, (bool, np.bool_)):
             raise TypeError('`case` must be a boolean')
         if not isinstance(flags, (int, np.integer, re.RegexFlag)):
             raise TypeError('flags must be a `RegexFlag` or integer')
+        if not isinstance(pat, (str, Pattern)):
+            raise TypeError('`pat` must either be either a string or compiled regex pattern')
+        if not isinstance(regex, (bool, np.bool_)):
+            raise TypeError('`regex` must be a boolean')
+        if not isinstance(keep, (bool, np.bool_)):
+            raise TypeError('`keep` must be a boolean')
+
+        if keep:
+            columns, locs, other_columns, other_locs = self._validate_columns_others(column)
+        else:
+            columns, locs = self._validate_columns(column)
 
         data = self._df._data['O']
         if len(locs) == 1:
             arr = _sf.contains(data[:, locs[0]], pat, case, flags, na, regex)[:, np.newaxis]
         else:
             arr = _sf.contains_2d(data[:, locs], pat, case, flags, na, regex)
+
         if keep:
             return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
         else:
             return self._create_df(arr, 'O', columns)
 
-    def count(self, pattern):
-        arr = sf.count(self._df._data['O'][:, 0], pattern)
-        return self._create_df(arr, 'i')
+    def count(self, column=None, pat=None, case=True, flags=0, na=nan, regex=True, keep=False):
+        """
+
+        Parameters
+        ----------
+        column
+        pat
+        case - gets ignored whenever
+        flags
+        na
+        regex
+        keep
+
+        Returns
+        -------
+
+        """
+        if not isinstance(case, (bool, np.bool_)):
+            raise TypeError('`case` must be a boolean')
+        if not isinstance(flags, (int, np.integer, re.RegexFlag)):
+            raise TypeError('flags must be a `RegexFlag` or integer')
+        if not isinstance(pat, (str, Pattern)):
+            raise TypeError('`pat` must either be either a string or compiled regex pattern')
+        if not isinstance(regex, (bool, np.bool_)):
+            raise TypeError('`regex` must be a boolean')
+        if not isinstance(keep, (bool, np.bool_)):
+            raise TypeError('`keep` must be a boolean')
+
+        if keep:
+            columns, locs, other_columns, other_locs = self._validate_columns_others(column)
+        else:
+            columns, locs = self._validate_columns(column)
+
+        data = self._df._data['O']
+        if len(locs) == 1:
+            arr = _sf.count(data[:, locs[0]], pat, case, flags, na, regex)[:, np.newaxis]
+        else:
+            arr = _sf.count_2d(data[:, locs], pat, case, flags, na, regex)
+
+        if keep:
+            return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
+        else:
+            return self._create_df(arr, 'O', columns)
+
+    def endswith(self, column=None, pat=None, keep=False):
+        if not isinstance(pat, str):
+            raise TypeError('`pat` must be a string')
+        if not isinstance(keep, (bool, np.bool_)):
+            raise TypeError('`keep` must be a boolean')
+
+        if keep:
+            columns, locs, other_columns, other_locs = self._validate_columns_others(column)
+        else:
+            columns, locs = self._validate_columns(column)
+
+        data = self._df._data['O']
+        if len(locs) == 1:
+            arr = _sf.endswith(data[:, locs[0]], pat)[:, np.newaxis]
+        else:
+            arr = _sf.endswith_2d(data[:, locs], pat)
+
+        if keep:
+            return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
+        else:
+            return self._create_df(arr, 'O', columns)
