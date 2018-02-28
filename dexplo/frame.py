@@ -3666,8 +3666,11 @@ class DataFrame(object):
     def factorize(self, column: str) -> Tuple[ndarray, ndarray]:
         self._validate_column_name(column)
         dtype, loc, _ = self._column_info[column].values
-        func_name = 'get_group_assignment_' + utils.convert_kind_to_dtype(dtype) + '_1d'
         col_arr = self._data[dtype][:, loc]
+        if dtype in 'mM':
+            col_arr = col_arr.view('int64')
+            dtype = 'i'
+        func_name = 'get_group_assignment_' + utils.convert_kind_to_dtype(dtype) + '_1d'
         groups, first_pos = getattr(_gb, func_name)(col_arr)
         return groups, col_arr[first_pos]
 
@@ -4034,8 +4037,7 @@ class Grouper(object):
         self._group_columns = columns
 
         if len(self._group_position) == self._df.shape[0]:
-            warnings.warn("Each group contains exactly one row of data. "
-                          "Are you sure you are grouping correctly?")
+            warnings.warn("Each group contains exactly one row of data. Are you sure you are grouping correctly?")
 
     def _create_groups(self, columns: Union[str, List[str]]) -> Tuple[ndarray, ndarray]:
         self._group_dtype_loc: Dict[str, List[int]] = defaultdict(list)
@@ -4049,13 +4051,18 @@ class Grouper(object):
         if len(columns) == 1:
             # since there is just one column, dtype is from the for-loop
             final_arr = self._df._data[dtype][:, loc]
+            if dtype in 'mM':
+                final_arr = final_arr.view('int64')
             dtype = final_arr.dtype.kind
             func_name = 'get_group_assignment_' + utils.convert_kind_to_dtype(dtype) + '_1d'
             return getattr(_gb, func_name)(final_arr)
         elif len(self._group_dtype_loc) == 1 or 'O' not in self._group_dtype_loc:
             arrs = []
             for dtype, locs in self._group_dtype_loc.items():
-                arrs.append(self._df._data[dtype][:, locs])
+                arr = self._df._data[dtype][:, locs]
+                if dtype in 'mM':
+                    arr = arr.view('int64')
+                arrs.append(arr)
             if len(arrs) == 1:
                 final_arr = arrs[0]
             else:
@@ -4071,7 +4078,10 @@ class Grouper(object):
                 if dtype == 'O':
                     arr_str = self._df._data['O'][:, locs]
                 else:
-                    arrs.append(self._df._data[dtype][:, locs])
+                    arr = self._df._data[dtype][:, locs]
+                    if dtype in 'mM':
+                        arr = arr.view('int64')
+                    arrs.append(arr)
             if len(arrs) == 1:
                 arr_numbers = arrs[0]
             else:
@@ -4134,7 +4144,7 @@ class Grouper(object):
         return len(self._group_position)
 
     def _group_agg(self, name: str, ignore_str: bool = True, add_positions: bool = False,
-                   keep_group_cols: bool = True,
+                   keep_group_cols: bool = True, ignore_date: bool = True, keep_date_type=True,
                    **kwargs) -> DataFrame:
         labels = self._group_labels
         size = len(self._group_position)
@@ -4156,11 +4166,16 @@ class Grouper(object):
         for dtype, data in self._df._data.items():
             if ignore_str and dtype == 'O':
                 continue
+            if ignore_date and dtype in 'mM':
+                continue
             # number of grouped columns
             group_locs: list = self._group_dtype_loc.get(dtype, [])
             if len(group_locs) != data.shape[1]:
-                func_name = name + '_' + utils.convert_kind_to_dtype(dtype)
+                func_name = name + '_' + utils.convert_kind_to_dtype_generic(dtype)
                 func = getattr(_gb, func_name)
+                if dtype in 'mM':
+                    data = data.view('int64')
+
                 if add_positions:
                     arr = func(labels, size, data, group_locs, self._group_position, **kwargs)
                 else:
@@ -4168,7 +4183,11 @@ class Grouper(object):
             else:
                 continue
 
-            new_kind = arr.dtype.kind
+            if dtype in 'mM' and keep_date_type:
+                new_kind = dtype
+                arr = arr.astype(utils.convert_kind_to_dtype(dtype))
+            else:
+                new_kind = arr.dtype.kind
             cur_loc = utils.get_num_cols(data_dict.get(new_kind, []))
             data_dict[new_kind].append(arr)
 
@@ -4211,9 +4230,10 @@ class Grouper(object):
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
     def count(self) -> DataFrame:
-        return self._group_agg('count', ignore_str=False)
+        return self._group_agg('count', ignore_str=False, ignore_date=False, keep_date_type=False)
 
     def cumcount(self) -> DataFrame:
+        # todo: add ascending=False
         name = self._get_agg_name('cumcount')
         new_columns = np.array(self._group_columns + [name], dtype='O')
         cumcount = _gb.cumcount(self._group_labels, len(self._group_position))[:, np.newaxis]
@@ -4235,10 +4255,10 @@ class Grouper(object):
         return self._group_agg('mean')
 
     def max(self) -> DataFrame:
-        return self._group_agg('max', False)
+        return self._group_agg('max', False, ignore_date=False)
 
     def min(self) -> DataFrame:
-        return self._group_agg('min', False)
+        return self._group_agg('min', False, ignore_date=False)
 
     def first(self) -> DataFrame:
         new_columns = self._group_columns.copy()
@@ -4306,16 +4326,16 @@ class Grouper(object):
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
     def any(self) -> DataFrame:
-        return self._group_agg('any', False)
+        return self._group_agg('any', False, ignore_date=False, keep_date_type=False)
 
     def all(self) -> DataFrame:
-        return self._group_agg('all', False)
+        return self._group_agg('all', False, ignore_date=False, keep_date_type=False)
 
     def median(self) -> DataFrame:
         return self._group_agg('median')
 
     def nunique(self) -> DataFrame:
-        return self._group_agg('nunique', False)
+        return self._group_agg('nunique', False, ignore_date=False, keep_date_type=False)
 
     def head(self, n=5) -> DataFrame:
         row_idx = _gb.head(self._group_labels, len(self), n=n)
@@ -4326,10 +4346,10 @@ class Grouper(object):
         return self._df[row_idx, :]
 
     def cummax(self) -> DataFrame:
-        return self._group_agg('cummax', keep_group_cols=False)
+        return self._group_agg('cummax', keep_group_cols=False, ignore_date=False)
 
     def cummin(self) -> DataFrame:
-        return self._group_agg('cummin', keep_group_cols=False)
+        return self._group_agg('cummin', keep_group_cols=False, ignore_date=False)
 
     def cumsum(self) -> DataFrame:
         return self._group_agg('cumsum', keep_group_cols=False)

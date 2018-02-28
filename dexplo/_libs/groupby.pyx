@@ -786,6 +786,22 @@ def count_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data
                 result[labels[j], i - k] += 1
     return result
 
+def count_date(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef int k = 0
+    cdef long nat = np.datetime64('nat').astype('int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] != nat:
+                result[labels[j], i - k] += 1
+    return result
+
 def sum_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
     cdef int i, j, k = 0
     cdef int nr = data.shape[0]
@@ -983,6 +999,21 @@ def max_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, 
                     result[labels[j], i - k] = data[j, i]
     return result
 
+def max_date(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.full((size, nc - len(group_locs)), MIN_INT, dtype='int64')
+    cdef long nat = np.datetime64('nat').astype('int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] > result[labels[j], i - k] and data[j, i] != nat:
+                result[labels[j], i - k] = data[j, i]
+    return result
+
 def min_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
     cdef int i, j, k = 0
     cdef int nr = data.shape[0]
@@ -1040,6 +1071,21 @@ def min_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, 
                     result[labels[j], i - k] = data[j, i]
     return result
 
+def min_date(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef long nat = np.datetime64('nat').astype('int64')
+    cdef ndarray[np.int64_t, ndim=2] result = np.full((size, nc - len(group_locs)), nat, dtype='int64')
+
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if (data[j, i] < result[labels[j], i - k] and data[j, i] != nat) or (result[labels[j], i - k] == nat):
+                result[labels[j], i - k] = data[j, i]
+    return result
 
 def last_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
     cdef int i, j, k = 0
@@ -1402,6 +1448,7 @@ def any_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] da
     cdef int nr = data.shape[0]
     cdef int nc = data.shape[1]
     cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.zeros((size, nc - len(group_locs)), dtype='bool')
+
     for i in range(nc):
         if i in group_locs:
             k += 1
@@ -1450,6 +1497,22 @@ def any_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, 
             continue
         for j in range(nr):
             if data[j, i] is not None and data[j, i] != 0:
+                result[labels[j], i - k] = True
+    return result
+
+def any_date(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.zeros((size, nc - len(group_locs)), dtype='bool')
+    cdef long nat = np.datetime64('nat').astype('int64')
+
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] != nat:
                 result[labels[j], i - k] = True
     return result
 
@@ -1509,6 +1572,21 @@ def all_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, 
                 result[labels[j], i - k] = False
     return result
 
+def all_date(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.uint8_t, ndim=2, cast=True] result = np.ones((size, nc - len(group_locs)), dtype='bool')
+    cdef long nat = np.datetime64('nat').astype('int64')
+
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] == nat:
+                result[labels[j], i - k] = False
+    return result
 
 def median_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
     cdef int i, j, k = 0
@@ -1727,6 +1805,39 @@ def nunique_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, nd
         start = end
     return result
 
+def nunique_date(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((size, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
+    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
+    cdef ndarray[np.int64_t, ndim=2] data_sorted = data[label_args]
+    cdef ndarray[object] uniques
+
+    j = 0
+    for i in range(1, nr):
+        if ordered_labels[i - 1] != ordered_labels[i]:
+            group_end_idx[j] = i
+            j += 1
+    group_end_idx[size - 1] = nr
+
+    start = 0
+    for i in range(size):
+        end = group_end_idx[i]
+        uniques = np.empty(nc_final, dtype='O')
+        for j in range(nc_final):
+            uniques[j] = set()
+        for j in range(start, end):
+            for k in range(nc_final):
+                uniques[k].add(data_sorted[j, k])
+        for j in range(nc_final):
+            result[i, j] = len(uniques[j])
+        start = end
+    return result
+
 def head(ndarray[np.int64_t] labels, int size, n):
     cdef int i
     cdef int nr = len(labels)
@@ -1806,6 +1917,23 @@ def cummax_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2
                 result[j, i - k] = False
     return result
 
+def cummax_date(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef long nat = np.datetime64('nat').astype('int64')
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc_final), dtype='int64')
+    cdef ndarray[np.int64_t, ndim=2] cur_max = np.full((size, nc_final), nat, dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if data[j, i] > cur_max[labels[j], i - k] and data[j, i] != nat:
+                cur_max[labels[j], i - k] = data[j, i]
+            result[j, i - k] = cur_max[labels[j], i - k]
+    return result
 
 def cummin_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
     cdef int i, j, k = 0
@@ -1863,6 +1991,23 @@ def cummin_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2
                 result[j, i - k] = True
     return result
 
+def cummin_date(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef int nc_final = nc - len(group_locs)
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc_final), dtype='int64')
+    cdef long nat = np.datetime64('nat').astype('int64')
+    cdef ndarray[np.int64_t, ndim=2] cur_min = np.full((size, nc_final), nat, dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            if (data[j, i] < cur_min[labels[j], i - k] and data[j, i] != nat) or cur_min[labels[j], i - k] == nat:
+                cur_min[labels[j], i - k] = data[j, i]
+            result[j, i - k] = cur_min[labels[j], i - k]
+    return result
 
 def cumsum_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
     cdef int i, j, k = 0

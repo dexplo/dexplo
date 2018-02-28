@@ -54,8 +54,8 @@ No complex Python data types
 - [x] int - always 64 bits, not-null
 - [x] float - always 64 bits, nulls allowed
 - [x] str - A python unicode object, nulls allowed
-- [ ] datetime
-- [ ] timedelta
+- [x] datetime
+- [x] timedelta
 - [ ] categorical
 
 #### Attributes to implement
