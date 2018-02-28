@@ -100,10 +100,11 @@ class StringClass(object):
     def _create_df_all(self, arr, dtype):
         new_data = {}
         if dtype == 'O':
-            for dtype, arr in self._df._data.items():
-                if dtype == 'O':
+            for old_dtype, old_data in self._df._data.items():
+                if old_dtype == 'O':
                     new_data['O'] = arr
-                new_data[dtype] = arr.copy('F')
+                else:
+                    new_data[old_dtype] = old_data.copy('F')
         else:
             new_data = {}
             add_loc = 0
@@ -321,3 +322,100 @@ class StringClass(object):
             return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
         else:
             return self._create_df(arr, 'O', columns)
+
+    def find(self, column=None, sub=None, start=None, end=None, keep=False):
+        if not isinstance(sub, str):
+            raise TypeError('`sub` must be a string')
+        if not isinstance(keep, (bool, np.bool_)):
+            raise TypeError('`keep` must be a boolean')
+        if start is not None and not isinstance(start, (int, np.integer)):
+            raise TypeError('`start` must be an intege or None')
+        if end is not None and not isinstance(start, (int, np.integer)):
+            raise TypeError('`end` must be an intege or None')
+
+        if keep:
+            columns, locs, other_columns, other_locs = self._validate_columns_others(column)
+        else:
+            columns, locs = self._validate_columns(column)
+
+        data = self._df._data['O']
+        if len(locs) == 1:
+            arr = _sf.find(data[:, locs[0]], sub, start, end)[:, np.newaxis]
+        else:
+            arr = _sf.find_2d(data[:, locs], sub, start, end)
+
+        if keep:
+            return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
+        else:
+            return self._create_df(arr, 'O', columns)
+
+    def get(self, column=None, i=None, keep=False):
+        if not isinstance(keep, (bool, np.bool_)):
+            raise TypeError('`keep` must be a boolean')
+        if not isinstance(i, (int, np.integer)):
+            raise TypeError('`i` must be an intege or None')
+
+        columns, locs = self._validate_columns(column)
+        data = self._df._data['O']
+
+        if len(locs) == 1:
+            arr = _sf.get(data[:, locs[0]], i)[:, np.newaxis]
+        else:
+            arr = _sf.get_2d(data[:, locs], i)
+
+        if keep:
+            data = data.copy()
+            for i, loc in enumerate(locs):
+                data[:, loc] = arr[:, i]
+
+            return self._create_df_all(data, 'O')
+        return self._create_df(arr, 'O', columns)
+
+    def get_dummies(self, column=None, sep='|', keep=False):
+        if not isinstance(keep, (bool, np.bool_)):
+            raise TypeError('`keep` must be a boolean')
+        if not isinstance(sep, str):
+            raise TypeError('`end` must be an intege or None')
+
+        columns, locs = self._validate_columns(column)
+
+        data = self._df._data['O']
+        arrs = []
+        all_cols = []
+        for loc in locs:
+            arr, new_columns = _sf.get_dummies(data[:, loc], sep)
+            arrs.append(arr)
+            all_cols.append(new_columns)
+
+        if len(arrs) == 1:
+            final_arr = arrs[0]
+            final_cols = all_cols[0]
+        else:
+            final_arr = np.column_stack(arrs)
+            final_cols = np.concatenate(all_cols)
+
+        new_column_info = {}
+        new_data = {}
+        add_loc = 0
+        add_order = 0
+        if keep:
+            df = self._df.drop(columns=columns)
+            if 'i' in df._data:
+                add_loc = df._data['i'].shape[1]
+            add_order = df.shape[1]
+
+            for dtype, arr in df._data.items():
+                if dtype == 'i':
+                    new_data['i'] = np.column_stack((arr, final_arr))
+                else:
+                    new_data[dtype] = arr.copy('F')
+            new_column_info = df._copy_column_info()
+            new_columns = np.concatenate((df._columns, final_cols))
+        else:
+            new_data = {'i': final_arr}
+            new_columns = final_cols
+
+        for i, col in enumerate(final_cols):
+            new_column_info[col] = utils.Column('i', i + add_loc, i + add_order)
+
+        return self._df._construct_from_new(new_data, new_column_info, new_columns)

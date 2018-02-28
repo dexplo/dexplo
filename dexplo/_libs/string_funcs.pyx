@@ -234,30 +234,93 @@ def endswith_2d(ndarray[object, ndim=2] arr, str pat):
                 result[i, j] = False
     return result
 
-def find(ndarray[object] arr, str sub, int start=0, end=None):
+def find(ndarray[object] arr, str sub, start, end):
     cdef int i
+    cdef np.uint8_t hasnans = False
     cdef int n = len(arr)
-    cdef ndarray[int] result = np.empty(n, dtype=int)
+    cdef ndarray[np.float64_t] result = np.empty(n, dtype='float64')
     for i in range(n):
-        result[i] = arr[i].find(sub, start, end)
+        if arr[i] is not None:
+            result[i] = arr[i].find(sub, start, end)
+        else:
+            hasnans = True
+            result[i] = nan
+
+    if not hasnans:
+        return result.astype('int64')
     return result
 
-def get(ndarray[object] arr, int i):
-    cdef int j
+def find_2d(ndarray[object, ndim=2] arr, str sub, start, end):
+    cdef int i, j
+    cdef np.uint8_t hasnans = False
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].find(sub, start, end)
+            else:
+                hasnans = True
+                result[i, j] = nan
+
+    if not hasnans:
+        return result.astype('int64')
+    return result
+
+def get(ndarray[object] arr, int idx):
+    cdef int i
     cdef int n = len(arr)
     cdef ndarray[object] result = np.empty(n, dtype='object')
-    for j in range(n):
-        try:
-            result[j] = arr[j][i]
-        except IndexError:
-            result[j] = nan
+    for i in range(n):
+        if arr[i] is not None:
+            try:
+                result[i] = arr[i][idx]
+            except IndexError:
+                result[i] = None
+        else:
+            result[i] = None
+    return result
+
+def get_2d(ndarray[object, ndim=2] arr, int idx):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                try:
+                    result[i, j] = arr[i, j][idx]
+                except IndexError:
+                    result[i, j] = None
+            else:
+                result[i, j] = None
     return result
 
 def get_dummies(ndarray[object] arr, sep='|'):
-    cdef int i
+    cdef int i, arr_num, ct = 0
     cdef int n = len(arr)
-    cdef ndarray[object] result = np.empty(n, dtype='object')
+    cdef dict new_cols = {}
+    cdef list new_arrs = []
+    cdef ndarray[object] col_names
 
+    for i in range(n):
+        if arr[i] is not None:
+            for val in arr[i].split(sep):
+                arr_num = new_cols.get(val, -1)
+                if arr_num == -1:
+                    new_arrs.append(np.zeros(n, dtype='int64'))
+                    new_arrs[ct][i] = 1
+                    new_cols[val] = ct
+                    ct += 1
+                else:
+                    new_arrs[arr_num][i] = 1
+
+    col_names = np.empty(len(new_arrs), dtype='O')
+    for k, v in new_cols.items():
+        col_names[v] = k
+    return np.column_stack(new_arrs), col_names
 
 def lower(ndarray[object] arr):
     cdef int i

@@ -185,10 +185,10 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] endswith      
 - [ ] extract       
 - [ ] extractall    
-- [ ] find         
+- [x] find         
 - [ ] findall
-- [ ] get           
-- [ ] get_dummies
+- [x] get           
+- [x] get_dummies
 - [ ] index
 - [ ] isalnum
 - [ ] isalpha
