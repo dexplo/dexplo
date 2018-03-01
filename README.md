@@ -183,10 +183,8 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] contains      
 - [x] count         
 - [x] endswith      
-- [ ] extract       
-- [ ] extractall    
 - [x] find         
-- [ ] findall
+- [x] findall
 - [x] get           
 - [x] get_dummies
 - [x] isalnum

@@ -268,6 +268,31 @@ def find_2d(ndarray[object, ndim=2] arr, str sub, start, end):
         return result.astype('int64')
     return result
 
+def findall(ndarray[object] arr, pat, pos, case=True, flags=0):
+    cdef int i, j, arr_num, ct = 0
+    cdef int nr = len(arr)
+    cdef list new_arrs = []
+    cdef ndarray[object] col_names
+
+    if isinstance(pat, Pattern):
+        pattern = pat
+    else:
+        if not case:
+            flags = flags | re.IGNORECASE
+        pattern = re.compile(pat, flags=flags)
+
+    for i in range(nr):
+        if arr[i] is not None:
+            for j, val in enumerate((pattern.findall(arr[i], pos))):
+                try:
+                    new_arrs[j][i] = val
+                except IndexError:
+                    new_arrs.append(np.empty(nr, 'O'))
+                    new_arrs[j][i] = val
+
+    col_names = np.array(['find_' + str(i) for i in range(len(new_arrs))], 'O')
+    return np.column_stack(new_arrs), col_names
+
 def get(ndarray[object] arr, int idx):
     cdef int i
     cdef int n = len(arr)

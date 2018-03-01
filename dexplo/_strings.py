@@ -358,6 +358,19 @@ class StringClass(object):
         return self._str_generic(name='find', column=column, keep=keep, multiple=True,
                                  sub=sub, start=start, end=end)
 
+    def findall(self, column=None, pat=None, pos=0, case=True, flags=0, keep=False):
+        if not isinstance(pat, (str, Pattern)):
+            raise TypeError('`pat` must be a str or compiled regular expression')
+        if not isinstance(pos, (int, np.integer)):
+            raise TypeError('`n` must be an integer')
+        if not isinstance(case, (bool, np.bool_)):
+            raise TypeError('`case` must be a boolean')
+        if not isinstance(flags, (int, np.integer, re.RegexFlag)):
+            raise TypeError('flags must be a `RegexFlag` or integer')
+
+        return self._str_generic_concat('findall', column, keep, pat=pat, pos=pos,
+                                        case=case, flags=flags)
+
     def get(self, column=None, i=None, keep=False):
         if not isinstance(i, (int, np.integer)):
             raise TypeError('`i` must be an intege or None')
