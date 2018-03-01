@@ -8,6 +8,7 @@ from numpy import nan, ndarray
 from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
                     NoReturn, Set, Iterable, Any, TypeVar, Type, Generator)
 from typing import Pattern
+import textwrap
 
 
 class StringClass(object):
@@ -176,6 +177,71 @@ class StringClass(object):
                 locs_other.append(self._df._column_info[col].loc)
         return cols_other, locs_other
 
+    def _str_generic_concat(self, name, column, keep, **kwargs):
+        if not isinstance(keep, (bool, np.bool_)):
+            raise TypeError('`keep` must be a boolean')
+
+        if column is None:
+            columns = []
+            locs = []
+            for col in self._df._columns:
+                dtype, loc, _ = self._df._column_info[col].values
+                if dtype == 'O':
+                    columns.append(col)
+                    locs.append(loc)
+        else:
+            columns, locs = self._validate_columns(column)
+
+        data = self._df._data['O']
+        arrs = []
+        all_cols = []
+        for loc in locs:
+            arr, new_columns = getattr(_sf, name)(data[:, loc], **kwargs)
+            arrs.append(arr)
+            all_cols.append(new_columns)
+
+        dtype_new = arrs[0].dtype.kind
+
+        if len(arrs) == 1:
+            final_arr = arrs[0]
+            final_cols = all_cols[0]
+        else:
+            final_arr = np.column_stack(arrs)
+            all_cols_new = []
+            for cols, orig_name in zip(all_cols, columns):
+                all_cols_new.append(cols + '_' + orig_name)
+            final_cols = np.concatenate(all_cols_new)
+
+        new_column_info = {}
+        new_data = {}
+        add_loc = 0
+        add_order = 0
+        if keep:
+            df = self._df.drop(columns=columns)
+            if dtype_new in df._data:
+                add_loc = df._data[dtype_new].shape[1]
+            add_order = df.shape[1]
+
+            for dtype, arr in df._data.items():
+                if dtype == dtype_new:
+                    new_data[dtype_new] = np.column_stack((arr, final_arr))
+                else:
+                    new_data[dtype] = arr.copy('F')
+
+            if dtype_new not in df._data:
+                new_data[dtype_new] = final_arr
+
+            new_column_info = df._copy_column_info()
+            new_columns = np.concatenate((df._columns, final_cols))
+        else:
+            new_data = {dtype_new: final_arr}
+            new_columns = final_cols
+
+        for i, col in enumerate(final_cols):
+            new_column_info[col] = utils.Column(dtype_new, i + add_loc, i + add_order)
+
+        return self._df._construct_from_new(new_data, new_column_info, new_columns)
+
     def _str_generic(self, name, column, keep, multiple, **kwargs):
         if not isinstance(keep, (bool, np.bool_)):
             raise TypeError('`keep` must be a boolean')
@@ -221,16 +287,16 @@ class StringClass(object):
                 data[col] = [''.join(arr)]
             return DataFrame(data)
 
-    def center(self, column=None, width=None, fill_character=' ', keep=False):
-        if not isinstance(fill_character, str):
-            raise TypeError('`fill_character` must be a string')
-        elif len(fill_character) != 1:
-            raise ValueError('`fill_character` must be exactly one character long')
+    def center(self, column=None, width=None, fillchar=' ', keep=False):
+        if not isinstance(fillchar, str):
+            raise TypeError('`fillchar` must be a string')
+        elif len(fillchar) != 1:
+            raise ValueError('`fillchar` must be exactly one character long')
         if not isinstance(width, (int, np.integer)):
             raise TypeError('`width` must be an integer')
 
         return self._str_generic(name='center', column=column, keep=keep, multiple=False,
-                                 width=width, fill_character=fill_character)
+                                 width=width, fillchar=fillchar)
 
     def contains(self, column=None, pat=None, case=True, flags=0, na=nan, regex=True, keep=False):
         if not isinstance(case, (bool, np.bool_)):
@@ -287,7 +353,7 @@ class StringClass(object):
         if start is not None and not isinstance(start, (int, np.integer)):
             raise TypeError('`start` must be an intege or None')
         if end is not None and not isinstance(start, (int, np.integer)):
-            raise TypeError('`end` must be an intege or None')
+            raise TypeError('`end` must be an integer or None')
 
         return self._str_generic(name='find', column=column, keep=keep, multiple=True,
                                  sub=sub, start=start, end=end)
@@ -300,53 +366,10 @@ class StringClass(object):
                                  i=i)
 
     def get_dummies(self, column=None, sep='|', keep=False):
-        if not isinstance(keep, (bool, np.bool_)):
-            raise TypeError('`keep` must be a boolean')
         if not isinstance(sep, str):
-            raise TypeError('`end` must be an intege or None')
+            raise TypeError('`sep` must be an integer or None')
 
-        columns, locs = self._validate_columns(column)
-
-        data = self._df._data['O']
-        arrs = []
-        all_cols = []
-        for loc in locs:
-            arr, new_columns = _sf.get_dummies(data[:, loc], sep)
-            arrs.append(arr)
-            all_cols.append(new_columns)
-
-        if len(arrs) == 1:
-            final_arr = arrs[0]
-            final_cols = all_cols[0]
-        else:
-            final_arr = np.column_stack(arrs)
-            final_cols = np.concatenate(all_cols)
-
-        new_column_info = {}
-        new_data = {}
-        add_loc = 0
-        add_order = 0
-        if keep:
-            df = self._df.drop(columns=columns)
-            if 'i' in df._data:
-                add_loc = df._data['i'].shape[1]
-            add_order = df.shape[1]
-
-            for dtype, arr in df._data.items():
-                if dtype == 'i':
-                    new_data['i'] = np.column_stack((arr, final_arr))
-                else:
-                    new_data[dtype] = arr.copy('F')
-            new_column_info = df._copy_column_info()
-            new_columns = np.concatenate((df._columns, final_cols))
-        else:
-            new_data = {'i': final_arr}
-            new_columns = final_cols
-
-        for i, col in enumerate(final_cols):
-            new_column_info[col] = utils.Column('i', i + add_loc, i + add_order)
-
-        return self._df._construct_from_new(new_data, new_column_info, new_columns)
+        return self._str_generic_concat('get_dummies', column, keep, sep=sep)
 
     def isalnum(self, column=None, keep=False):
         return self._str_generic(name='isalnum', column=column, keep=keep, multiple=True)
@@ -374,3 +397,187 @@ class StringClass(object):
 
     def isupper(self, column=None, keep=False):
         return self._str_generic(name='isupper', column=column, keep=keep, multiple=True)
+
+    def join(self, column=None, sep=None, keep=False):
+        if not isinstance(sep, str):
+            raise TypeError('`sep` must be a string')
+        return self._str_generic(name='join', column=column, keep=keep, multiple=False,
+                                 sep=sep)
+
+    def len(self, column=None, keep=False):
+        return self._str_generic(name='_len', column=column, keep=keep, multiple=True)
+
+    def ljust(self, column=None, width=None, fillchar=' ', keep=False):
+        if not isinstance(fillchar, str):
+            raise TypeError('`fillchar` must be a string')
+        elif len(fillchar) != 1:
+            raise ValueError('`fillchar` must be exactly one character long')
+        if not isinstance(width, (int, np.integer)):
+            raise TypeError('`width` must be an integer')
+
+        return self._str_generic(name='ljust', column=column, keep=keep, multiple=False,
+                                 width=width, fillchar=fillchar)
+
+    def lower(self, column=None, keep=False):
+        return self._str_generic(name='lower', column=column, keep=keep, multiple=False)
+
+    def lstrip(self, column=None, to_strip=None, keep=False):
+        if not isinstance(to_strip, str) and to_strip is not None:
+            raise TypeError('`to_strip` must be a str or None')
+        return self._str_generic(name='lstrip', column=column, keep=keep, multiple=False,
+                                 to_strip=to_strip)
+
+    def repeat(self, column=None, repeats=None, keep=False):
+        if not isinstance(repeats, (int, np.integer)):
+            raise TypeError('`repeats` must be an intege or None')
+
+        return self._str_generic(name='repeat', column=column, keep=keep, multiple=False,
+                                 repeats=repeats)
+
+    def partition(self, column=None, sep='', keep=False):
+        if not isinstance(sep, str):
+            raise TypeError('`sep` must be an intege or None')
+
+        return self._str_generic_concat('partition', column, keep, sep=sep)
+
+    def replace(self, column=None, pat=None, repl=None, n=0, case=True, flags=0, keep=False):
+        if not isinstance(case, (bool, np.bool_)):
+            raise TypeError('`case` must be a boolean')
+        if not isinstance(flags, (int, np.integer, re.RegexFlag)):
+            raise TypeError('`flags` must be a `RegexFlag` or integer')
+        if not isinstance(n, (int, np.integer, re.RegexFlag)):
+            raise TypeError('`n` must be a `RegexFlag` or integer')
+        if not isinstance(pat, (str, Pattern)):
+            raise TypeError('`pat` must either be either a string or compiled regex pattern')
+        if not isinstance(repl, str) or callable(repl):
+            raise TypeError('`repl` must either be either a string or compiled regex pattern')
+
+        return self._str_generic(name='replace', column=column, keep=keep, multiple=False,
+                                 pat=pat, repl=repl, n=n, case=case, flags=flags)
+
+    def rfind(self, column=None, sub=None, start=None, end=None, keep=False):
+        if not isinstance(sub, str):
+            raise TypeError('`sub` must be a string')
+        if start is not None and not isinstance(start, (int, np.integer)):
+            raise TypeError('`start` must be an intege or None')
+        if end is not None and not isinstance(start, (int, np.integer)):
+            raise TypeError('`end` must be an integer or None')
+
+        return self._str_generic(name='rfind', column=column, keep=keep, multiple=True,
+                                 sub=sub, start=start, end=end)
+
+    def rjust(self, column=None, width=None, fillchar=' ', keep=False):
+        if not isinstance(fillchar, str):
+            raise TypeError('`fillchar` must be a string')
+        elif len(fillchar) != 1:
+            raise ValueError('`fillchar` must be exactly one character long')
+        if not isinstance(width, (int, np.integer)):
+            raise TypeError('`width` must be an integer')
+
+        return self._str_generic(name='rjust', column=column, keep=keep, multiple=False,
+                                 width=width, fillchar=fillchar)
+
+    def rpartition(self, column=None, sep='', keep=False):
+        if not isinstance(sep, str):
+            raise TypeError('`sep` must be an intege or None')
+
+        return self._str_generic_concat('rpartition', column, keep, sep=sep)
+
+    def rsplit(self, column=None, pat=None, n=0, case=True, flags=0, keep=False):
+        if not isinstance(pat, (str, Pattern)):
+            raise TypeError('`pat` must be a str or compiled regular expression')
+        if not isinstance(n, (int, np.integer)):
+            raise TypeError('`n` must be an integer')
+        if not isinstance(case, (bool, np.bool_)):
+            raise TypeError('`case` must be a boolean')
+        if not isinstance(flags, (int, np.integer, re.RegexFlag)):
+            raise TypeError('flags must be a `RegexFlag` or integer')
+
+        return self._str_generic_concat('rsplit', column, keep, pat=pat, n=n, case=case, flags=flags)
+
+    def rstrip(self, column=None, to_strip=None, keep=False):
+        if not isinstance(to_strip, str) and to_strip is not None:
+            raise TypeError('`to_strip` must be a str or None')
+        return self._str_generic(name='rstrip', column=column, keep=keep, multiple=False,
+                                 to_strip=to_strip)
+
+    def slice(self, column=None, start=None, stop=None, step=None, keep=False):
+        if not isinstance(start, (int, np.integer)) and start is not None:
+            raise TypeError('`start` must be an integer')
+        if not isinstance(stop, (int, np.integer)) and stop is not None:
+            raise TypeError('`stop` must be an integer')
+        if not isinstance(step, (int, np.integer)) and step is not None:
+            raise TypeError('`step` must be an integer')
+        return self._str_generic(name='_slice', column=column, keep=keep, multiple=False,
+                                 start=start, stop=stop, step=step)
+
+    def slice_replace(self, column=None, start=None, stop=None, repl=None, keep=False):
+        if start is None:
+            start = 0
+        if not isinstance(start, (int, np.integer)):
+            raise TypeError('`start` must be an integer')
+        if not isinstance(stop, (int, np.integer)) and stop is not None:
+            raise TypeError('`stop` must be an integer')
+        if repl is None:
+            repl = ''
+        if not isinstance(repl, str):
+            raise TypeError('`repl` must be a str or None')
+        return self._str_generic(name='slice_replace', column=column, keep=keep, multiple=False,
+                                 start=start, stop=stop, repl=repl)
+
+    def split(self, column=None, pat=None, n=0, case=True, flags=0, keep=False):
+        if not isinstance(pat, (str, Pattern)):
+            raise TypeError('`pat` must be a str or compiled regular expression')
+        if not isinstance(n, (int, np.integer)):
+            raise TypeError('`n` must be an integer')
+        if not isinstance(case, (bool, np.bool_)):
+            raise TypeError('`case` must be a boolean')
+        if not isinstance(flags, (int, np.integer, re.RegexFlag)):
+            raise TypeError('flags must be a `RegexFlag` or integer')
+
+        return self._str_generic_concat('split', column, keep, pat=pat, n=n, case=case, flags=flags)
+
+    def startswith(self, column=None, pat=None, keep=False):
+        if not isinstance(pat, str):
+            raise TypeError('`pat` must be a string')
+
+        return self._str_generic(name='startswith', column=column, keep=keep, multiple=True,
+                                 pat=pat)
+
+    def strip(self, column=None, to_strip=None, keep=False):
+        if not isinstance(to_strip, str) and to_strip is not None:
+            raise TypeError('`to_strip` must be a str or None')
+        return self._str_generic(name='strip', column=column, keep=keep, multiple=False,
+                                 to_strip=to_strip)
+
+    def swapcase(self, column=None, keep=False):
+        return self._str_generic(name='swapcase', column=column, keep=keep, multiple=False)
+
+    def title(self, column=None, keep=False):
+        return self._str_generic(name='title', column=column, keep=keep, multiple=False)
+
+    def translate(self, column=None, table=None, keep=False):
+        if not isinstance(table, dict):
+            raise TypeError('`table` must be a dict')
+        return self._str_generic(name='translate', column=column, keep=keep, multiple=False,
+                                 table=table)
+
+    def upper(self, column=None, keep=False):
+        return self._str_generic(name='upper', column=column, keep=keep, multiple=False)
+
+    def wrap(self, column=None, width=None, keep=False, **kwargs):
+        if not isinstance(width, (int, np.integer)):
+            raise TypeError('`width` must be an integer')
+
+        t = textwrap.TextWrapper(width, **kwargs)
+
+        return self._str_generic(name='wrap', column=column, keep=keep, multiple=False,
+                                 t=t)
+
+    def zfill(self, column=None, width=None, keep=False):
+        if not isinstance(width, (int, np.integer)):
+            raise TypeError('`width` must be an integer')
+
+        return self._str_generic(name='zfill', column=column, keep=keep, multiple=False,
+                                 width=width)
+

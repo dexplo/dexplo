@@ -658,6 +658,17 @@ def lstrip_2d(ndarray[object, ndim=2] arr, to_strip):
                 result[i, j] = None
     return result
 
+def partition(ndarray[object] arr, str sep):
+    cdef int i, j
+    cdef int n = len(arr)
+    cdef ndarray[object, ndim=2] result = np.empty((n, 3), dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].partition(sep)
+        else:
+            result[i] = [None, None, None]
+    return result, np.array(['head', 'sep', 'tail'], dtype='O')
+
 def repeat(ndarray[object] arr, int repeats):
     cdef int i
     cdef int n = len(arr)
@@ -686,6 +697,47 @@ def repeat_2d(ndarray[object, ndim=2] arr, int repeats):
                     result[i, j] = None
             else:
                 result[i, j] = None
+    return result
+
+def replace(ndarray[object] arr, pat, str repl='', n=0, case=True, flags=0):
+    cdef Py_ssize_t i
+    cdef Py_ssize_t nr = len(arr)
+    cdef ndarray[object] result = np.empty(nr, dtype='O')
+
+    if isinstance(pat, Pattern):
+        pattern = pat
+    else:
+        if not case:
+            flags = flags | re.IGNORECASE
+        pattern = re.compile(pat, flags=flags)
+
+    for i in range(nr):
+        if arr[i] is not None:
+            result[i] = pattern.sub(repl, arr[i], n)
+        else:
+            result[i] = None
+    return result
+
+def replace_2d(ndarray[object, ndim=2] arr, pat, str repl='', n=0, case=True, flags=0):
+    cdef Py_ssize_t i, j
+    cdef Py_ssize_t nr = len(arr)
+    cdef Py_ssize_t nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='O')
+
+    if isinstance(pat, Pattern):
+        pattern = pat
+    else:
+        if not case:
+            flags = flags | re.IGNORECASE
+        pattern = re.compile(pat, flags=flags)
+
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = pattern.sub(repl, arr[i, j], n)
+            else:
+                result[i, j] = None
+
     return result
 
 def rfind(ndarray[object] arr, str sub, start, end):
@@ -745,6 +797,42 @@ def rjust_2d(ndarray[object, ndim=2] arr, int width, str fillchar=' '):
             else:
                 result[i, j] = None
     return result
+
+def rpartition(ndarray[object] arr, str sep):
+    cdef int i, j
+    cdef int n = len(arr)
+    cdef ndarray[object, ndim=2] result = np.empty((n, 3), dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].rpartition(sep)
+        else:
+            result[i] = [None, None, None]
+    return result, np.array(['head', 'sep', 'tail'], dtype='O')
+
+def rsplit(ndarray[object] arr, pat, n, case=True, flags=0):
+    cdef int i, j, arr_num, ct = 0
+    cdef int nr = len(arr)
+    cdef list new_arrs = []
+    cdef ndarray[object] col_names
+
+    if isinstance(pat, Pattern):
+        pattern = pat
+    else:
+        if not case:
+            flags = flags | re.IGNORECASE
+        pattern = re.compile(pat, flags=flags)
+
+    for i in range(nr):
+        if arr[i] is not None:
+            for j, val in enumerate((pattern.split(arr[i][::-1], n))[::-1]):
+                try:
+                    new_arrs[j][i] = val[::-1]
+                except IndexError:
+                    new_arrs.append(np.empty(nr, 'O'))
+                    new_arrs[j][i] = val[::-1]
+
+    col_names = np.array(['split_' + str(i) for i in range(len(new_arrs))], 'O')
+    return np.column_stack(new_arrs), col_names
 
 def rstrip(ndarray[object] arr, to_strip):
     cdef int i
@@ -835,6 +923,31 @@ def slice_replace_2d(ndarray[object, ndim=2] arr, int start, stop, str repl):
                 else:
                     result[i, j] = None
     return result
+
+def split(ndarray[object] arr, pat, n, case=True, flags=0):
+    cdef int i, j, arr_num, ct = 0
+    cdef int nr = len(arr)
+    cdef list new_arrs = []
+    cdef ndarray[object] col_names
+
+    if isinstance(pat, Pattern):
+        pattern = pat
+    else:
+        if not case:
+            flags = flags | re.IGNORECASE
+        pattern = re.compile(pat, flags=flags)
+
+    for i in range(nr):
+        if arr[i] is not None:
+            for j, val in enumerate(pattern.split(arr[i], n)):
+                try:
+                    new_arrs[j][i] = val
+                except IndexError:
+                    new_arrs.append(np.empty(nr, 'O'))
+                    new_arrs[j][i] = val
+
+    col_names = np.array(['split_' + str(i) for i in range(len(new_arrs))], 'O')
+    return np.column_stack(new_arrs), col_names
 
 def startswith(ndarray[object] arr, str pat):
     cdef int i
@@ -1027,4 +1140,3 @@ def wrap_2d(ndarray[object, ndim=2] arr, t):
             else:
                 result[i, j] = None
     return result
-

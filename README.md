@@ -203,17 +203,17 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] ljust
 - [x] lower         
 - [x] lstrip
-- [ ] partition
+- [x] partition
 - [x] repeat
-- [ ] replace
+- [x] replace
 - [x] rfind
 - [x] rjust
-- [ ] rpartition
-- [ ] rsplit
+- [x] rpartition
+- [x] rsplit
 - [x] rstrip
 - [x] slice
 - [x] slice_replace
-- [ ] split
+- [x] split
 - [x] startswith
 - [x] strip
 - [x] swapcase
