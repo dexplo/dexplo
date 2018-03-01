@@ -198,23 +198,19 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] isspace
 - [x] istitle
 - [x] isupper
-- [ ] join
-- [ ] len
-- [ ] ljust
-- [ ] lower         
-- [ ] lstrip
-- [ ] match
-- [ ] normalize
-- [ ] pad
+- [x] join
+- [x] len
+- [x] ljust
+- [x] lower         
+- [x] lstrip
 - [ ] partition
 - [ ] repeat
 - [ ] replace
-- [ ] rfind
-- [ ] rindex
-- [ ] rjust
+- [x] rfind
+- [x] rjust
 - [ ] rpartition
 - [ ] rsplit
-- [ ] rstrip
+- [x] rstrip
 - [ ] slice
 - [ ] slice_replace
 - [ ] split

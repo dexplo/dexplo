@@ -39,18 +39,18 @@ def capitalize_2d(ndarray[object, ndim=2] arr):
                 arr[i, j] = None
     return result
 
-def center(ndarray[object] arr, int width, str fill_character=' '):
+def center(ndarray[object] arr, int width, str fillchar=' '):
     cdef int i
     cdef int n = len(arr)
     cdef ndarray[object] result = np.empty(n, dtype='object')
     for i in range(n):
         if arr[i] is not None:
-            result[i] = arr[i].center(width, fill_character)
+            result[i] = arr[i].center(width, fillchar)
         else:
             result[i] = None
     return result
 
-def center_2d(ndarray[object, ndim=2] arr, int width, str fill_character=' '):
+def center_2d(ndarray[object, ndim=2] arr, int width, str fillchar=' '):
     cdef int i, j
     cdef int nr = len(arr)
     cdef int nc = arr.shape[1]
@@ -58,7 +58,7 @@ def center_2d(ndarray[object, ndim=2] arr, int width, str fill_character=' '):
     for i in range(nr):
         for j in range(nc):
             if arr[i, j] is not None:
-                result[i, j] = arr[i, j].center(width, fill_character)
+                result[i, j] = arr[i, j].center(width, fillchar)
             else:
                 result[i, j] = None
     return result
@@ -538,31 +538,204 @@ def isupper_2d(ndarray[object, ndim=2] arr):
                 result[i, j] = False
     return result
 
+def join(ndarray[object] arr, str sep):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='O')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = sep.join(arr[i])
+        else:
+            result[i] = None
+    return result
 
+def join_2d(ndarray[object, ndim=2] arr, str sep):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='O')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = sep.join(arr[i, j])
+            else:
+                result[i, j] = None
+    return result
 
+def _len(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.int64_t] result = np.empty(n, dtype='int64')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = len(arr[i])
+        else:
+            result[i] = -1
+    return result
 
+def _len_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc), dtype='int64')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = len(arr[i, j])
+            else:
+                result[i, j] = -1
+    return result
 
+def ljust(ndarray[object] arr, int width, str fillchar=' '):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].ljust(width, fillchar)
+        else:
+            result[i] = None
+    return result
+
+def ljust_2d(ndarray[object, ndim=2] arr, int width, str fillchar=' '):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].ljust(width, fillchar)
+            else:
+                result[i, j] = None
+    return result
 
 def lower(ndarray[object] arr):
     cdef int i
     cdef int n = len(arr)
     cdef ndarray[object] result = np.empty(n, dtype='object')
     for i in range(n):
-        result[i] = arr[i].lower()
+        if arr[i] is not None:
+            result[i] = arr[i].lower()
+        else:
+            result[i] = None
     return result
 
-def title(ndarray[object] arr):
+def lower_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].lower()
+            else:
+                result[i, j] = None
+    return result
+
+def lstrip(ndarray[object] arr, to_strip):
     cdef int i
     cdef int n = len(arr)
     cdef ndarray[object] result = np.empty(n, dtype='object')
     for i in range(n):
-        result[i] = arr[i].title()
+        if arr[i] is not None:
+            result[i] = arr[i].lstrip(to_strip)
+        else:
+            result[i] = None
     return result
 
-def upper(ndarray[object] arr):
+def lstrip_2d(ndarray[object, ndim=2] arr, to_strip):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].lstrip(to_strip)
+            else:
+                result[i, j] = None
+    return result
+
+def rfind(ndarray[object] arr, str sub, start, end):
+    cdef int i
+    cdef np.uint8_t hasnans = False
+    cdef int n = len(arr)
+    cdef ndarray[np.float64_t] result = np.empty(n, dtype='float64')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].rfind(sub, start, end)
+        else:
+            hasnans = True
+            result[i] = nan
+
+    if not hasnans:
+        return result.astype('int64')
+    return result
+
+def rfind_2d(ndarray[object, ndim=2] arr, str sub, start, end):
+    cdef int i, j
+    cdef np.uint8_t hasnans = False
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].rfind(sub, start, end)
+            else:
+                hasnans = True
+                result[i, j] = nan
+
+    if not hasnans:
+        return result.astype('int64')
+    return result
+
+def rjust(ndarray[object] arr, int width, str fillchar=' '):
     cdef int i
     cdef int n = len(arr)
     cdef ndarray[object] result = np.empty(n, dtype='object')
     for i in range(n):
-        result[i] = arr[i].upper()
+        if arr[i] is not None:
+            result[i] = arr[i].rjust(width, fillchar)
+        else:
+            result[i] = None
+    return result
+
+def rjust_2d(ndarray[object, ndim=2] arr, int width, str fillchar=' '):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].rjust(width, fillchar)
+            else:
+                result[i, j] = None
+    return result
+
+def rstrip(ndarray[object] arr, to_strip):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].rstrip(to_strip)
+        else:
+            result[i] = None
+    return result
+
+def rstrip_2d(ndarray[object, ndim=2] arr, to_strip):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].rstrip(to_strip)
+            else:
+                result[i, j] = None
     return result
