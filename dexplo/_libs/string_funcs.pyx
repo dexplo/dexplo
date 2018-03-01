@@ -322,6 +322,227 @@ def get_dummies(ndarray[object] arr, sep='|'):
         col_names[v] = k
     return np.column_stack(new_arrs), col_names
 
+def isalnum(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].isalnum()
+        else:
+            result[i] = False
+    return result
+
+def isalnum_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].isalnum()
+            else:
+                result[i, j] = False
+    return result
+
+def isalpha(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].isalpha()
+        else:
+            result[i] = False
+    return result
+
+def isalpha_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].isalpha()
+            else:
+                result[i, j] = False
+    return result
+
+def isdecimal(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].isdecimal()
+        else:
+            result[i] = False
+    return result
+
+def isdecimal_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].isdecimal()
+            else:
+                result[i, j] = False
+    return result
+
+def isdigit(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].isdigit()
+        else:
+            result[i] = False
+    return result
+
+def isdigit_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].isdigit()
+            else:
+                result[i, j] = False
+    return result
+
+def islower(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].islower()
+        else:
+            result[i] = False
+    return result
+
+def islower_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].islower()
+            else:
+                result[i, j] = False
+    return result
+
+def isnumeric(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].isnumeric()
+        else:
+            result[i] = False
+    return result
+
+def isnumeric_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].isnumeric()
+            else:
+                result[i, j] = False
+    return result
+
+def isspace(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].isspace()
+        else:
+            result[i] = False
+    return result
+
+def isspace_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].isspace()
+            else:
+                result[i, j] = False
+    return result
+
+def istitle(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].istitle()
+        else:
+            result[i] = False
+    return result
+
+def istitle_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].istitle()
+            else:
+                result[i, j] = False
+    return result
+
+def isupper(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].isupper()
+        else:
+            result[i] = False
+    return result
+
+def isupper_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].isupper()
+            else:
+                result[i, j] = False
+    return result
+
+
+
+
+
+
 def lower(ndarray[object] arr):
     cdef int i
     cdef int n = len(arr)

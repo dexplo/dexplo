@@ -176,19 +176,34 @@ class StringClass(object):
                 locs_other.append(self._df._column_info[col].loc)
         return cols_other, locs_other
 
-    def capitalize(self, column=None, keep=False):
-        columns, locs = self._validate_columns(column)
+    def _str_generic(self, name, column, keep, multiple, **kwargs):
+        if not isinstance(keep, (bool, np.bool_)):
+            raise TypeError('`keep` must be a boolean')
+
+        if keep:
+            columns, locs, other_columns, other_locs = self._validate_columns_others(column)
+        else:
+            columns, locs = self._validate_columns(column)
+
         data = self._df._data['O']
         if len(locs) == 1:
-            arr = _sf.capitalize(data[:, locs[0]])[:, np.newaxis]
+            arr = getattr(_sf, name)(data[:, locs[0]], **kwargs)[:, np.newaxis]
         else:
-            arr = _sf.capitalize_2d(data[:, locs])
+            arr = getattr(_sf, name + '_2d')(data[:, locs], **kwargs)
+
         if keep:
-            data = data.copy()
-            for i, loc in enumerate(locs):
-                data[:, loc] = arr[:, i]
-            return self._create_df_all(data, 'O')
-        return self._create_df(arr, 'O', columns)
+            if multiple:
+                return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
+            else:
+                data = data.copy()
+                for i, loc in enumerate(locs):
+                    data[:, loc] = arr[:, i]
+                return self._create_df_all(data, 'O')
+        else:
+            return self._create_df(arr, arr.dtype.kind, columns)
+
+    def capitalize(self, column=None, keep=False):
+        return self._str_generic(name='capitalize', column=column, keep=keep, multiple=False)
 
     def cat(self, column=None):
         columns, locs = self._validate_columns(column)
@@ -214,20 +229,8 @@ class StringClass(object):
         if not isinstance(width, (int, np.integer)):
             raise TypeError('`width` must be an integer')
 
-        columns, locs = self._validate_columns(column)
-        data = self._df._data['O']
-
-        if len(locs) == 1:
-            arr = _sf.center(data[:, locs[0]], width, fill_character)[:, np.newaxis]
-        else:
-            arr = _sf.center_2d(data[:, locs], width, fill_character)
-
-        if keep:
-            data = data.copy()
-            for i, loc in enumerate(locs):
-                data[:, loc] = arr[:, i]
-            return self._create_df_all(data, 'O')
-        return self._create_df(arr, 'O', columns)
+        return self._str_generic(name='center', column=column, keep=keep, multiple=False,
+                                 width=width, fill_character=fill_character)
 
     def contains(self, column=None, pat=None, case=True, flags=0, na=nan, regex=True, keep=False):
         if not isinstance(case, (bool, np.bool_)):
@@ -238,24 +241,9 @@ class StringClass(object):
             raise TypeError('`pat` must either be either a string or compiled regex pattern')
         if not isinstance(regex, (bool, np.bool_)):
             raise TypeError('`regex` must be a boolean')
-        if not isinstance(keep, (bool, np.bool_)):
-            raise TypeError('`keep` must be a boolean')
 
-        if keep:
-            columns, locs, other_columns, other_locs = self._validate_columns_others(column)
-        else:
-            columns, locs = self._validate_columns(column)
-
-        data = self._df._data['O']
-        if len(locs) == 1:
-            arr = _sf.contains(data[:, locs[0]], pat, case, flags, na, regex)[:, np.newaxis]
-        else:
-            arr = _sf.contains_2d(data[:, locs], pat, case, flags, na, regex)
-
-        if keep:
-            return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
-        else:
-            return self._create_df(arr, 'O', columns)
+        return self._str_generic(name='contains', column=column, keep=keep, multiple=True,
+                                 pat=pat, case=case, flags=flags, na=na, regex=regex)
 
     def count(self, column=None, pat=None, case=True, flags=0, na=nan, regex=True, keep=False):
         """
@@ -282,94 +270,34 @@ class StringClass(object):
             raise TypeError('`pat` must either be either a string or compiled regex pattern')
         if not isinstance(regex, (bool, np.bool_)):
             raise TypeError('`regex` must be a boolean')
-        if not isinstance(keep, (bool, np.bool_)):
-            raise TypeError('`keep` must be a boolean')
 
-        if keep:
-            columns, locs, other_columns, other_locs = self._validate_columns_others(column)
-        else:
-            columns, locs = self._validate_columns(column)
-
-        data = self._df._data['O']
-        if len(locs) == 1:
-            arr = _sf.count(data[:, locs[0]], pat, case, flags, na, regex)[:, np.newaxis]
-        else:
-            arr = _sf.count_2d(data[:, locs], pat, case, flags, na, regex)
-
-        if keep:
-            return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
-        else:
-            return self._create_df(arr, 'O', columns)
+        return self._str_generic(name='count', column=column, keep=keep, multiple=True,
+                                 pat=pat, case=case, flags=flags, na=na, regex=regex)
 
     def endswith(self, column=None, pat=None, keep=False):
         if not isinstance(pat, str):
             raise TypeError('`pat` must be a string')
-        if not isinstance(keep, (bool, np.bool_)):
-            raise TypeError('`keep` must be a boolean')
 
-        if keep:
-            columns, locs, other_columns, other_locs = self._validate_columns_others(column)
-        else:
-            columns, locs = self._validate_columns(column)
-
-        data = self._df._data['O']
-        if len(locs) == 1:
-            arr = _sf.endswith(data[:, locs[0]], pat)[:, np.newaxis]
-        else:
-            arr = _sf.endswith_2d(data[:, locs], pat)
-
-        if keep:
-            return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
-        else:
-            return self._create_df(arr, 'O', columns)
+        return self._str_generic(name='endswith', column=column, keep=keep, multiple=True,
+                                 pat=pat)
 
     def find(self, column=None, sub=None, start=None, end=None, keep=False):
         if not isinstance(sub, str):
             raise TypeError('`sub` must be a string')
-        if not isinstance(keep, (bool, np.bool_)):
-            raise TypeError('`keep` must be a boolean')
         if start is not None and not isinstance(start, (int, np.integer)):
             raise TypeError('`start` must be an intege or None')
         if end is not None and not isinstance(start, (int, np.integer)):
             raise TypeError('`end` must be an intege or None')
 
-        if keep:
-            columns, locs, other_columns, other_locs = self._validate_columns_others(column)
-        else:
-            columns, locs = self._validate_columns(column)
-
-        data = self._df._data['O']
-        if len(locs) == 1:
-            arr = _sf.find(data[:, locs[0]], sub, start, end)[:, np.newaxis]
-        else:
-            arr = _sf.find_2d(data[:, locs], sub, start, end)
-
-        if keep:
-            return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
-        else:
-            return self._create_df(arr, 'O', columns)
+        return self._str_generic(name='find', column=column, keep=keep, multiple=True,
+                                 sub=sub, start=start, end=end)
 
     def get(self, column=None, i=None, keep=False):
-        if not isinstance(keep, (bool, np.bool_)):
-            raise TypeError('`keep` must be a boolean')
         if not isinstance(i, (int, np.integer)):
             raise TypeError('`i` must be an intege or None')
 
-        columns, locs = self._validate_columns(column)
-        data = self._df._data['O']
-
-        if len(locs) == 1:
-            arr = _sf.get(data[:, locs[0]], i)[:, np.newaxis]
-        else:
-            arr = _sf.get_2d(data[:, locs], i)
-
-        if keep:
-            data = data.copy()
-            for i, loc in enumerate(locs):
-                data[:, loc] = arr[:, i]
-
-            return self._create_df_all(data, 'O')
-        return self._create_df(arr, 'O', columns)
+        return self._str_generic(name='get', column=column, keep=keep, multiple=False,
+                                 i=i)
 
     def get_dummies(self, column=None, sep='|', keep=False):
         if not isinstance(keep, (bool, np.bool_)):
@@ -419,3 +347,30 @@ class StringClass(object):
             new_column_info[col] = utils.Column('i', i + add_loc, i + add_order)
 
         return self._df._construct_from_new(new_data, new_column_info, new_columns)
+
+    def isalnum(self, column=None, keep=False):
+        return self._str_generic(name='isalnum', column=column, keep=keep, multiple=True)
+
+    def isalpha(self, column=None, keep=False):
+        return self._str_generic(name='isalpha', column=column, keep=keep, multiple=True)
+
+    def isdecimal(self, column=None, keep=False):
+        return self._str_generic(name='isdecimal', column=column, keep=keep, multiple=True)
+
+    def isdigit(self, column=None, keep=False):
+        return self._str_generic(name='isdigit', column=column, keep=keep, multiple=True)
+
+    def islower(self, column=None, keep=False):
+        return self._str_generic(name='islower', column=column, keep=keep, multiple=True)
+
+    def isnumeric(self, column=None, keep=False):
+        return self._str_generic(name='isnumeric', column=column, keep=keep, multiple=True)
+
+    def isspace(self, column=None, keep=False):
+        return self._str_generic(name='isspace', column=column, keep=keep, multiple=True)
+
+    def istitle(self, column=None, keep=False):
+        return self._str_generic(name='istitle', column=column, keep=keep, multiple=True)
+
+    def isupper(self, column=None, keep=False):
+        return self._str_generic(name='isupper', column=column, keep=keep, multiple=True)

@@ -189,16 +189,15 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] findall
 - [x] get           
 - [x] get_dummies
-- [ ] index
-- [ ] isalnum
-- [ ] isalpha
-- [ ] isdecimal
-- [ ] isdigit
-- [ ] islower
-- [ ] isnumeric
-- [ ] isspace
-- [ ] istitle
-- [ ] isupper
+- [x] isalnum
+- [x] isalpha
+- [x] isdecimal
+- [x] isdigit
+- [x] islower
+- [x] isnumeric
+- [x] isspace
+- [x] istitle
+- [x] isupper
 - [ ] join
 - [ ] len
 - [ ] ljust
