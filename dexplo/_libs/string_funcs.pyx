@@ -658,6 +658,36 @@ def lstrip_2d(ndarray[object, ndim=2] arr, to_strip):
                 result[i, j] = None
     return result
 
+def repeat(ndarray[object] arr, int repeats):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            try:
+                result[i] = arr[i] * repeats
+            except IndexError:
+                result[i] = None
+        else:
+            result[i] = None
+    return result
+
+def repeat_2d(ndarray[object, ndim=2] arr, int repeats):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                try:
+                    result[i, j] = arr[i, j] * repeats
+                except IndexError:
+                    result[i, j] = None
+            else:
+                result[i, j] = None
+    return result
+
 def rfind(ndarray[object] arr, str sub, start, end):
     cdef int i
     cdef np.uint8_t hasnans = False
@@ -739,3 +769,262 @@ def rstrip_2d(ndarray[object, ndim=2] arr, to_strip):
             else:
                 result[i, j] = None
     return result
+
+def _slice(ndarray[object] arr, start, stop, step):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i][start:stop:step]
+        else:
+            result[i] = None
+    return result
+
+def _slice_2d(ndarray[object, ndim=2] arr, start, stop, step):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j][start:stop:step]
+            else:
+                result[i, j] = None
+    return result
+
+def slice_replace(ndarray[object] arr, int start, stop, str repl):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+
+    if stop is None:
+        for i in range(n):
+            if arr[i] is not None:
+                result[i] = arr[i][:start] + repl
+            else:
+                result[i] = None
+    else:
+        for i in range(n):
+            if arr[i] is not None:
+                result[i] = arr[i][:start] + repl + arr[i][stop:]
+            else:
+                result[i] = None
+    return result
+
+def slice_replace_2d(ndarray[object, ndim=2] arr, int start, stop, str repl):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    cdef str s
+
+    if stop is None:
+        for i in range(nr):
+            for j in range(nc):
+                if arr[i, j] is not None:
+                    result[i, j] = arr[i, j][:start] + repl
+                else:
+                    result[i, j] = None
+    else:
+        for i in range(nr):
+            for j in range(nc):
+                if arr[i, j] is not None:
+                    result[i, j] = arr[i, j][:start] + repl + arr[i, j][stop:]
+                else:
+                    result[i, j] = None
+    return result
+
+def startswith(ndarray[object] arr, str pat):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].startswith(pat)
+        else:
+            result[i] = False
+    return result
+
+def startswith_2d(ndarray[object, ndim=2] arr, str pat):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.uint8_t, cast=True, ndim=2] result = np.empty((nr, nc), dtype='bool')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].startswith(pat)
+            else:
+                result[i, j] = False
+    return result
+
+def swapcase(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].swapcase()
+        else:
+            result[i] = None
+    return result
+
+def swapcase_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].swapcase()
+            else:
+                result[i, j] = None
+    return result
+
+def title(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].title()
+        else:
+            result[i] = None
+    return result
+
+def title_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].title()
+            else:
+                result[i, j] = None
+    return result
+
+def upper(ndarray[object] arr):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].upper()
+        else:
+            result[i] = None
+    return result
+
+def upper_2d(ndarray[object, ndim=2] arr):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].upper()
+            else:
+                result[i, j] = None
+    return result
+
+def strip(ndarray[object] arr, to_strip):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].strip(to_strip)
+        else:
+            result[i] = None
+    return result
+
+def strip_2d(ndarray[object, ndim=2] arr, to_strip):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].strip(to_strip)
+            else:
+                result[i, j] = None
+    return result
+
+def translate(ndarray[object] arr, dict table):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].translate(table)
+        else:
+            result[i] = None
+    return result
+
+def translate_2d(ndarray[object, ndim=2] arr, dict table):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].translate(table)
+            else:
+                result[i, j] = None
+    return result
+
+def zfill(ndarray[object] arr, int width):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = arr[i].zfill(width)
+        else:
+            result[i] = None
+    return result
+
+def zfill_2d(ndarray[object, ndim=2] arr, int width):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = arr[i, j].zfill(width)
+            else:
+                result[i, j] = None
+    return result
+
+def wrap(ndarray[object] arr, t):
+    cdef int i
+    cdef int n = len(arr)
+    cdef ndarray[object] result = np.empty(n, dtype='object')
+    for i in range(n):
+        if arr[i] is not None:
+            result[i] = r'\n'.join(t.wrap(arr[i]))
+        else:
+            result[i] = None
+    return result
+
+def wrap_2d(ndarray[object, ndim=2] arr, t):
+    cdef int i, j
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='object')
+    for i in range(nr):
+        for j in range(nc):
+            if arr[i, j] is not None:
+                result[i, j] = r'\n'.join(t.wrap(arr[i, j]))
+            else:
+                result[i, j] = None
+    return result
+

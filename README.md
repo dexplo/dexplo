@@ -204,21 +204,21 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] lower         
 - [x] lstrip
 - [ ] partition
-- [ ] repeat
+- [x] repeat
 - [ ] replace
 - [x] rfind
 - [x] rjust
 - [ ] rpartition
 - [ ] rsplit
 - [x] rstrip
-- [ ] slice
-- [ ] slice_replace
+- [x] slice
+- [x] slice_replace
 - [ ] split
-- [ ] startswith
-- [ ] strip
-- [ ] swapcase
-- [ ] title
-- [ ] translate
-- [ ] upper         
-- [ ] wrap
-- [ ] zfill
+- [x] startswith
+- [x] strip
+- [x] swapcase
+- [x] title
+- [x] translate
+- [x] upper         
+- [x] wrap
+- [x] zfill
