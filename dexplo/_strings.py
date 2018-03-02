@@ -15,6 +15,8 @@ class StringClass(object):
 
     def __init__(self, df: DataFrame) -> None:
         self._df: DataFrame = df
+        self._dtype_acc = 'O'
+        self._2d = '_2d'
 
     def _validate_columns(self, column):
         if isinstance(column, str):
@@ -47,7 +49,7 @@ class StringClass(object):
                 if dtype == 'O':
                     columns.append(col)
                     locs.append(loc)
-            return columns, loc
+            return columns, locs
         else:
             raise TypeError('`column` must be a column name as a string, a list of string, or None')
 

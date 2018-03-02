@@ -11,9 +11,6 @@ from typing import Pattern
 cimport cython
 cimport numpy as np
 
-DTYPE = np.int8
-ctypedef np.int8_t DTYPE_t
-
 
 def capitalize(ndarray[object] arr):
     cdef int i

@@ -220,3 +220,43 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] upper         
 - [x] wrap
 - [x] zfill
+
+**dt** - `df.dt.<method>`
+- [ ] ceil
+- [ ] date
+- [x] day
+- [ ] dayofweek
+- [ ] dayofyear
+- [ ] days_in_month
+- [ ] daysinmonth
+- [ ] floor
+- [ ] freq
+- [x] hour
+- [ ] is_leap_year
+- [ ] is_month_end
+- [ ] is_month_start
+- [ ] is_quarter_end
+- [ ] is_quarter_start
+- [ ] is_year_end
+- [ ] is_year_start
+- [ ] microsecond
+- [ ] millisecond
+- [x] minute
+- [x] month
+- [ ] nanosecond
+- [ ] normalize
+- [ ] quarter
+- [ ] round
+- [ ] second
+- [ ] strftime
+- [ ] time
+- [ ] to_period
+- [ ] to_pydatetime
+- [ ] tz
+- [ ] tz_convert
+- [ ] tz_localize
+- [ ] week
+- [ ] weekday
+- [ ] weekday_name
+- [ ] weekofyear
+- [x] year

@@ -320,6 +320,8 @@ class DataFrame(object):
 
     def _add_accessors(self):
         from dexplo._strings import StringClass
+        from dexplo._date import DateTimeClass
+        from dexplo._date import TimeDeltaClass
         self.str = StringClass(self)
         self.dt = DateTimeClass(self)
         self.td = TimeDeltaClass(self)
@@ -4065,15 +4067,3 @@ class DataFrame(object):
 
     def _ipython_key_completions_(self):
         return self._columns.tolist()
-
-
-class DateTimeClass(object):
-
-    def __init__(self, df):
-        self._df = df
-
-
-class TimeDeltaClass(object):
-
-    def __init__(self, df):
-        self._df = df
