@@ -17,7 +17,8 @@ class Grouper(object):
         self._group_columns = columns
 
         if len(self._group_position) == self._df.shape[0]:
-            warnings.warn("Each group contains exactly one row of data. Are you sure you are grouping correctly?")
+            warnings.warn("Each group contains exactly one row of data. "
+                          "Are you sure you are grouping correctly?")
 
     def _create_groups(self, columns: Union[str, List[str]]) -> Tuple[ndarray, ndarray]:
         self._group_dtype_loc: Dict[str, List[int]] = defaultdict(list)

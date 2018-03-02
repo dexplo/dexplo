@@ -320,29 +320,68 @@ def get_2d(ndarray[object, ndim=2] arr, int idx):
                 result[i, j] = None
     return result
 
-def get_dummies(ndarray[object] arr, sep='|'):
-    cdef int i, arr_num, ct = 0
-    cdef int n = len(arr)
-    cdef dict new_cols = {}
-    cdef list new_arrs = []
-    cdef ndarray[object] col_names
+# def get_dummies(ndarray[object] arr, sep='|'):
+#     cdef int i, arr_num, ct = 0
+#     cdef int n = len(arr)
+#     cdef dict new_cols = {}
+#     cdef list new_arrs = []
+#     cdef ndarray[object] col_names
+#
+#     for i in range(n):
+#         if arr[i] is not None:
+#             for val in arr[i].split(sep):
+#                 arr_num = new_cols.get(val, -1)
+#                 if arr_num == -1:
+#                     new_arrs.append(np.zeros(n, dtype='int64'))
+#                     new_arrs[ct][i] = 1
+#                     new_cols[val] = ct
+#                     ct += 1
+#                 else:
+#                     new_arrs[arr_num][i] = 1
+#
+#     col_names = np.empty(len(new_arrs), dtype='O')
+#     for k, v in new_cols.items():
+#         col_names[v] = k
+#     return np.column_stack(new_arrs), col_names
 
-    for i in range(n):
-        if arr[i] is not None:
-            for val in arr[i].split(sep):
-                arr_num = new_cols.get(val, -1)
-                if arr_num == -1:
-                    new_arrs.append(np.zeros(n, dtype='int64'))
-                    new_arrs[ct][i] = 1
-                    new_cols[val] = ct
-                    ct += 1
-                else:
-                    new_arrs[arr_num][i] = 1
+def get_dummies(ndarray[object, ndim=2] arr, sep, int count):
+    cdef int i, j
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+    cdef ndarray[np.int64_t, ndim=2] result
+    cdef dict d = {}
+    cdef list col_dicts = []
+    cdef list col_groups = []
 
-    col_names = np.empty(len(new_arrs), dtype='O')
-    for k, v in new_cols.items():
-        col_names[v] = k
-    return np.column_stack(new_arrs), col_names
+    for j in range(nc):
+        d = {}
+        for i in range(nr):
+            if arr[i, j] is not None:
+                group[i] = d.get(arr[i, j], -1)
+                if group[i] == -1:
+                    group[i] = count
+                    d[arr[i, j]] = count
+                    count += 1
+
+        col_dicts.append(d)
+        col_groups.append(group)
+
+    result = np.zeros((nr, count), dtype='int64', order='F')
+
+    if sep is None:
+        for j in range(nc):
+            d = col_dicts[j]
+            group = col_groups[j]
+            for i in range(nr):
+                if arr[i, j] is not None:
+                    result[i, group[i]] = 1
+
+    col_names = []
+    for d in col_dicts:
+        col_names.extend(list(d))
+
+    return result, np.array(col_names, dtype='O')
 
 def isalnum(ndarray[object] arr):
     cdef int i

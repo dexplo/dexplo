@@ -16,6 +16,9 @@ from dexplo._libs import (string_funcs as _sf,
                           sort_rank as _sr,
                           unique as _uq)
 from dexplo import _stat_funcs as stat
+from dexplo._strings import StringClass
+from dexplo._date import DateTimeClass
+from dexplo._date import TimeDeltaClass
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
 
@@ -319,9 +322,6 @@ class DataFrame(object):
         self._data = self._concat_arrays(data_dict)
 
     def _add_accessors(self):
-        from dexplo._strings import StringClass
-        from dexplo._date import DateTimeClass
-        from dexplo._date import TimeDeltaClass
         self.str = StringClass(self)
         self.dt = DateTimeClass(self)
         self.td = TimeDeltaClass(self)
@@ -1022,12 +1022,15 @@ class DataFrame(object):
     @classmethod
     def _construct_from_new(cls: Type[object], data: Dict[str, ndarray],
                             column_info: ColInfoT, columns: ColumnT) -> 'DataFrame':
-        df_new: 'DataFrame' = cls.__new__(cls)
+        df_new: 'DataFrame' = super().__new__(cls)
         df_new._column_info = column_info
         df_new._data = data
         df_new._columns = np.asarray(columns, dtype='O')
         df_new._hasnans = {}
-        df_new._add_accessors()
+        # df_new.str = StringClass(df_new)
+        # TimeDeltaClass(df_new)
+        # df_new.str = DateTimeClass(df_new)
+        # df_new._add_accessors()
         return df_new
 
     def _do_eval(self, op_string: str, other: Any) -> Tuple[Dict[str, List[ndarray]], ColInfoT]:
@@ -3520,19 +3523,90 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def drop(self,
-             rows: Union[int, List[int], ndarray, None] = None,
-             columns: Union[int, List[IntStr], ndarray, None] = None):
+    def _drop_just_cols(self, columns):
+        if isinstance(columns, (int, str, np.integer)):
+            columns = [columns]
+        elif isinstance(columns, ndarray):
+            columns = utils.try_to_squeeze_array(columns)
+        elif isinstance(columns, list):
+            pass
+        elif columns is not None:
+            raise TypeError('Columns must either be an int, list/array of ints or None')
+        else:
+            raise ValueError('Both rows and columns cannot be None')
+
+        column_strings: Set[str] = set()
+        for col in columns:
+            if isinstance(col, str):
+                column_strings.add(col)
+            elif isinstance(col, (int, np.integer)):
+                column_strings.add(self._columns[col])
+
+        dtype_drop_info = defaultdict(list)
+        for col in column_strings:
+            dtype, loc, order = self._column_info[col].values
+            dtype_drop_info[dtype].append(loc)
+
+        new_column_info = {}
+        new_columns = []
+        order_sub = 0
+        for col in self._columns:
+            if col not in column_strings:
+                dtype, loc, order = self._column_info[col].values
+                loc_sub = 0
+                for loc_drops in dtype_drop_info.get(dtype, ()):
+                    loc_sub += loc > loc_drops
+                new_column_info[col] = utils.Column(dtype, loc - loc_sub, order - order_sub)
+                new_columns.append(col)
+            else:
+                order_sub += 1
+
+        new_data = {}
+        for dtype, arr in self._data.items():
+            if dtype not in dtype_drop_info:
+                new_data[dtype] = arr.copy('F')
+            else:
+                locs = dtype_drop_info[dtype]
+                if locs == arr.shape[1]:
+                    continue
+                keep = np.ones(arr.shape[1], dtype='bool')
+                keep[locs] = False
+                new_data[dtype] = arr[:, keep]
+
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def _drop_just_rows(self, rows):
         if isinstance(rows, int):
             rows = [rows]
         elif isinstance(rows, ndarray):
             rows = utils.try_to_squeeze_array(rows)
         elif isinstance(rows, list):
             pass
-        elif rows is not None:
-            raise TypeError('Rows must either be an int, list/array of ints or None')
         else:
-            rows = []
+            raise TypeError('Rows must either be an int, list/array of ints or None')
+
+    def drop(self,
+             rows: Union[int, List[int], ndarray, None] = None,
+             columns: Union[int, List[IntStr], ndarray, None] = None):
+        if rows is None:
+            return self._drop_just_cols(columns)
+
+        if columns is None:
+            return self._drop_just_rows(rows)
+
+        if isinstance(columns, (int, str, np.integer)):
+            columns = [columns]
+        elif isinstance(columns, ndarray):
+            columns = utils.try_to_squeeze_array(columns)
+        elif not isinstance(columns, list):
+            raise TypeError('Rows must either be an int, list/array of ints or None')
+
+        if isinstance(rows, int):
+            rows = [rows]
+        elif isinstance(rows, ndarray):
+            rows = utils.try_to_squeeze_array(rows)
+        elif not isinstance(rows, list):
+            raise TypeError('Rows must either be an int, list/array of ints or None')
 
         new_rows: List[int] = []
         for row in rows:
@@ -3545,17 +3619,6 @@ class DataFrame(object):
             else:
                 new_rows.append(row)
 
-        if isinstance(columns, (int, str, np.integer)):
-            columns = [columns]
-        elif isinstance(columns, ndarray):
-            columns = utils.try_to_squeeze_array(rows)
-        elif isinstance(columns, list):
-            pass
-        elif columns is not None:
-            raise TypeError('Rows must either be an int, list/array of ints or None')
-        else:
-            columns = []
-
         column_strings: List[str] = []
         for col in columns:
             if isinstance(col, str):
@@ -3566,12 +3629,11 @@ class DataFrame(object):
         self._validate_column_name_list(column_strings)
         column_set: Set[str] = set(column_strings)
 
-        # todo: can avoid checking if rows/columns is None
         new_rows = np.isin(np.arange(len(self)), new_rows, invert=True)
         new_columns = [col for col in self._columns if col not in column_set]
 
         new_column_info: ColInfoT = {}
-        data_dict: Dict[str, List[ndarray]] = defaultdict(list)
+        data_dict: Dict[str, List[int]] = defaultdict(list)
         for i, col in enumerate(new_columns):
             dtype, loc, _ = self._column_info[col].values
             cur_loc = len(data_dict[dtype])

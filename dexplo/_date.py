@@ -1,4 +1,3 @@
-from dexplo._frame import DataFrame
 import dexplo._utils as utils
 from dexplo._libs import (string_funcs as _sf,
                           math as _math)
@@ -6,6 +5,7 @@ import numpy as np
 from numpy import nan, ndarray
 from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
                     NoReturn, Set, Iterable, Any, TypeVar, Type, Generator)
+import weakref
 
 NAT = np.datetime64('nat')
 
@@ -271,7 +271,7 @@ class AccessorMixin(object):
 class DateTimeClass(AccessorMixin):
 
     def __init__(self, df):
-        self._df = df
+        self._df = weakref.ref(df)()
         self._dtype_acc = 'M'
         self._2d = ''
 
@@ -351,7 +351,7 @@ class DateTimeClass(AccessorMixin):
 class TimeDeltaClass(AccessorMixin):
 
     def __init__(self, df):
-        self._df = df
+        self._df = weakref.ref(df)()
         self._dtype_acc = 'm'
         self._2d = ''
 

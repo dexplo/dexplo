@@ -1,4 +1,3 @@
-from dexplo._frame import DataFrame
 import dexplo._utils as utils
 from dexplo._libs import (string_funcs as _sf,
                           math as _math)
@@ -9,12 +8,13 @@ from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
                     NoReturn, Set, Iterable, Any, TypeVar, Type, Generator)
 from typing import Pattern
 import textwrap
+import weakref
 
 
 class StringClass(object):
 
-    def __init__(self, df: DataFrame) -> None:
-        self._df: DataFrame = df
+    def __init__(self, df: 'DataFrame') -> None:
+        self._df = weakref.ref(df)()
         self._dtype_acc = 'O'
         self._2d = '_2d'
 
@@ -111,8 +111,8 @@ class StringClass(object):
         else:
             new_data = {}
             add_loc = 0
-            if dtype in self._data:
-                add_loc = self._data[dtype].shape[1]
+            if dtype in self._df._data:
+                add_loc = self._df._data[dtype].shape[1]
             for old_dtype, old_data in self._df._data.items():
                 if dtype != 'O':
                     new_data[old_dtype] = old_data.copy('F')
@@ -195,40 +195,29 @@ class StringClass(object):
             columns, locs = self._validate_columns(column)
 
         data = self._df._data['O']
-        arrs = []
-        all_cols = []
-        for loc in locs:
-            arr, new_columns = getattr(_sf, name)(data[:, loc], **kwargs)
-            arrs.append(arr)
-            all_cols.append(new_columns)
+        final_arr, final_cols = getattr(_sf, name)(data[:, locs], **kwargs)
+        dtype_new = final_arr.dtype.kind
 
-        dtype_new = arrs[0].dtype.kind
-
-        if len(arrs) == 1:
-            final_arr = arrs[0]
-            final_cols = all_cols[0]
-        else:
-            final_arr = np.column_stack(arrs)
-            all_cols_new = []
-            for cols, orig_name in zip(all_cols, columns):
-                all_cols_new.append(cols + '_' + orig_name)
-            final_cols = np.concatenate(all_cols_new)
-
+        final_cols = final_cols + '_' + np.arange(len(final_cols)).astype('str')
         new_column_info = {}
         new_data = {}
         add_loc = 0
         add_order = 0
+
         if keep:
             df = self._df.drop(columns=columns)
+
             if dtype_new in df._data:
                 add_loc = df._data[dtype_new].shape[1]
             add_order = df.shape[1]
 
             for dtype, arr in df._data.items():
                 if dtype == dtype_new:
-                    new_data[dtype_new] = np.column_stack((arr, final_arr))
+                    for i in range(arr.shape[1]):
+                        final_arr[:, i] = arr[:, i]
+                    new_data[dtype_new] = final_arr
                 else:
-                    new_data[dtype] = arr.copy('F')
+                    new_data[dtype] = arr
 
             if dtype_new not in df._data:
                 new_data[dtype_new] = final_arr
@@ -287,7 +276,7 @@ class StringClass(object):
                 nans = _math.isna_str_1d(arr)
                 arr = arr[~nans].tolist()
                 data[col] = [''.join(arr)]
-            return DataFrame(data)
+            # return DataFrame(data)
 
     def center(self, column=None, width=None, fillchar=' ', keep=False):
         if not isinstance(fillchar, str):
@@ -380,11 +369,12 @@ class StringClass(object):
         return self._str_generic(name='get', column=column, keep=keep, multiple=False,
                                  i=i)
 
-    def get_dummies(self, column=None, sep='|', keep=False):
-        if not isinstance(sep, str):
+    def get_dummies(self, column=None, sep=None, keep=False):
+        count = self._df._data['i'].shape[1]
+        if not isinstance(sep, str) and sep is not None:
             raise TypeError('`sep` must be an integer or None')
 
-        return self._str_generic_concat('get_dummies', column, keep, sep=sep)
+        return self._str_generic_concat('get_dummies', column, keep, sep=sep, count=count)
 
     def isalnum(self, column=None, keep=False):
         return self._str_generic(name='isalnum', column=column, keep=keep, multiple=True)

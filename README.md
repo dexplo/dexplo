@@ -239,11 +239,11 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] is_quarter_start
 - [ ] is_year_end
 - [ ] is_year_start
-- [ ] microsecond
-- [ ] millisecond
+- [x] microsecond
+- [x] millisecond
 - [x] minute
 - [x] month
-- [ ] nanosecond
+- [x] nanosecond
 - [ ] normalize
 - [ ] quarter
 - [ ] round
