@@ -265,11 +265,17 @@ def find_2d(ndarray[object, ndim=2] arr, str sub, start, end):
         return result.astype('int64')
     return result
 
-def findall(ndarray[object] arr, pat, pos, case=True, flags=0):
-    cdef int i, j, arr_num, ct = 0
-    cdef int nr = len(arr)
-    cdef list new_arrs = []
-    cdef ndarray[object] col_names
+def findall(ndarray[object, ndim=2] arr, pat, pos, case=True, flags=0, int count=0):
+    cdef int i, j, k, arr_num, ct = 0
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef list data = []
+    cdef list result
+    cdef ndarray[object] cur_arr
+    cdef ndarray[object, ndim=2] final_arr
+    cdef int amax = 0
+    cdef int total_max = 0
+    cdef list maxes = [0]
 
     if isinstance(pat, Pattern):
         pattern = pat
@@ -278,17 +284,35 @@ def findall(ndarray[object] arr, pat, pos, case=True, flags=0):
             flags = flags | re.IGNORECASE
         pattern = re.compile(pat, flags=flags)
 
-    for i in range(nr):
-        if arr[i] is not None:
-            for j, val in enumerate((pattern.findall(arr[i], pos))):
-                try:
-                    new_arrs[j][i] = val
-                except IndexError:
-                    new_arrs.append(np.empty(nr, 'O'))
-                    new_arrs[j][i] = val
+    for j in range(nc):
+        cur_arr = np.empty(nr, 'O')
+        amax = 0
+        for i in range(nr):
+            if arr[i, j] is not None:
+                result = pattern.findall(arr[i, j], pos)
+                cur_arr[i] = result
+                if len(result) > amax:
+                    amax = len(result)
+            else:
+                cur_arr[i] = None
+        total_max += amax
+        data.append(cur_arr)
+        maxes.append(amax)
 
-    col_names = np.array(['find_' + str(i) for i in range(len(new_arrs))], 'O')
-    return np.column_stack(new_arrs), col_names
+    final_arr = np.empty((nr, total_max + count), 'O')
+    for j in range(nc):
+        cur_arr = data[j]
+        for i in range(nr):
+            if cur_arr[i] is not None:
+                for k, val in enumerate(cur_arr[i]):
+                    final_arr[i, k + maxes[j] + count] = val
+
+    col_names = []
+    for i, val in enumerate(maxes[1:]):
+        for k in range(val):
+            col_names.append(str(k))
+
+    return final_arr, np.array(col_names, 'O'), maxes[1:]
 
 def get(ndarray[object] arr, int idx):
     cdef int i
@@ -320,30 +344,6 @@ def get_2d(ndarray[object, ndim=2] arr, int idx):
                 result[i, j] = None
     return result
 
-# def get_dummies(ndarray[object] arr, sep='|'):
-#     cdef int i, arr_num, ct = 0
-#     cdef int n = len(arr)
-#     cdef dict new_cols = {}
-#     cdef list new_arrs = []
-#     cdef ndarray[object] col_names
-#
-#     for i in range(n):
-#         if arr[i] is not None:
-#             for val in arr[i].split(sep):
-#                 arr_num = new_cols.get(val, -1)
-#                 if arr_num == -1:
-#                     new_arrs.append(np.zeros(n, dtype='int64'))
-#                     new_arrs[ct][i] = 1
-#                     new_cols[val] = ct
-#                     ct += 1
-#                 else:
-#                     new_arrs[arr_num][i] = 1
-#
-#     col_names = np.empty(len(new_arrs), dtype='O')
-#     for k, v in new_cols.items():
-#         col_names[v] = k
-#     return np.column_stack(new_arrs), col_names
-
 def get_dummies(ndarray[object, ndim=2] arr, sep, int count):
     cdef int i, j
     cdef int nr = arr.shape[0]
@@ -353,6 +353,7 @@ def get_dummies(ndarray[object, ndim=2] arr, sep, int count):
     cdef dict d = {}
     cdef list col_dicts = []
     cdef list col_groups = []
+    cdef list group_len = []
 
     for j in range(nc):
         d = {}
@@ -373,15 +374,18 @@ def get_dummies(ndarray[object, ndim=2] arr, sep, int count):
         for j in range(nc):
             d = col_dicts[j]
             group = col_groups[j]
+            group_len.append(len(d))
             for i in range(nr):
                 if arr[i, j] is not None:
                     result[i, group[i]] = 1
+    else:
+        raise NotImplementedError('no sep yet')
 
     col_names = []
     for d in col_dicts:
         col_names.extend(list(d))
 
-    return result, np.array(col_names, dtype='O')
+    return result, np.array(col_names, dtype='O'), group_len
 
 def isalnum(ndarray[object] arr):
     cdef int i
@@ -719,16 +723,18 @@ def lstrip_2d(ndarray[object, ndim=2] arr, to_strip):
                 result[i, j] = None
     return result
 
-def partition(ndarray[object] arr, str sep):
+def partition(ndarray[object, ndim=2] arr, str sep, int count):
     cdef int i, j
-    cdef int n = len(arr)
-    cdef ndarray[object, ndim=2] result = np.empty((n, 3), dtype='object')
-    for i in range(n):
-        if arr[i] is not None:
-            result[i] = arr[i].partition(sep)
-        else:
-            result[i] = [None, None, None]
-    return result, np.array(['head', 'sep', 'tail'], dtype='O')
+    cdef int nr = len(arr)
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, 3 * nc + count), dtype='object')
+
+    for j in range(nc):
+        for i in range(nr):
+            if arr[i, j] is not None:
+                for k, val in  enumerate(arr[i, j].partition(sep)):
+                    result[i, j * 3 + k + count] = val
+    return result, np.array(['head', 'sep', 'tail'] * nc, dtype='O'), [3] * nc
 
 def repeat(ndarray[object] arr, int repeats):
     cdef int i
@@ -859,22 +865,55 @@ def rjust_2d(ndarray[object, ndim=2] arr, int width, str fillchar=' '):
                 result[i, j] = None
     return result
 
-def rpartition(ndarray[object] arr, str sep):
+def rpartition(ndarray[object, ndim=2] arr, str sep, int count):
     cdef int i, j
-    cdef int n = len(arr)
-    cdef ndarray[object, ndim=2] result = np.empty((n, 3), dtype='object')
-    for i in range(n):
-        if arr[i] is not None:
-            result[i] = arr[i].rpartition(sep)
-        else:
-            result[i] = [None, None, None]
-    return result, np.array(['head', 'sep', 'tail'], dtype='O')
-
-def rsplit(ndarray[object] arr, pat, n, case=True, flags=0):
-    cdef int i, j, arr_num, ct = 0
     cdef int nr = len(arr)
-    cdef list new_arrs = []
-    cdef ndarray[object] col_names
+    cdef int nc = arr.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, 3 * nc + count), dtype='object')
+
+    for j in range(nc):
+        for i in range(nr):
+            if arr[i, j] is not None:
+                for k, val in  enumerate(arr[i, j].rpartition(sep)):
+                    result[i, j * 3 + k + count] = val
+    return result, np.array(['head', 'sep', 'tail'] * nc, dtype='O'), [3] * nc
+
+# def rsplit(ndarray[object] arr, pat, n, case=True, flags=0):
+#     cdef int i, j, arr_num, ct = 0
+#     cdef int nr = len(arr)
+#     cdef list new_arrs = []
+#     cdef ndarray[object] col_names
+#
+#     if isinstance(pat, Pattern):
+#         pattern = pat
+#     else:
+#         if not case:
+#             flags = flags | re.IGNORECASE
+#         pattern = re.compile(pat, flags=flags)
+#
+#     for i in range(nr):
+#         if arr[i] is not None:
+#             for j, val in enumerate((pattern.split(arr[i][::-1], n))[::-1]):
+#                 try:
+#                     new_arrs[j][i] = val[::-1]
+#                 except IndexError:
+#                     new_arrs.append(np.empty(nr, 'O'))
+#                     new_arrs[j][i] = val[::-1]
+#
+#     col_names = np.array(['split_' + str(i) for i in range(len(new_arrs))], 'O')
+#     return np.column_stack(new_arrs), col_names
+
+def rsplit(ndarray[object, ndim=2] arr, pat, n, case=True, flags=0, int count=0):
+    cdef int i, j, k, arr_num, ct = 0
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef list data = []
+    cdef list result
+    cdef ndarray[object] cur_arr
+    cdef ndarray[object, ndim=2] final_arr
+    cdef int amax = 0
+    cdef int total_max = 0
+    cdef list maxes = [0]
 
     if isinstance(pat, Pattern):
         pattern = pat
@@ -883,17 +922,35 @@ def rsplit(ndarray[object] arr, pat, n, case=True, flags=0):
             flags = flags | re.IGNORECASE
         pattern = re.compile(pat, flags=flags)
 
-    for i in range(nr):
-        if arr[i] is not None:
-            for j, val in enumerate((pattern.split(arr[i][::-1], n))[::-1]):
-                try:
-                    new_arrs[j][i] = val[::-1]
-                except IndexError:
-                    new_arrs.append(np.empty(nr, 'O'))
-                    new_arrs[j][i] = val[::-1]
+    for j in range(nc):
+        cur_arr = np.empty(nr, 'O')
+        amax = 0
+        for i in range(nr):
+            if arr[i, j] is not None:
+                result = pattern.split(arr[i, j][::-1], n)[::-1]
+                cur_arr[i] = result
+                if len(result) > amax:
+                    amax = len(result)
+            else:
+                cur_arr[i] = None
+        total_max += amax
+        data.append(cur_arr)
+        maxes.append(amax)
 
-    col_names = np.array(['split_' + str(i) for i in range(len(new_arrs))], 'O')
-    return np.column_stack(new_arrs), col_names
+    final_arr = np.empty((nr, total_max + count), 'O')
+    for j in range(nc):
+        cur_arr = data[j]
+        for i in range(nr):
+            if cur_arr[i] is not None:
+                for k, val in enumerate(cur_arr[i]):
+                    final_arr[i, k + maxes[j] + count] = val[::-1]
+
+    col_names = []
+    for i, val in enumerate(maxes[1:]):
+        for k in range(val):
+            col_names.append(str(k))
+
+    return final_arr, np.array(col_names, 'O'), maxes[1:]
 
 def rstrip(ndarray[object] arr, to_strip):
     cdef int i
@@ -985,11 +1042,17 @@ def slice_replace_2d(ndarray[object, ndim=2] arr, int start, stop, str repl):
                     result[i, j] = None
     return result
 
-def split(ndarray[object] arr, pat, n, case=True, flags=0):
-    cdef int i, j, arr_num, ct = 0
-    cdef int nr = len(arr)
-    cdef list new_arrs = []
-    cdef ndarray[object] col_names
+def split(ndarray[object, ndim=2] arr, pat, n, case=True, flags=0, int count=0):
+    cdef int i, j, k, arr_num, ct = 0
+    cdef int nr = arr.shape[0]
+    cdef int nc = arr.shape[1]
+    cdef list data = []
+    cdef list result
+    cdef ndarray[object] cur_arr
+    cdef ndarray[object, ndim=2] final_arr
+    cdef int amax = 0
+    cdef int total_max = 0
+    cdef list maxes = [0]
 
     if isinstance(pat, Pattern):
         pattern = pat
@@ -998,17 +1061,35 @@ def split(ndarray[object] arr, pat, n, case=True, flags=0):
             flags = flags | re.IGNORECASE
         pattern = re.compile(pat, flags=flags)
 
-    for i in range(nr):
-        if arr[i] is not None:
-            for j, val in enumerate(pattern.split(arr[i], n)):
-                try:
-                    new_arrs[j][i] = val
-                except IndexError:
-                    new_arrs.append(np.empty(nr, 'O'))
-                    new_arrs[j][i] = val
+    for j in range(nc):
+        cur_arr = np.empty(nr, 'O')
+        amax = 0
+        for i in range(nr):
+            if arr[i, j] is not None:
+                result = pattern.split(arr[i, j], n)
+                cur_arr[i] = result
+                if len(result) > amax:
+                    amax = len(result)
+            else:
+                cur_arr[i] = None
+        total_max += amax
+        data.append(cur_arr)
+        maxes.append(amax)
 
-    col_names = np.array(['split_' + str(i) for i in range(len(new_arrs))], 'O')
-    return np.column_stack(new_arrs), col_names
+    final_arr = np.empty((nr, total_max + count), 'O')
+    for j in range(nc):
+        cur_arr = data[j]
+        for i in range(nr):
+            if cur_arr[i] is not None:
+                for k, val in enumerate(cur_arr[i]):
+                    final_arr[i, k + maxes[j] + count] = val
+
+    col_names = []
+    for i, val in enumerate(maxes[1:]):
+        for k in range(val):
+            col_names.append(str(k))
+
+    return final_arr, np.array(col_names, 'O'), maxes[1:]
 
 def startswith(ndarray[object] arr, str pat):
     cdef int i

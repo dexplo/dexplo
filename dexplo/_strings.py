@@ -179,7 +179,7 @@ class StringClass(object):
                 locs_other.append(self._df._column_info[col].loc)
         return cols_other, locs_other
 
-    def _str_generic_concat(self, name, column, keep, **kwargs):
+    def _str_generic_concat(self, name, column, keep, return_dtype, **kwargs):
         if not isinstance(keep, (bool, np.bool_)):
             raise TypeError('`keep` must be a boolean')
 
@@ -195,10 +195,21 @@ class StringClass(object):
             columns, locs = self._validate_columns(column)
 
         data = self._df._data['O']
-        final_arr, final_cols = getattr(_sf, name)(data[:, locs], **kwargs)
+
+        count = 0
+        if return_dtype != 'O':
+            if return_dtype in self._df._data:
+                count = self._df._data[return_dtype].shape[1]
+        else:
+            count = self._df._data['O'].shape[1] - len(columns)
+
+        kwargs['count'] = count
+
+        final_arr, final_cols, group_len = getattr(_sf, name)(data[:, locs], **kwargs)
         dtype_new = final_arr.dtype.kind
 
-        final_cols = final_cols + '_' + np.arange(len(final_cols)).astype('str')
+        if len(columns) > 1:
+            final_cols = np.repeat(columns, group_len).astype('O') + '_' + final_cols
         new_column_info = {}
         new_data = {}
         add_loc = 0
@@ -360,7 +371,7 @@ class StringClass(object):
             raise TypeError('flags must be a `RegexFlag` or integer')
 
         return self._str_generic_concat('findall', column, keep, pat=pat, pos=pos,
-                                        case=case, flags=flags)
+                                        case=case, flags=flags, return_dtype='O')
 
     def get(self, column=None, i=None, keep=False):
         if not isinstance(i, (int, np.integer)):
@@ -370,11 +381,10 @@ class StringClass(object):
                                  i=i)
 
     def get_dummies(self, column=None, sep=None, keep=False):
-        count = self._df._data['i'].shape[1]
         if not isinstance(sep, str) and sep is not None:
             raise TypeError('`sep` must be an integer or None')
 
-        return self._str_generic_concat('get_dummies', column, keep, sep=sep, count=count)
+        return self._str_generic_concat('get_dummies', column, keep, sep=sep, return_dtype='i')
 
     def isalnum(self, column=None, keep=False):
         return self._str_generic(name='isalnum', column=column, keep=keep, multiple=True)
@@ -443,7 +453,7 @@ class StringClass(object):
         if not isinstance(sep, str):
             raise TypeError('`sep` must be an intege or None')
 
-        return self._str_generic_concat('partition', column, keep, sep=sep)
+        return self._str_generic_concat('partition', column, keep, sep=sep, return_dtype='O')
 
     def replace(self, column=None, pat=None, repl=None, n=0, case=True, flags=0, keep=False):
         if not isinstance(case, (bool, np.bool_)):
@@ -486,7 +496,7 @@ class StringClass(object):
         if not isinstance(sep, str):
             raise TypeError('`sep` must be an intege or None')
 
-        return self._str_generic_concat('rpartition', column, keep, sep=sep)
+        return self._str_generic_concat('rpartition', column, keep, sep=sep, return_dtype='O')
 
     def rsplit(self, column=None, pat=None, n=0, case=True, flags=0, keep=False):
         if not isinstance(pat, (str, Pattern)):
@@ -498,7 +508,8 @@ class StringClass(object):
         if not isinstance(flags, (int, np.integer, re.RegexFlag)):
             raise TypeError('flags must be a `RegexFlag` or integer')
 
-        return self._str_generic_concat('rsplit', column, keep, pat=pat, n=n, case=case, flags=flags)
+        return self._str_generic_concat('rsplit', column, keep, pat=pat, n=n, case=case, flags=flags,
+                                        return_dtype='O')
 
     def rstrip(self, column=None, to_strip=None, keep=False):
         if not isinstance(to_strip, str) and to_strip is not None:
@@ -540,7 +551,8 @@ class StringClass(object):
         if not isinstance(flags, (int, np.integer, re.RegexFlag)):
             raise TypeError('flags must be a `RegexFlag` or integer')
 
-        return self._str_generic_concat('split', column, keep, pat=pat, n=n, case=case, flags=flags)
+        return self._str_generic_concat('split', column, keep, pat=pat, n=n, case=case, flags=flags,
+                                        return_dtype='O')
 
     def startswith(self, column=None, pat=None, keep=False):
         if not isinstance(pat, str):
