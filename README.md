@@ -225,38 +225,34 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] ceil
 - [ ] date
 - [x] day
-- [ ] dayofweek
-- [ ] dayofyear
-- [ ] days_in_month
-- [ ] daysinmonth
+- [x] day_of_week
+- [x] day_of_year
+- [x] days_in_month
 - [ ] floor
 - [ ] freq
 - [x] hour
-- [ ] is_leap_year
-- [ ] is_month_end
-- [ ] is_month_start
-- [ ] is_quarter_end
-- [ ] is_quarter_start
-- [ ] is_year_end
-- [ ] is_year_start
+- [x] is_leap_year
+- [x] is_month_end
+- [x] is_month_start
+- [x] is_quarter_end
+- [x] is_quarter_start
+- [x] is_year_end
+- [x] is_year_start
 - [x] microsecond
 - [x] millisecond
 - [x] minute
 - [x] month
 - [x] nanosecond
 - [ ] normalize
-- [ ] quarter
+- [x] quarter
 - [ ] round
-- [ ] second
+- [x] second
 - [ ] strftime
 - [ ] time
-- [ ] to_period
 - [ ] to_pydatetime
 - [ ] tz
 - [ ] tz_convert
 - [ ] tz_localize
-- [ ] week
-- [ ] weekday
-- [ ] weekday_name
-- [ ] weekofyear
+- [x] weekday_name
+- [ ] week_of_year
 - [x] year

@@ -1,5 +1,6 @@
 import dexplo._utils as utils
 from dexplo._libs import (string_funcs as _sf,
+                          date as _date,
                           math as _math)
 import numpy as np
 from numpy import nan, ndarray
@@ -252,9 +253,9 @@ class AccessorMixin(object):
 
         data = self._df._data[self._dtype_acc]
         if len(locs) == 1:
-            arr = getattr(self, name)(data[:, locs[0]], **kwargs)[:, np.newaxis]
+            arr = getattr(self, name)(data[:, locs], **kwargs)
         else:
-            arr = getattr(self, name + self._2d)(data[:, locs], **kwargs)
+            arr = getattr(self, name)(data[:, locs], **kwargs)
 
         if keep:
             if multiple:
@@ -275,59 +276,141 @@ class DateTimeClass(AccessorMixin):
         self._dtype_acc = 'M'
         self._2d = ''
 
-    def year(self, column=None, keep=False):
-        return self._generic(name='_year', column=column, keep=keep, multiple=True)
-
-    def _year(self, data):
-        years = data.astype('datetime64[Y]').astype('float64') + 1970
-        years[np.isnat(data)] = nan
-        return years
-
-    def month(self, column=None, keep=False):
-        return self._generic(name='_month', column=column, keep=keep, multiple=True)
-
-    def _month(self, data):
-        months = data.astype('datetime64[M]').astype('float64') % 12 + 1
-        months[np.isnat(data)] = nan
-        return months
-
     def day(self, column=None, keep=False):
         return self._generic(name='_day', column=column, keep=keep, multiple=True)
 
     def _day(self, data):
-        days = (data.astype('datetime64[D]') - data.astype('datetime64[M]') + 1).astype('float64')
-        days[np.isnat(data)] = nan
+        if data.size < 5000:
+            days = (data.astype('datetime64[D]') - data.astype('datetime64[M]') + 1).astype('float64')
+            days[np.isnat(data)] = nan
+        else:
+            return _date.day(data.astype('int64'))
         return days
+
+    def day_of_week(self, column=None, keep=False):
+        return self._generic(name='_day_of_week', column=column, keep=keep, multiple=True)
+
+    def _day_of_week(self, data):
+        return _date.day_of_week(data.astype('int64'))
+
+    def day_of_year(self, column=None, keep=False):
+        return self._generic(name='_day_of_year', column=column, keep=keep, multiple=True)
+
+    def _day_of_year(self, data):
+        if data.size < 2500:
+            doy = (data.astype('datetime64[D]') - data.astype('datetime64[Y]') + 1).astype('float64')
+            doy[np.isnat(data)] = nan
+            return doy
+        else:
+            return _date.day_of_year(data.astype('int64'))
+
+    def days_in_month(self, column=None, keep=False):
+        return self._generic(name='_days_in_month', column=column, keep=keep, multiple=True)
+
+    def _days_in_month(self, data):
+        if data.size < 5000:
+            month = data.astype('datetime64[M]')
+            next_month = (month + 1).astype('datetime64[D]')
+            dim = (next_month - month).astype('float64')
+            dim[np.isnat(data)] = nan
+            return dim
+        else:
+            return _date.days_in_month(data.astype('int64'))
 
     def hour(self, column=None, keep=False):
         return self._generic(name='_hour', column=column, keep=keep, multiple=True)
 
     def _hour(self, data):
-        hours = (data.astype('datetime64[h]') - data.astype('datetime64[D]')).astype('float64')
-        hours[np.isnat(data)] = nan
-        return hours
+        hour = (data.astype('int64') / (3600 * 10 ** 9) % 24).astype('int64').astype('float64')
+        hour[np.isnat(data)] = nan
+        return hour
+
+    def is_leap_year(self, column=None, keep=False):
+        return self._generic(name='_is_leap_year', column=column, keep=keep, multiple=True)
+
+    def _is_leap_year(self, data):
+        if data.size < 500:
+            years = data.astype('datetime64[Y]').astype('float64') + 1970
+            years[np.isnat(data)] = nan
+            return np.where(years % 4 == 0, np.where(years % 100 == 0,
+                                              np.where(years % 400 == 0, True, False), True), False)
+        else:
+            return _date.is_leap_year(data.astype('int64'))
+
+    def is_month_end(self, column=None, keep=False):
+        return self._generic(name='_is_month_end', column=column, keep=keep, multiple=True)
+
+    def _is_month_end(self, data):
+        return self._day(data) == self._days_in_month(data)
+
+    def is_month_start(self, column=None, keep=False):
+        return self._generic(name='_is_month_start', column=column, keep=keep, multiple=True)
+
+    def _is_month_start(self, data):
+        return self._day(data) == 1
+
+    def is_quarter_end(self, column=None, keep=False):
+        return self._generic(name='_is_quarter_end', column=column, keep=keep, multiple=True)
+
+    def _is_quarter_end(self, data):
+        return _date.is_quarter_end(data.astype('int64'))
+
+    def is_quarter_start(self, column=None, keep=False):
+        return self._generic(name='_is_quarter_start', column=column, keep=keep, multiple=True)
+
+    def _is_quarter_start(self, data):
+        return _date.is_quarter_start(data.astype('int64'))
+
+    def is_year_end(self, column=None, keep=False):
+        return self._generic(name='_is_year_end', column=column, keep=keep, multiple=True)
+
+    def _is_year_end(self, data):
+        return _date.is_year_end(data.astype('int64'))
+
+    def is_year_start(self, column=None, keep=False):
+        return self._generic(name='_is_year_start', column=column, keep=keep, multiple=True)
+
+    def _is_year_start(self, data):
+        return _date.is_year_start(data.astype('int64'))
 
     def minute(self, column=None, keep=False):
         return self._generic(name='_minute', column=column, keep=keep, multiple=True)
 
     def _minute(self, data):
-        minutes = (data.astype('datetime64[m]') - data.astype('datetime64[h]')).astype('float64')
-        minutes[np.isnat(data)] = nan
-        return minutes
+        minute = (data.astype('int64') / (60 * 10 ** 9) % 60).astype('int64').astype('float64')
+        minute[np.isnat(data)] = nan
+        return minute
+
+    def month(self, column=None, keep=False):
+        return self._generic(name='_month', column=column, keep=keep, multiple=True)
+
+    def _month(self, data):
+        if data.size < 6000:
+            return _date.month(data.astype('datetime64[M]').astype('int64'))
+        else:
+            return _date.month2(data.astype('int64'))
+
+    def quarter(self, column=None, keep=False):
+        return self._generic(name='_quarter', column=column, keep=keep, multiple=True)
+
+    def _quarter(self, data):
+        t = data.astype('datetime64[M]').astype('float64') % 12 // 3 + 1
+        t[np.isnat(data)] = nan
+        return t
 
     def second(self, column=None, keep=False):
         return self._generic(name='_second', column=column, keep=keep, multiple=True)
 
     def _second(self, data):
-        t = (data.astype('datetime64[s]') - data.astype('datetime64[m]')).astype('float64')
-        t[np.isnat(data)] = nan
-        return t
+        sec = (data.astype('int64') / 10 ** 9 % 60).astype('int64').astype('float64')
+        sec[np.isnat(data)] = nan
+        return sec
 
     def millisecond(self, column=None, keep=False):
         return self._generic(name='_millisecond', column=column, keep=keep, multiple=True)
 
     def _millisecond(self, data):
-        t = (data.astype('datetime64[ms]') - data.astype('datetime64[s]')).astype('float64')
+        t = (data.astype('int64') / 10 ** 6 % 1000).astype('int64').astype('float64')
         t[np.isnat(data)] = nan
         return t
 
@@ -335,7 +418,7 @@ class DateTimeClass(AccessorMixin):
         return self._generic(name='_microsecond', column=column, keep=keep, multiple=True)
 
     def _microsecond(self, data):
-        t = (data.astype('datetime64[us]') - data.astype('datetime64[ms]')).astype('float64')
+        t = (data.astype('int64') / 1000 % 1000).astype('int64').astype('float64')
         t[np.isnat(data)] = nan
         return t
 
@@ -343,9 +426,41 @@ class DateTimeClass(AccessorMixin):
         return self._generic(name='_nanosecond', column=column, keep=keep, multiple=True)
 
     def _nanosecond(self, data):
-        t = (data.astype('datetime64[ns]') - data.astype('datetime64[us]')).astype('float64')
+        t = (data.astype('int64') % 1000).astype('int64').astype('float64')
         t[np.isnat(data)] = nan
         return t
+
+    def week_of_year(self, column=None, keep=False):
+        return self._generic(name='_week_of_year', column=column, keep=keep, multiple=True)
+
+    def _week_of_year(self, data):
+        woy = (self._day_of_year(data) - self._day_of_week(data) + 9) // 7
+        years = self._year(data)
+        weeks_in_prev_year_4 = self._weeks_in_year(years - 1, 4)
+        weeks_in_prev_year_3 = self._weeks_in_year(years - 2, 3)
+        zero_weeks = 52 + (weeks_in_prev_year_4 | weeks_in_prev_year_3)
+        return np.where(woy == 0, zero_weeks, woy)
+
+    def weekday_name(self, column=None, keep=False):
+        return self._generic(name='_weekday_name', column=column, keep=keep, multiple=True)
+
+    def _weekday_name(self, data):
+        dow = data.astype('datetime64[D]').astype('int64')
+        return _date.weekday_name(dow)
+
+    def year(self, column=None, keep=False):
+        return self._generic(name='_year', column=column, keep=keep, multiple=True)
+
+    def _year(self, data):
+        if data.size < 5000:
+            years = data.astype('datetime64[Y]').astype('float64') + 1970
+            years[np.isnat(data)] = nan
+            return years
+        else:
+            return _date.year(data.astype('int64'))
+
+    def _weeks_in_year(self, years, mod_result):
+        return (years + years // 4 - years // 100 + years // 400) % 7 == mod_result
 
 
 class TimeDeltaClass(AccessorMixin):

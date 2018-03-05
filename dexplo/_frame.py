@@ -1027,10 +1027,7 @@ class DataFrame(object):
         df_new._data = data
         df_new._columns = np.asarray(columns, dtype='O')
         df_new._hasnans = {}
-        # df_new.str = StringClass(df_new)
-        # TimeDeltaClass(df_new)
-        # df_new.str = DateTimeClass(df_new)
-        # df_new._add_accessors()
+        df_new._add_accessors()
         return df_new
 
     def _do_eval(self, op_string: str, other: Any) -> Tuple[Dict[str, List[ndarray]], ColInfoT]:
@@ -1450,15 +1447,7 @@ class DataFrame(object):
                          'Use a.any() or a.all()')
 
     def __getattr__(self, name: str) -> NoReturn:
-        dtypes: Dict[str, str] = {'dt': 'datetime',
-                                  'str': 'object',
-                                  'cat': 'Categorical'}
-        if name in dtypes:
-            raise AttributeError(f'The {name} accessor is only available for '
-                                 'single-column DataFrames with data type '
-                                 f'{dtypes[name]}')
-        else:
-            raise AttributeError("'DataFrame' object has no "
+        raise AttributeError("'DataFrame' object has no "
                                  f"attribute '{name}'")
 
     def __iadd__(self, value: Any) -> NoReturn:
