@@ -3,6 +3,7 @@ from numpy import nan
 from libc.math cimport isnan, sqrt
 from numpy cimport ndarray
 cimport numpy as np
+import cython
 
 
 cdef create_days_to_year():
@@ -251,11 +252,90 @@ def create_days_to_year_start():
             idx += 365
     return days_to_day
 
+def get_weeks_in_year():
+    cdef int i, n
+    cdef ndarray[np.uint8_t, cast=True] result = np.zeros(800, dtype='bool')
+    cdef ndarray[np.int64_t] a = np.array([4, 9, 15, 20, 26, 32, 37, 43, 48, 54, 60, 65,
+                                           71, 76, 82, 88, 93, 99, 105, 111, 116, 122,
+                                           128, 133, 139, 144, 150, 156, 161, 167, 172,
+                                           178, 184, 189, 195, 201, 207, 212, 218, 224,
+                                           229, 235, 240, 246, 252, 257, 263, 268, 274,
+                                           280, 285, 291, 296, 303, 308, 314, 320, 325,
+                                           331, 336, 342, 348, 353, 359, 364, 370, 376,
+                                           381, 387, 392, 398], dtype='int64')
+    n = len(a)
+    for i in range(n):
+        result[a[i]] = True
+        result[400 + a[i]] = True
+    return result
+
+@cython.cdivision(True)
+def create_days_to_week_num():
+    cdef long i, j, idx = 366
+    cdef ndarray[np.int64_t] days_to_week_num = np.empty(366 * 700, dtype='int64')
+    cdef ndarray[np.uint8_t, cast=True] weeks_in_year = get_weeks_in_year()
+    cdef int wiy, wiy_prev = 52, wn, dow
+
+    for i in range(1, 700):
+        wiy = weeks_in_year[i] + 52
+        if i % 4 != 0:
+            for j in range(365):
+                dow = (idx + j + 5) % 7 + 1
+                wn = (j + 1 - dow + 10) // 7
+                if wn == 0:
+                    days_to_week_num[idx + j] = wiy_prev
+                elif wn > wiy:
+                    days_to_week_num[idx + j] = 1
+                else:
+                    days_to_week_num[idx + j] = wn
+            idx += 365
+        elif i % 100 != 0:
+            for j in range(366):
+                dow = (idx + j + 5) % 7 + 1
+                wn = (j + 1 - dow + 10) // 7
+                if wn == 0:
+                    days_to_week_num[idx + j] = wiy_prev
+                elif wn > wiy:
+                    days_to_week_num[idx + j] = 1
+                else:
+                    days_to_week_num[idx + j] = wn
+
+            idx += 366
+        elif i % 400 == 0:
+            for j in range(366):
+                dow = (idx + j + 5) % 7 + 1
+                wn = (j + 1 - dow + 10) // 7
+                if wn == 0:
+                    days_to_week_num[idx + j] = wiy_prev
+                elif wn > wiy:
+                    days_to_week_num[idx + j] = 1
+                else:
+                    days_to_week_num[idx + j] = wn
+            idx += 366
+        else:
+            for j in range(365):
+                dow = (idx + j + 5) % 7 + 1
+                wn = (j + 1 - dow + 10) // 7
+                if wn == 0:
+                    days_to_week_num[idx + j] = wiy_prev
+                elif wn > wiy:
+                    days_to_week_num[idx + j] = 1
+                else:
+                    days_to_week_num[idx + j] = wn
+            idx += 365
+        wiy_prev = wiy
+
+    # days_to_week_num[idx:idx + idx - 365] = days_to_week_num[365:idx]
+
+    return days_to_week_num
+
+@cython.cdivision(True)
 def weekday_name(ndarray[np.int64_t, ndim=2] a):
     cdef int i, j
     cdef int nr = a.shape[0]
     cdef int nc = a.shape[1]
     cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef long year_nanos = 10 ** 9 * 86400
     cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='O')
     cdef ndarray[object] day_count = np.array(['Thursday', 'Friday', 'Saturday', 'Sunday',
                                                'Monday', 'Tuesday', 'Wednesday'], 'O')
@@ -265,7 +345,7 @@ def weekday_name(ndarray[np.int64_t, ndim=2] a):
             if a[i, j] == NAT:
                 result[i, j] = None
             else:
-                result[i, j] = day_count[a[i, j] % 7]
+                result[i, j] = day_count[a[i, j] / year_nanos % 7]
     return result
 
 def day_of_week(ndarray[np.int64_t, ndim=2] a):
@@ -499,4 +579,50 @@ def is_year_start(ndarray[np.int64_t, ndim=2] a):
                 result[i, j] = False
             else:
                 result[i, j] = days_to_is_year_start[<long> (a[i, j] / year_nanos) + days_since_1600]
+    return result
+
+@cython.cdivision(True)
+def week_of_year(ndarray[np.float64_t, ndim=2] week, ndarray[np.float64_t, ndim=2] year):
+    cdef int i, j
+    cdef int nr = week.shape[0]
+    cdef int nc = week.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    cdef ndarray[np.uint8_t, cast=True] has_53_weeks
+
+    has_53_weeks = get_weeks_in_year()
+
+    for j in range(nc):
+        for i in range(nr):
+            if week[i, j] == 0:
+                result[i, j] = has_53_weeks[<int> ((year[i, j] - 1) % 400)] + 52
+            elif week[i, j] == 53:
+                if has_53_weeks[<int> (year[i, j] % 400)]:
+                    result[i, j] = 53
+                else:
+                    result[i, j] = 1
+            elif week[i, j] > 0:
+                result[i, j] = week[i, j]
+            else:
+                result[i, j] = nan
+    return result
+
+@cython.cdivision(True)
+def week_of_year2(ndarray[np.int64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef ndarray[np.int64_t] weeks_in_year
+    cdef int days_since_1600 = 135140
+    cdef long year_nanos = 10 ** 9 * 86400
+
+    weeks_in_year = create_days_to_week_num()
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = nan
+            else:
+                result[i, j] = weeks_in_year[a[i, j] // year_nanos + days_since_1600]
     return result

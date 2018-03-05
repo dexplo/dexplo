@@ -434,18 +434,18 @@ class DateTimeClass(AccessorMixin):
         return self._generic(name='_week_of_year', column=column, keep=keep, multiple=True)
 
     def _week_of_year(self, data):
-        woy = (self._day_of_year(data) - self._day_of_week(data) + 9) // 7
-        years = self._year(data)
-        weeks_in_prev_year_4 = self._weeks_in_year(years - 1, 4)
-        weeks_in_prev_year_3 = self._weeks_in_year(years - 2, 3)
-        zero_weeks = 52 + (weeks_in_prev_year_4 | weeks_in_prev_year_3)
-        return np.where(woy == 0, zero_weeks, woy)
+        if data.size < 500:
+            woy = (self._day_of_year(data) - self._day_of_week(data) + 9) // 7
+            years = self._year(data)
+            return _date.week_of_year(woy, years)
+        else:
+            return _date.week_of_year2(data.astype('int64'))
 
     def weekday_name(self, column=None, keep=False):
         return self._generic(name='_weekday_name', column=column, keep=keep, multiple=True)
 
     def _weekday_name(self, data):
-        dow = data.astype('datetime64[D]').astype('int64')
+        dow = data.astype('int64')
         return _date.weekday_name(dow)
 
     def year(self, column=None, keep=False):
@@ -458,9 +458,6 @@ class DateTimeClass(AccessorMixin):
             return years
         else:
             return _date.year(data.astype('int64'))
-
-    def _weeks_in_year(self, years, mod_result):
-        return (years + years // 4 - years // 100 + years // 400) % 7 == mod_result
 
 
 class TimeDeltaClass(AccessorMixin):

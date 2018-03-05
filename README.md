@@ -254,5 +254,5 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] tz_convert
 - [ ] tz_localize
 - [x] weekday_name
-- [ ] week_of_year
+- [x] week_of_year
 - [x] year
