@@ -243,11 +243,11 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] month
 - [x] nanosecond
 - [x] quarter
-- [ ] round
+- [x] round
 - [x] second
-- [ ] strftime
-- [ ] time
+- [x] strftime
 - [x] to_pydatetime
+- [x] to_pytime
 - [ ] tz
 - [ ] tz_convert
 - [ ] tz_localize

@@ -280,7 +280,7 @@ class DateTimeClass(AccessorMixin):
     def ceil(self, column=None, freq=None, keep=False):
         if freq not in ('ns', 'us', 'ms', 's', 'm', 'h', 'D', 'Y'):
             raise ValueError("`freq` must be one of 'ns', 'us', 'ms', 's', 'm', 'h', 'D', 'Y'")
-        return self._generic(name='_ceil', column=column, keep=keep, multiple=True, freq=freq)
+        return self._generic(name='_ceil', column=column, keep=keep, multiple=False, freq=freq)
 
     def _ceil(self, data, freq):
         if freq == 'ns':
@@ -337,7 +337,7 @@ class DateTimeClass(AccessorMixin):
     def floor(self, column=None, freq=None, keep=False):
         if freq not in ('ns', 'us', 'ms', 's', 'm', 'h', 'D', 'Y'):
             raise ValueError("`freq` must be one of 'ns', 'us', 'ms', 's', 'm', 'h', 'D', 'Y'")
-        return self._generic(name='_floor', column=column, keep=keep, multiple=True, freq=freq)
+        return self._generic(name='_floor', column=column, keep=keep, multiple=False, freq=freq)
 
     def _floor(self, data, freq):
         if freq == 'ns':
@@ -348,9 +348,7 @@ class DateTimeClass(AccessorMixin):
         return self._generic(name='_hour', column=column, keep=keep, multiple=True)
 
     def _hour(self, data):
-        hour = (data.astype('int64') / (3600 * 10 ** 9) % 24).astype('int64').astype('float64')
-        hour[np.isnat(data)] = nan
-        return hour
+        return _date.hour(data.astype('int64'))
 
     def is_leap_year(self, column=None, keep=False):
         return self._generic(name='_is_leap_year', column=column, keep=keep, multiple=True)
@@ -404,9 +402,7 @@ class DateTimeClass(AccessorMixin):
         return self._generic(name='_minute', column=column, keep=keep, multiple=True)
 
     def _minute(self, data):
-        minute = (data.astype('int64') / (60 * 10 ** 9) % 60).astype('int64').astype('float64')
-        minute[np.isnat(data)] = nan
-        return minute
+        return _date.minute(data.astype('int64'))
 
     def month(self, column=None, keep=False):
         return self._generic(name='_month', column=column, keep=keep, multiple=True)
@@ -421,41 +417,60 @@ class DateTimeClass(AccessorMixin):
         return self._generic(name='_quarter', column=column, keep=keep, multiple=True)
 
     def _quarter(self, data):
-        t = data.astype('datetime64[M]').astype('float64') % 12 // 3 + 1
-        t[np.isnat(data)] = nan
-        return t
+        if data.size < 5000:
+            t = data.astype('datetime64[M]').astype('float64') % 12 // 3 + 1
+            t[np.isnat(data)] = nan
+            return t
+        else:
+            return _date.quarter(data.astype('int64'))
 
     def second(self, column=None, keep=False):
         return self._generic(name='_second', column=column, keep=keep, multiple=True)
 
     def _second(self, data):
-        sec = (data.astype('int64') / 10 ** 9 % 60).astype('int64').astype('float64')
-        sec[np.isnat(data)] = nan
-        return sec
+        return _date.second(data.astype('int64'))
 
     def millisecond(self, column=None, keep=False):
         return self._generic(name='_millisecond', column=column, keep=keep, multiple=True)
 
     def _millisecond(self, data):
-        t = (data.astype('int64') / 10 ** 6 % 1000).astype('int64').astype('float64')
-        t[np.isnat(data)] = nan
-        return t
+        return _date.millisecond(data.astype('int64'))
 
     def microsecond(self, column=None, keep=False):
         return self._generic(name='_microsecond', column=column, keep=keep, multiple=True)
 
     def _microsecond(self, data):
-        t = (data.astype('int64') / 1000 % 1000).astype('int64').astype('float64')
-        t[np.isnat(data)] = nan
-        return t
+        return _date.microsecond(data.astype('int64'))
 
     def nanosecond(self, column=None, keep=False):
         return self._generic(name='_nanosecond', column=column, keep=keep, multiple=True)
 
     def _nanosecond(self, data):
-        t = (data.astype('int64') % 1000).astype('int64').astype('float64')
-        t[np.isnat(data)] = nan
-        return t
+        return _date.nanosecond(data.astype('int64'))
+
+    def round(self, column=None, freq=None, keep=False):
+        if freq not in ('ns', 'us', 'ms', 's', 'm', 'h', 'D', 'Y'):
+            raise ValueError("`freq` must be one of 'ns', 'us', 'ms', 's', 'm', 'h', 'D', 'Y'")
+        return self._generic(name='_round', column=column, keep=keep, multiple=False, freq=freq)
+
+    def _round(self, data, freq):
+        if freq == 'ns':
+            return data
+        return getattr(_date,  'round_' + freq)(data.astype('float64'))
+
+    def strftime(self, column=None, date_format=None, keep=False):
+        if not isinstance(date_format, str):
+            raise TypeError('`date_format` must be a str')
+        return self._generic(name='_strftime', column=column, keep=keep, multiple=True,
+                             date_format=date_format)
+
+    def _strftime(self, data, date_format):
+        return _date.strftime(data.astype('float64'), date_format)
+
+    def to_pytime(self, column=None):
+        columns, locs = self._validate_columns(column)
+        data = self._df._data['M'][:, locs]
+        return _date.to_pytime(data.astype('float64'))
 
     def to_pydatetime(self, column=None):
         columns, locs = self._validate_columns(column)
@@ -500,4 +515,13 @@ class TimeDeltaClass(AccessorMixin):
         self._df = weakref.ref(df)()
         self._dtype_acc = 'm'
         self._2d = ''
+
+    def seconds(self, column=None, keep=False):
+        return self._generic(name='_seconds', column=column, keep=keep, multiple=True)
+
+    def _seconds(self, data):
+        sec = data.astype('float64') // 10 ** 9 % 86400
+        sec[np.isnat(data)] = nan
+        return sec
+
 

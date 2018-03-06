@@ -1,6 +1,6 @@
 import numpy as np
 from numpy import nan
-from libc.math cimport ceil
+from libc.math cimport ceil, round, abs
 from numpy cimport ndarray
 cimport numpy as np
 import cython
@@ -445,6 +445,129 @@ def month2(ndarray[np.int64_t, ndim=2] a):
                 result[i, j] = nan
             else:
                 result[i, j] = days_to_month[<long> (a[i, j] / year_nanos) + days_since_1600]
+    return result
+
+def quarter(ndarray[np.int64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef ndarray[np.int64_t] days_to_month
+    cdef int days_since_1600 = 135140
+    cdef long year_nanos = 10 ** 9 * 86400
+
+    days_to_month = create_days_to_month()
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = nan
+            else:
+                result[i, j] = days_to_month[<long> (a[i, j] / year_nanos) + days_since_1600] % 12 / 3 + 1
+    return result
+
+def nanosecond(ndarray[np.int64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef int days_since_1600 = 135140
+    cdef long year_nanos = 10 ** 9 * 86400
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = nan
+            else:
+                result[i, j] = a[i, j] % 1000
+    return result
+
+def microsecond(ndarray[np.int64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef int days_since_1600 = 135140
+    cdef long year_nanos = 10 ** 9 * 86400
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = nan
+            else:
+                result[i, j] = <long> (a[i, j] / 1000) % 1000
+    return result
+
+
+def millisecond(ndarray[np.int64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef int days_since_1600 = 135140
+    cdef long year_nanos = 10 ** 9 * 86400
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = nan
+            else:
+                result[i, j] = <long> (a[i, j] / 1000000) % 1000
+    return result
+
+def second(ndarray[np.int64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef int days_since_1600 = 135140
+    cdef long year_nanos = 10 ** 9 * 86400
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = nan
+            else:
+                result[i, j] = <long> (a[i, j] / 10 ** 9) % 60
+    return result
+
+def minute(ndarray[np.int64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef int days_since_1600 = 135140
+    cdef long nanos = 10 ** 9 * 60
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = nan
+            else:
+                result[i, j] = <long> (a[i, j] / nanos) % 60
+    return result
+
+def hour(ndarray[np.int64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef int days_since_1600 = 135140
+    cdef long nanos = 10 ** 9 * 3600
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = nan
+            else:
+                result[i, j] = <long> (a[i, j] / nanos) % 24
     return result
 
 def year(ndarray[np.int64_t, ndim=2] a):
@@ -909,4 +1032,157 @@ def ceil_Y(ndarray[np.float64_t, ndim=2] a):
                     while days_to_nano[idx] == cur_year_nanos:
                         idx += 1
                     result[i, j] = days_to_nano[idx]
+    return result.astype('datetime64[ns]')
+
+def to_pytime(ndarray[np.float64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='O')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef long day_nanos = 86400
+
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = None
+            else:
+                result[i, j] = datetime.datetime.fromtimestamp(a[i, j] / 10 ** 9 + 18000).time()
+    return result
+
+
+def strftime(ndarray[np.float64_t, ndim=2] a, str date_format):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[object, ndim=2] result = np.empty((nr, nc), dtype='O')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef long day_nanos = 86400
+
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = None
+            else:
+                result[i, j] = datetime.datetime.fromtimestamp(a[i, j] / 10 ** 9 + 18000).strftime(date_format)
+    return result
+
+def round_us(ndarray[np.float64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc), dtype='int64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+
+    for j in range(nc):
+        for i in range(nr):
+            result[i, j] = <long> round(a[i, j] / 1000) * 1000
+    return result.astype('datetime64[ns]')
+
+def round_ms(ndarray[np.float64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc), dtype='int64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+
+    for j in range(nc):
+        for i in range(nr):
+            result[i, j] = <long> round(a[i, j] / 1000000) * 1000000
+    return result.astype('datetime64[ns]')
+
+@cython.cdivision(True)
+def round_s(ndarray[np.float64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc), dtype='int64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = NAT
+            else:
+                result[i, j] = <long> round(a[i, j] / 10 ** 9) * 10 ** 9
+    return result.astype('datetime64[ns]')
+
+def round_m(ndarray[np.float64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc), dtype='int64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef long nanos = 10 ** 9 * 60
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = NAT
+            else:
+                result[i, j] = <long> round(a[i, j] / nanos) * nanos
+    return result.astype('datetime64[ns]')
+
+
+def round_h(ndarray[np.float64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc), dtype='int64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef long nanos = 10 ** 9 * 3600
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = NAT
+            else:
+                result[i, j] = <long> round(a[i, j] / nanos) * nanos
+    return result.astype('datetime64[ns]')
+
+def round_D(ndarray[np.float64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc), dtype='int64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef long nanos = 10 ** 9 * 3600 * 24
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = NAT
+            else:
+                result[i, j] = <long> round(a[i, j] / nanos) * nanos
+    return result.astype('datetime64[ns]')
+
+def round_Y(ndarray[np.float64_t, ndim=2] a):
+    cdef int i, j
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+    cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
+    cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
+    cdef ndarray[np.int64_t] days_to_nano
+    cdef int days_since_1600 = 135140
+    cdef long year_nanos = 10 ** 9 * 86400
+    cdef long cur_year_nanos, idx
+
+    days_to_nano = create_days_to_nano_years()
+
+    for j in range(nc):
+        for i in range(nr):
+            if a[i, j] == NAT:
+                result[i, j] = NAT
+            else:
+                idx = <long> (a[i, j] // year_nanos) + days_since_1600
+                cur_year_nanos = days_to_nano[idx]
+                idx += 365
+                while days_to_nano[idx] == cur_year_nanos:
+                    idx += 1
+                if a[i, j] - cur_year_nanos > days_to_nano[idx] - a[i, j]:
+                    result[i, j] = days_to_nano[idx]
+                else:
+                    result[i, j] = cur_year_nanos
     return result.astype('datetime64[ns]')
