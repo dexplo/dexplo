@@ -254,3 +254,16 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] weekday_name
 - [x] week_of_year
 - [x] year
+
+**td** - `df.td.<method>`
+- [ ] ceil
+- [ ] components
+- [x] days
+- [ ] floor
+- [ ] freq
+- [x] microseconds
+- [x] milliseconds
+- [x] nanoseconds
+- [ ] round
+- [x] seconds
+- [ ] to_pytimedelta

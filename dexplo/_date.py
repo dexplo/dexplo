@@ -1,7 +1,7 @@
 import dexplo._utils as utils
 from dexplo._libs import (string_funcs as _sf,
                           date as _date,
-                          math as _math)
+                          timedelta as _td)
 import numpy as np
 from numpy import nan, ndarray
 from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
@@ -516,12 +516,51 @@ class TimeDeltaClass(AccessorMixin):
         self._dtype_acc = 'm'
         self._2d = ''
 
-    def seconds(self, column=None, keep=False):
-        return self._generic(name='_seconds', column=column, keep=keep, multiple=True)
+    def seconds(self, column=None, total=False, keep=False):
+        if not isinstance(total, (bool, np.bool_)):
+            raise TypeError('`total` must be a boolean')
+        return self._generic(name='_seconds', column=column, keep=keep, multiple=True,
+                             total=total)
 
-    def _seconds(self, data):
-        sec = data.astype('float64') // 10 ** 9 % 86400
-        sec[np.isnat(data)] = nan
-        return sec
+    def _seconds(self, data, total):
+        if total:
+            t = data.astype('float64') / 10 ** 9
+            t[np.isnat(data)] = nan
+            return t
+        else:
+            return _td.seconds(data.astype('int64'))
+
+    def milliseconds(self, column=None, total=False, keep=False):
+        if not isinstance(total, (bool, np.bool_)):
+            raise TypeError('`total` must be a boolean')
+        return self._generic(name='_milliseconds', column=column, keep=keep, multiple=True,
+                             total=total)
+
+    def _milliseconds(self, data, total):
+        return _td.milliseconds(data.astype('int64'), total)
+
+    def microseconds(self, column=None, total=False, keep=False):
+        if not isinstance(total, (bool, np.bool_)):
+            raise TypeError('`total` must be a boolean')
+        return self._generic(name='_microseconds', column=column, keep=keep, multiple=True,
+                             total=total)
+
+    def _microseconds(self, data, total):
+        return _td.microseconds(data.astype('int64'), total)
+
+    def nanoseconds(self, column=None, keep=False):
+        return self._generic(name='_nanoseconds', column=column, keep=keep, multiple=True)
+
+    def _nanoseconds(self, data):
+        return _td.nanoseconds(data.astype('int64'))
+
+    def days(self, column=None, total=False, keep=False):
+        if not isinstance(total, (bool, np.bool_)):
+            raise TypeError('`total` must be a boolean')
+        return self._generic(name='_days', column=column, keep=keep, multiple=True,
+                             total=total)
+
+    def _days(self, data, total):
+        return _td.days(data.astype('int64'), total)
 
 

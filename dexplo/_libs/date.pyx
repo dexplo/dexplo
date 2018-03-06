@@ -473,7 +473,6 @@ def nanosecond(ndarray[np.int64_t, ndim=2] a):
     cdef int nc = a.shape[1]
     cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
     cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
-    cdef int days_since_1600 = 135140
     cdef long year_nanos = 10 ** 9 * 86400
 
     for j in range(nc):
@@ -490,7 +489,6 @@ def microsecond(ndarray[np.int64_t, ndim=2] a):
     cdef int nc = a.shape[1]
     cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
     cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
-    cdef int days_since_1600 = 135140
     cdef long year_nanos = 10 ** 9 * 86400
 
     for j in range(nc):
@@ -508,7 +506,6 @@ def millisecond(ndarray[np.int64_t, ndim=2] a):
     cdef int nc = a.shape[1]
     cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
     cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
-    cdef int days_since_1600 = 135140
     cdef long year_nanos = 10 ** 9 * 86400
 
     for j in range(nc):
@@ -525,7 +522,6 @@ def second(ndarray[np.int64_t, ndim=2] a):
     cdef int nc = a.shape[1]
     cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
     cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
-    cdef int days_since_1600 = 135140
     cdef long year_nanos = 10 ** 9 * 86400
 
     for j in range(nc):
@@ -542,7 +538,6 @@ def minute(ndarray[np.int64_t, ndim=2] a):
     cdef int nc = a.shape[1]
     cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
     cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
-    cdef int days_since_1600 = 135140
     cdef long nanos = 10 ** 9 * 60
 
     for j in range(nc):
@@ -559,7 +554,6 @@ def hour(ndarray[np.int64_t, ndim=2] a):
     cdef int nc = a.shape[1]
     cdef ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc), dtype='float64')
     cdef np.int64_t NAT = np.datetime64('nat').astype('int64')
-    cdef int days_since_1600 = 135140
     cdef long nanos = 10 ** 9 * 3600
 
     for j in range(nc):
