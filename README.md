@@ -222,13 +222,12 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] zfill
 
 **dt** - `df.dt.<method>`
-- [ ] ceil
-- [ ] date
+- [x] ceil
 - [x] day
 - [x] day_of_week
 - [x] day_of_year
 - [x] days_in_month
-- [ ] floor
+- [x] floor
 - [ ] freq
 - [x] hour
 - [x] is_leap_year
@@ -243,13 +242,12 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] minute
 - [x] month
 - [x] nanosecond
-- [ ] normalize
 - [x] quarter
 - [ ] round
 - [x] second
 - [ ] strftime
 - [ ] time
-- [ ] to_pydatetime
+- [x] to_pydatetime
 - [ ] tz
 - [ ] tz_convert
 - [ ] tz_localize

@@ -7,6 +7,7 @@ from numpy import nan, ndarray
 from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
                     NoReturn, Set, Iterable, Any, TypeVar, Type, Generator)
 import weakref
+import datetime
 
 NAT = np.datetime64('nat')
 
@@ -276,6 +277,22 @@ class DateTimeClass(AccessorMixin):
         self._dtype_acc = 'M'
         self._2d = ''
 
+    def ceil(self, column=None, freq=None, keep=False):
+        if freq not in ('ns', 'us', 'ms', 's', 'm', 'h', 'D', 'Y'):
+            raise ValueError("`freq` must be one of 'ns', 'us', 'ms', 's', 'm', 'h', 'D', 'Y'")
+        return self._generic(name='_ceil', column=column, keep=keep, multiple=True, freq=freq)
+
+    def _ceil(self, data, freq):
+        if freq == 'ns':
+            return data
+        if freq == 'Y':
+            if data.size < 5000:
+                years = data.astype('datetime64[Y]')
+                diff = (years - data).astype('int64')
+                years[diff != 0] += 1
+                return years.astype('datetime64[ns]')
+        return getattr(_date,  'ceil_' + freq)(data.astype('float64'))
+
     def day(self, column=None, keep=False):
         return self._generic(name='_day', column=column, keep=keep, multiple=True)
 
@@ -316,6 +333,16 @@ class DateTimeClass(AccessorMixin):
             return dim
         else:
             return _date.days_in_month(data.astype('int64'))
+
+    def floor(self, column=None, freq=None, keep=False):
+        if freq not in ('ns', 'us', 'ms', 's', 'm', 'h', 'D', 'Y'):
+            raise ValueError("`freq` must be one of 'ns', 'us', 'ms', 's', 'm', 'h', 'D', 'Y'")
+        return self._generic(name='_floor', column=column, keep=keep, multiple=True, freq=freq)
+
+    def _floor(self, data, freq):
+        if freq == 'ns':
+            return data
+        return getattr(_date,  'floor_' + freq)(data.astype('int64'))
 
     def hour(self, column=None, keep=False):
         return self._generic(name='_hour', column=column, keep=keep, multiple=True)
@@ -429,6 +456,13 @@ class DateTimeClass(AccessorMixin):
         t = (data.astype('int64') % 1000).astype('int64').astype('float64')
         t[np.isnat(data)] = nan
         return t
+
+    def to_pydatetime(self, column=None):
+        columns, locs = self._validate_columns(column)
+        data = self._df._data['M'][:, locs]
+        # return _date.to_pydatetime(data.astype('int64'))
+        return data.astype('datetime64[us]').astype(datetime.datetime)
+
 
     def week_of_year(self, column=None, keep=False):
         return self._generic(name='_week_of_year', column=column, keep=keep, multiple=True)
