@@ -25,7 +25,7 @@ else:
     USE_CYTHON = True
 
 if USE_CYTHON:
-    extensions = cythonize('dexplo/_libs/*.pyx')
+    extensions = cythonize(['dexplo/_libs/*.pyx'])
 else:
     extensions = []
     for fn in glob.glob('dexplo/_libs/*.c'):
@@ -39,7 +39,7 @@ def readme():
 
 setup(name='dexplo',
       cmdclass = {'build_ext': CustomBuildExtCommand},
-      version='0.0.8',
+      version='0.0.10',
       description='A library for data exploration comparible to pandas. '
                   'No Series, No hierarchical indexing, only one indexer [ ]',
       long_description=readme(),
