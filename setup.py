@@ -1,29 +1,12 @@
-from setuptools import setup, find_packages, Extension, Command
+from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
-import glob
+import sys, glob
 
 
 class CustomBuildExtCommand(build_ext):
     """build_ext command for use when numpy headers are needed."""
-    user_options = build_ext.user_options + [('cython=', None, 'To use cython or not during installation')]
-
-    def initialize_options(self):
-        build_ext.initialize_options(self)
-        self.cython = None
-
-    def finalize_options(self):
-        build_ext.finalize_options(self)
 
     def run(self):
-        global extenions
-        if self.cython == 'True':
-            from Cython.Build import cythonize
-            self.ext_modules = cythonize(['dexplo/_libs/*.pyx'])
-        else:
-            self.ext_modules = []
-            for fn in glob.glob('dexplo/_libs/*.c'):
-                self.ext_modules.append(Extension(fn[:-2].replace(r'/', '.'), [fn]))
-
         # Import numpy here, only when headers are needed
         import numpy
 
@@ -32,28 +15,27 @@ class CustomBuildExtCommand(build_ext):
 
         # Call original build_ext command
         build_ext.run(self)
-        
-# try:
-#     from Cython.Build import cythonize
-# except ImportError:
-#     USE_CYTHON = False
-# else:
-#     USE_CYTHON = True
 
-# if USE_CYTHON:
-#     extensions = cythonize(['dexplo/_libs/*.pyx'])
-# else:
-#     extensions = []
-#     for fn in glob.glob('dexplo/_libs/*.c'):
-#         extensions.append(Extension(fn[:-2].replace(r'/', '.'), [fn]))
 
 def readme():
     with open('README.rst') as f:
         return f.read()
 
+
+if '--use-cython' in sys.argv:
+    USE_CYTHON = True
+    sys.argv.remove('--use-cython')
+
+    from Cython.Build import cythonize
+    extensions = cythonize(['dexplo/_libs/*.pyx'])
+else:
+    extensions = []
+    for fn in glob.glob('dexplo/_libs/*.c'):
+        extensions.append(Extension(fn[:-2].replace(r'/', '.'), [fn]))
+
 setup(name='dexplo',
       cmdclass={'build_ext': CustomBuildExtCommand},
-      version='0.0.12',
+      version='0.0.13',
       description='A library for data exploration comparible to pandas. '
                   'No Series, No hierarchical indexing, only one indexer [ ]',
       long_description=readme(),
@@ -70,6 +52,5 @@ setup(name='dexplo',
       keywords='data analysis exploration aggregation pandas numpy',
       packages=find_packages(exclude=['docs', 'stubs']),
       install_requires=['numpy'],
-      python_requires='>=3.6')
-      # include_dirs=[np.get_include()],
-      # ext_modules=extensions)
+      python_requires='>=3.6',
+      ext_modules=extensions)
