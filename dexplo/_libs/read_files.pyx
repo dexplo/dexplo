@@ -63,7 +63,7 @@ def get_dtypes_first_line(char * chars, int nc):
                         vals[j] = temp.decode('utf-8')
                         dtypes[j] = 4
                 elif is_float:
-                    vals[j] = sign * (x + dec / denom)
+                    vals[j] = sign * (x + <double> dec / denom)
                     dtypes[j] = 3
                 else:
                     vals[j] = sign * x
@@ -98,13 +98,43 @@ def get_dtypes_first_line(char * chars, int nc):
 
     return dtypes, dtype_loc, dtype_summary, vals
 
-def read_csv(fn):
+cdef double get_float(char * string):
+    cdef:
+        int x = 0
+        int dec = 0
+        int denom = 1
+        int sign = 1
+        int i = 0
+        bint has_dec = False
+        int n = len(string)
+        int start = 0
+
+    while string[start] == b' ':
+        start += 1
+
+    if string[start] == 45:
+        sign = -1
+        start += 1
+
+    for i in range(start, n):
+        if string[i] >= 48 and string[i] <= 57:
+            if has_dec:
+                dec = dec * 10 + string[i] - 48
+                denom = denom * 10
+            else:
+                x = x * 10 + string[i] - 48
+        elif string[i] == 46:
+            has_dec = True
+
+    return sign * (x + <double> dec / denom)
+
+def read_csv(fn, int sep, int header, int skiprows_int, set skiprows_set):
     cdef:
         bytes buf, first_buf
         list columns
         char * chars # const?
         char * first_line
-        Py_ssize_t i=0, j=0,k=0, nr, nc, start=0, end=0, n
+        Py_ssize_t i=0, j=0,k=0, nr, nc, start=0, end=0, n, act_row = 0
 
         ndarray[np.uint8_t, ndim=2, cast=True] a_bool
         ndarray[np.int64_t, ndim=2] a_int
@@ -117,6 +147,7 @@ def read_csv(fn):
         bint begun = False
         bint has_int = False
         bint has_num = False
+        bint has_skiprows_set = bool(skiprows_set)
 
         int x = 0, dec=0, denom = 1, sign = 1, jump = 0, ct_dec
         ndarray[np.int64_t] dtypes
@@ -124,12 +155,63 @@ def read_csv(fn):
         ndarray[np.int64_t] dtype_summary
         ndarray[object] vals
 
-    nr = rawgencount(fn) - 1
+    nr = rawgencount(fn)
+    py_sep = bytes(chr(sep), 'utf-8')
 
-    with open(fn, "rb") as f:
-        columns = [v.decode('utf8') for v in f.readline().replace(b"\n", b"").split(b',')]
-        first_buf = f.readline()
-        buf = f.read() # this is fast, can keep in Python
+    if header == -1:
+        nr = nr - len(skiprows_set) - skiprows_int
+        with open(fn, "rb") as f:
+            for i in range(skiprows_int):
+                f.readline()
+            while act_row in skiprows_set:
+                skiprows_set.remove(act_row)
+                f.readline()
+                act_row += 1
+            first_buf = f.readline()
+            act_row += 1
+            while act_row in skiprows_set:
+                skiprows_set.remove(act_row)
+                f.readline()
+                act_row += 1
+            nc = len(first_buf.split(py_sep))
+            columns = ['a' + str(i) for i in range(nc)]
+            buf = f.read()
+    else:
+        nr = nr - len(skiprows_set) - skiprows_int - header - 1
+        with open(fn, "rb") as f:
+            for i in range(skiprows_int + header):
+                f.readline()
+                act_row += 1
+
+            columns = []
+            col_set = set()
+            for i, v in enumerate(f.readline().replace(b"\n", b"").split(py_sep)):
+                v = v.decode('utf8')
+                if v == '':
+                    col_name = col_name = 'a' + str(i)
+                else:
+                    col_name = col_base = v
+
+                k = 0
+                while col_name in col_set:
+                    col_name = col_base + '_' + str(k)
+                    k += 1
+                columns.append(col_name)
+                col_set.add(col_name)
+            act_row += 1
+
+            while act_row in skiprows_set:
+                skiprows_set.remove(act_row)
+                f.readline()
+                act_row += 1
+            first_buf = f.readline()
+            act_row += 1
+            while act_row in skiprows_set:
+                skiprows_set.remove(act_row)
+                f.readline()
+                act_row += 1
+
+            buf = f.read() # this is fast, can keep in Python
 
     first_line = first_buf
     nc = len(columns)
@@ -167,7 +249,7 @@ def read_csv(fn):
             while chars[i] == b' ':
                 i += 1
 
-            while chars[i] != b',' and chars[i] != b'\n':
+            while chars[i] != sep and chars[i] != b'\n':
                 i += 1
 
             # only assign when a non-empty string is present - otherise its already None
@@ -198,7 +280,7 @@ def read_csv(fn):
                 elif chars[i] == 46:
                     ct_dec += 1
                     i += 1
-                elif chars[i] != b',' and chars[i] != b'\n':
+                elif chars[i] != sep and chars[i] != b'\n':
                     is_str = True
                     i += 1
                 else:
@@ -224,7 +306,7 @@ def read_csv(fn):
                 if start == i:
                     a_float[k, dtype_loc[j]] = nan
                 else:
-                    a_float[k, dtype_loc[j]] = 3.2 # todo: function for float
+                    a_float[k, dtype_loc[j]] = get_float(chars[start:i])
 
         elif dtypes[j] == 3:
             x = 0
@@ -256,14 +338,14 @@ def read_csv(fn):
                 elif chars[i] == 46:
                     ct_dec += 1
                     i += 1
-                elif chars[i] != b',' and chars[i] != b'\n':
+                elif chars[i] != sep and chars[i] != b'\n':
                     is_str = True
                     i += 1
                 else:
                     break
 
             if has_num and ct_dec <= 1 and not is_str:
-                a_float[k, dtype_loc[j]] = x
+                a_float[k, dtype_loc[j]] = sign * (x + <double> dec / denom)
             elif start == i:
                 a_float[k, dtype_loc[j]] = nan
             else: # is_str or ct_dec > 1:
@@ -281,7 +363,7 @@ def read_csv(fn):
 
             start = i
 
-            while chars[i] != b',' and chars[i] != b'\n':
+            while chars[i] != sep and chars[i] != b'\n':
                 i += 1
 
             if chars[start:i] == b'True':
@@ -331,7 +413,7 @@ def read_csv(fn):
                 elif chars[i] == 46:
                     ct_dec += 1
                     i += 1
-                elif chars[i] != b',' and chars[i] != b'\n':
+                elif chars[i] != sep and chars[i] != b'\n':
                     is_str = True
                     i += 1
                 else:
@@ -358,5 +440,26 @@ def read_csv(fn):
         if j == nc:
             j = 0
             k += 1
+            act_row += 1
+
+            if has_skiprows_set:
+                while act_row in skiprows_set:
+                    skiprows_set.remove(act_row)
+                    while chars[i] != b'\n':
+                        i += 1
+                    i += 1
+                    act_row += 1
+
+                if len(skiprows_set) == 0:
+                    has_skiprows_set = False
+
+    is_unk = dtypes == 0
+    unk_total = is_unk.sum()
+    if unk_total > 0:
+        # make unknown data types str
+        a_unk = np.empty((nr, unk_total), dtype='O')
+        a_str = np.column_stack((a_str, a_unk))
+        dtypes[is_unk] = 4
+        dtype_loc[is_unk] = np.arange(unk_total) + dtype_summary[4]
 
     return a_bool, a_int, a_float, a_str, columns, dtypes, dtype_loc

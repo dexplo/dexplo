@@ -6,11 +6,48 @@ from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
 
 import dexplo._utils as utils
 from dexplo._libs import (read_files as _rf)
-from dexplo._frame import  DataFrame
+from dexplo._frame import DataFrame
 
 
-def read_csv(fp, delimitter=','):
-    a_bool, a_int, a_float, a_str, columns, dtypes, dtype_loc = _rf.read_csv(fp)
+def read_csv(fp, sep=',', header=0, skiprows=None):
+    if not isinstance(sep, str):
+        raise TypeError('`sep` must be a string')
+    if len(sep) != 1:
+        raise ValueError('`sep` must only be one character in length')
+    if not isinstance(header, int):
+        raise TypeError('`header` must be an integer')
+    if header < -1:
+        raise ValueError('`header` must be greater than or equal to -1')
+
+    skiprows_set = set()
+    skiprows_int = 0
+    if skiprows is None:
+        pass
+    elif isinstance(skiprows, int):
+        if skiprows < 0:
+            raise ValueError('`skiprows` must be one or more non-negative integers')
+        skiprows_int = skiprows
+    else:
+        skiprows_arr = np.asarray(skiprows)
+        if (skiprows_arr < 0).any():
+            raise ValueError('All values in the `skiprows` sequence must be >= 0')
+        if header == -1:
+            skiprows_set = set(skiprows_arr)
+        else:
+            max_row = skiprows_arr.max()
+            if header > max_row - len(skiprows_arr):
+                header += len(skiprows_arr)
+            else:
+                max_rows = np.arange(max_row)
+                kept_rows = max_rows[~np.isin(max_rows, skiprows_arr)]
+                header = kept_rows[header]
+                skiprows_set = set(skiprows_arr[skiprows_arr > header])
+
+    print(skiprows_int, skiprows_set)
+
+    tuple_return = _rf.read_csv(fp, ord(sep), header, skiprows_int, skiprows_set)
+
+    a_bool, a_int, a_float, a_str, columns, dtypes, dtype_loc = tuple_return
 
     new_column_info = {}
     dtype_map = {1: 'b', 2: 'i', 3: 'f', 4: 'O'}
