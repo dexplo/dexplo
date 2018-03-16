@@ -8,20 +8,9 @@ import cython
 
 from collections import defaultdict
 
-def _make_gen(reader):
-    b = reader(1024 * 1024)
-    while b:
-        yield b
-        b = reader(1024 * 1024)
-
-def rawgencount(filename):
-    f = open(filename, 'rb')
-    f_gen = _make_gen(f.raw.read)
-    return sum( buf.count(b'\n') for buf in f_gen )
-
-def get_dtypes_first_line(char * chars, int nc):
+def get_dtypes_first_line(char * chars, int nc, ndarray[np.uint8_t, cast=True] usecols_arr):
     cdef:
-        Py_ssize_t i=0, j=0, n, start=0
+        Py_ssize_t i=0, j=0, n, start=0, k=0
         int x = 0, dec=0, denom = 1, sign = 1
         ndarray[np.int64_t] dtypes = np.zeros(nc, dtype='int64')
         ndarray[np.int64_t] dtype_loc = np.zeros(nc, dtype='int64')
@@ -39,6 +28,12 @@ def get_dtypes_first_line(char * chars, int nc):
     # 0: unknown, 1 boolean, 2 int, 3 float, 4 str
 
     for i in range(n):
+        if not usecols_arr[k]:
+            if chars[i] == b',' or chars[i] == b'\n':
+                k += 1
+                start = i + 1
+            continue
+
         if not begun:
             # remove white spaces in beginning
             if chars[i] == b' ':
@@ -50,6 +45,7 @@ def get_dtypes_first_line(char * chars, int nc):
             else:
                 begun = True
         if chars[i] == b',' or chars[i] == b'\n':
+            k += 1
             if i != start:
                 temp = chars[start:i]
                 if is_str:
@@ -68,6 +64,7 @@ def get_dtypes_first_line(char * chars, int nc):
                 else:
                     vals[j] = sign * x
                     dtypes[j] = 2
+
             # reset - new value
             start = i + 1
             j += 1
@@ -128,13 +125,13 @@ cdef double get_float(char * string):
 
     return sign * (x + <double> dec / denom)
 
-def read_csv(fn, int sep, int header, int skiprows_int, set skiprows_set):
+def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_set, list usecols):
     cdef:
         bytes buf, first_buf
         list columns
         char * chars # const?
         char * first_line
-        Py_ssize_t i=0, j=0,k=0, nr, nc, start=0, end=0, n, act_row = 0
+        Py_ssize_t i=0, j=0,k=0, nc, start=0, end=0, n, act_row = 0, use_col_idx=0
 
         ndarray[np.uint8_t, ndim=2, cast=True] a_bool
         ndarray[np.int64_t, ndim=2] a_int
@@ -148,14 +145,15 @@ def read_csv(fn, int sep, int header, int skiprows_int, set skiprows_set):
         bint has_int = False
         bint has_num = False
         bint has_skiprows_set = bool(skiprows_set)
+        bint has_usecols = bool(usecols)
 
-        int x = 0, dec=0, denom = 1, sign = 1, jump = 0, ct_dec
+        int x = 0, dec=0, denom = 1, sign = 1, jump = 0, ct_dec, nc_orig=0
         ndarray[np.int64_t] dtypes
         ndarray[np.int64_t] dtype_loc
         ndarray[np.int64_t] dtype_summary
         ndarray[object] vals
+        ndarray[np.uint8_t, cast=True] usecols_arr
 
-    nr = rawgencount(fn)
     py_sep = bytes(chr(sep), 'utf-8')
 
     if header == -1:
@@ -215,7 +213,30 @@ def read_csv(fn, int sep, int header, int skiprows_int, set skiprows_set):
 
     first_line = first_buf
     nc = len(columns)
-    dtypes, dtype_loc, dtype_summary, vals = get_dtypes_first_line(first_line, nc)
+    nc_orig = nc
+
+    if has_usecols:
+        if isinstance(usecols[0], (int, np.integer)):
+            try:
+                # test whether selection works - can ue negative indices
+                usecols_new = np.arange(nc)[usecols]
+            except IndexError:
+                raise IndexError('The integer values in `usecols` cannot must be used to '
+                                 f'select columns in a {nc}-item sequence')
+        else:
+            # assume we have column names
+            usecols_new = []
+            for col in usecols:
+                usecols_new.append(columns.index(col))
+
+        usecols_arr = np.zeros(nc, dtype='bool')
+        usecols_arr[usecols_new] = True
+        nc = usecols_arr.sum()
+        columns = np.array(columns)[usecols_arr].tolist()
+    else:
+        usecols_arr = np.ones(nc, dtype='bool')
+
+    dtypes, dtype_loc, dtype_summary, vals = get_dtypes_first_line(first_line, nc, usecols_arr)
 
     a_bool = np.empty((nr, dtype_summary[1]), dtype='bool', order='F')
     a_int = np.empty((nr, dtype_summary[2]), dtype='int64', order='F')
@@ -243,6 +264,22 @@ def read_csv(fn, int sep, int header, int skiprows_int, set skiprows_set):
     while True:
         if i >= n:
             break
+
+        if has_usecols:
+            if not usecols_arr[use_col_idx]:
+                while chars[i] != sep and chars[i] != b'\n':
+                    i += 1
+                # go to next row
+                if chars[i] == b'\n':
+                    j = 0
+                    use_col_idx = 0
+                    k += 1
+                    act_row += 1
+                else:
+                    use_col_idx += 1
+
+                i += 1
+                continue
 
         if dtypes[j] == 4:
             start = i
@@ -437,8 +474,10 @@ def read_csv(fn, int sep, int header, int skiprows_int, set skiprows_set):
 
         i += 1
         j += 1
-        if j == nc:
+        use_col_idx += 1
+        if use_col_idx == nc_orig:
             j = 0
+            use_col_idx = 0
             k += 1
             act_row += 1
 

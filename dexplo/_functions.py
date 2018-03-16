@@ -9,7 +9,7 @@ from dexplo._libs import (read_files as _rf)
 from dexplo._frame import DataFrame
 
 
-def read_csv(fp, sep=',', header=0, skiprows=None):
+def read_csv(fp, sep=',', header=0, skiprows=None, usecols=None):
     if not isinstance(sep, str):
         raise TypeError('`sep` must be a string')
     if len(sep) != 1:
@@ -18,6 +18,14 @@ def read_csv(fp, sep=',', header=0, skiprows=None):
         raise TypeError('`header` must be an integer')
     if header < -1:
         raise ValueError('`header` must be greater than or equal to -1')
+
+    if isinstance(usecols, list):
+        if len(usecols) == 0:
+            raise ValueError('`usecols` must be a non-empty list of integers or column names')
+    elif usecols is not None:
+        raise TypeError('`usecols` must be a list of integers or column names')
+
+    nrows = _get_file_legnth(fp)
 
     skiprows_set = set()
     skiprows_int = 0
@@ -43,9 +51,7 @@ def read_csv(fp, sep=',', header=0, skiprows=None):
                 header = kept_rows[header]
                 skiprows_set = set(skiprows_arr[skiprows_arr > header])
 
-    print(skiprows_int, skiprows_set)
-
-    tuple_return = _rf.read_csv(fp, ord(sep), header, skiprows_int, skiprows_set)
+    tuple_return = _rf.read_csv(fp, nrows, ord(sep), header, skiprows_int, skiprows_set, usecols)
 
     a_bool, a_int, a_float, a_str, columns, dtypes, dtype_loc = tuple_return
 
@@ -77,3 +83,14 @@ def read_csv(fp, sep=',', header=0, skiprows=None):
                 cur_dtype_loc[dtype] += 1
 
     return DataFrame._construct_from_new(new_data, new_column_info, columns)
+
+def _make_gen(reader):
+    b = reader(1024 * 1024)
+    while b:
+        yield b
+        b = reader(1024 * 1024)
+
+def _get_file_legnth(filename):
+    f = open(filename, 'rb')
+    f_gen = _make_gen(f.raw.read)
+    return sum( buf.count(b'\n') for buf in f_gen )

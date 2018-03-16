@@ -125,6 +125,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] apply
 - [ ] assign
 - [x] astype
+- [ ] cut
 - [x] factorize
 - [x] groupby
 - [x] iterrows
@@ -136,6 +137,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] replace
 - [ ] rolling
 - [x] sort_values
+- [ ] to_csv
 
 **Functions**
 
