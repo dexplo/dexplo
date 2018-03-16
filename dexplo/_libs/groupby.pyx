@@ -718,6 +718,61 @@ def size(ndarray[np.int64_t] a, int group_size):
         result[a[i]] += 1
     return result
 
+def size_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i, j
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef int k = 0
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            result[labels[j], i - k] += 1
+    return result
+
+def size_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i, j
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef int k = 0
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            result[labels[j], i - k] += 1
+    return result
+
+def size_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i, j, k = 0
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            result[labels[j], i - k] += 1
+    return result
+
+def size_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, list group_locs):
+    cdef int i, j
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t, ndim=2] result = np.zeros((size, nc - len(group_locs)), dtype='int64')
+    cdef int k = 0
+    for i in range(nc):
+        if i in group_locs:
+            k += 1
+            continue
+        for j in range(nr):
+            result[labels[j], i - k] += 1
+    return result
+
 def cumcount(ndarray[np.int64_t] a, int group_size):
     cdef int i
     cdef int n = len(a)
@@ -1086,6 +1141,66 @@ def min_date(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] d
             if (data[j, i] < result[labels[j], i - k] and data[j, i] != nat) or (result[labels[j], i - k] == nat):
                 result[labels[j], i - k] = data[j, i]
     return result
+
+def first_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
+    cdef int i
+    cdef int nc = data.shape[1]
+    cdef list kept_cols = []
+    cdef list kept_rows = []
+
+    for i in range(nc):
+        if i not in group_locs:
+            kept_cols.append(i)
+
+    for i in range(size):
+        kept_rows.append(labels[i])
+
+    return data[np.ix_(kept_rows, kept_cols)]
+
+def first_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
+    cdef int i
+    cdef int nc = data.shape[1]
+    cdef list kept_cols = []
+    cdef list kept_rows = []
+
+    for i in range(nc):
+        if i not in group_locs:
+            kept_cols.append(i)
+
+    for i in range(size):
+        kept_rows.append(labels[i])
+
+    return data[np.ix_(kept_rows, kept_cols)]
+
+def first_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
+    cdef int i
+    cdef int nc = data.shape[1]
+    cdef list kept_cols = []
+    cdef list kept_rows = []
+
+    for i in range(nc):
+        if i not in group_locs:
+            kept_cols.append(i)
+
+    for i in range(size):
+        kept_rows.append(labels[i])
+
+    return data[np.ix_(kept_rows, kept_cols)]
+
+def first_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data, list group_locs):
+    cdef int i
+    cdef int nc = data.shape[1]
+    cdef list kept_cols = []
+    cdef list kept_rows = []
+
+    for i in range(nc):
+        if i not in group_locs:
+            kept_cols.append(i)
+
+    for i in range(size):
+        kept_rows.append(labels[i])
+
+    return data[np.ix_(kept_rows, kept_cols)]
 
 def last_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
     cdef int i, j, k = 0

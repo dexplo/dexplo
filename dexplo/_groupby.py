@@ -1,13 +1,27 @@
 from dexplo._frame import DataFrame
 import dexplo._utils as utils
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import numpy as np
 from numpy import ndarray
-from typing import Union, Dict, List, Tuple
+from typing import Union, Dict, List, Tuple, Callable
 from dexplo._libs import groupby as _gb
+import warnings
 
 ColInfoT = Dict[str, utils.Column]
 
+def get_func_kwargs(name):
+    if name in {'sum', 'prod', 'mean', 'median', 'size'}:
+        return {}
+    elif name in {'min', 'max'}:
+        return dict(ignore_str=False, ignore_date=False)
+    elif name in {'count'}:
+        return dict(ignore_str=False, ignore_date=False, keep_date_type=False)
+    elif name in {'first', 'last'}:
+        return dict(ignore_str=False)
+    elif name in {'any', 'all', 'nunique'}:
+        return dict(ignore_str=False, ignore_date=False, keep_date_type=False)
+    elif name in {'var'}:
+        return dict(add_positions=True)
 
 class Grouper(object):
 
@@ -125,8 +139,8 @@ class Grouper(object):
         return len(self._group_position)
 
     def _group_agg(self, name: str, ignore_str: bool = True, add_positions: bool = False,
-                   keep_group_cols: bool = True, ignore_date: bool = True, keep_date_type=True,
-                   **kwargs) -> DataFrame:
+                   keep_group_cols: bool = True, ignore_date: bool = True,
+                   keep_date_type: bool = True, **kwargs) -> DataFrame:
         labels = self._group_labels
         size = len(self._group_position)
 
@@ -337,3 +351,154 @@ class Grouper(object):
 
     def cumprod(self) -> DataFrame:
         return self._group_agg('cumprod', keep_group_cols=False)
+
+    def _single_agg(self, agg_cols: Dict = None, new_names: Dict = None,
+                    new_order: Dict = None, num_agg_cols: int = None,
+                    func_kwargs: Dict = None) -> DataFrame:
+
+        labels = self._group_labels
+        size = len(self._group_position)
+
+        data_dict = self._get_group_col_data()
+        new_column_info = self._get_new_column_info()
+        new_columns = self._group_columns.copy() + [''] * num_agg_cols
+
+        for name, agg_cols in agg_cols.items():
+
+            agg_dtype_locs = defaultdict(list)
+            agg_dtype_names = defaultdict(list)
+            agg_dtype_new_names = defaultdict(list)
+            agg_dtype_order = defaultdict(list)
+            non_agg_dtype_locs = defaultdict(list)
+            agg_dtype_kwargs = defaultdict(list)
+
+            name_kwargs = get_func_kwargs(name)
+            ignore_str = name_kwargs.get('ignore_str', True)
+            add_positions = name_kwargs.get('add_positions', False)
+            ignore_date = name_kwargs.get('ignore_date', True)
+            keep_date_type = name_kwargs.get('keep_date_type', True)
+
+            cur_new_names = new_names[name]
+            cur_new_order = new_order[name]
+            kwargs_list = func_kwargs[name]
+
+            for col in self._df._columns:
+
+                dtype, loc, _ = self._df._column_info[col].values
+                try:
+                    idx = agg_cols.index(col)
+                except ValueError:
+                    non_agg_dtype_locs[dtype].append(loc)
+                else:
+                    agg_dtype_locs[dtype].append(loc)
+                    agg_dtype_names[dtype].append(col)
+                    agg_dtype_new_names[dtype].append(cur_new_names[idx])
+                    agg_dtype_order[dtype].append(cur_new_order[idx])
+                    agg_dtype_kwargs[dtype].append(kwargs_list[idx])
+
+            for dtype, data in self._df._data.items():
+                if dtype not in agg_dtype_locs:
+                    continue
+                if ignore_str and dtype == 'O':
+                    continue
+                if ignore_date and dtype in 'mM':
+                    continue
+
+                func_name = name + '_' + utils.convert_kind_to_dtype_generic(dtype)
+                func = getattr(_gb, func_name)
+                if dtype in 'mM':
+                    data = data.view('int64')
+
+                kwargs = {}
+                for kw in agg_dtype_kwargs[dtype]:
+                    if kw is not None:
+                        kwargs = kw
+                        break
+
+                if add_positions:
+                    arr = func(labels, size, data, non_agg_dtype_locs[dtype], self._group_position, **kwargs)
+                else:
+                    arr = func(labels, size, data, non_agg_dtype_locs[dtype], **kwargs)
+
+                if dtype in 'mM' and keep_date_type:
+                    new_kind = dtype
+                    arr = arr.astype(utils.convert_kind_to_dtype(dtype))
+                else:
+                    new_kind = arr.dtype.kind
+
+                cur_loc = utils.get_num_cols(data_dict.get(new_kind, []))
+                data_dict[new_kind].append(arr)
+
+                old_locs = agg_dtype_locs[dtype]
+                order = np.argsort(old_locs).tolist()
+
+                cur_names = np.array(agg_dtype_new_names[dtype])[order]
+                cur_order = len(self._group_columns) + np.array(agg_dtype_order[dtype])[order]
+
+                for i, cur_name in enumerate(cur_names):
+                    new_column_info[cur_name] = utils.Column(new_kind, cur_loc + i, cur_order[i])
+                    new_columns[cur_order[i]] = cur_name
+
+        new_data = utils.concat_stat_arrays(data_dict)
+        return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
+
+    def agg(self, *args):
+        func_cols = OrderedDict()
+        func_new_names = OrderedDict()
+        func_order = OrderedDict()
+        func_kwargs = OrderedDict()
+
+        for i, arg in enumerate(args):
+            if not isinstance(arg, tuple):
+                raise TypeError('`Each argument to `agg` must be a 3-item tuple consisting '
+                                'of aggregation function (name or callable), '
+                                'aggregating column and resulting column name')
+            if len(arg) not in (3, 4):
+                raise ValueError(f'The tuple {arg} must have either three or four values '
+                                 '- the aggregation function, aggregating column, and resulting '
+                                 'column name. Optionally, it may have a dictionary of kwargs '
+                                 'for its fourth element')
+            if isinstance(arg[0], str):
+                if arg[0] not in {'size', 'count', 'sum', 'prod', 'mean',
+                                  'max', 'min', 'first', 'last', 'var',
+                                  'cov', 'corr', 'any', 'all', 'median',
+                                  'nunique'}:
+                    raise ValueError(f'{arg[0]} is not a possible aggregation function')
+            elif not isinstance(arg[0], Callable):
+                raise TypeError('The first item of the tuple must be an aggregating function name '
+                                'as a string or a user-defined function')
+
+            if not isinstance(arg[1], str):
+                raise TypeError('The second element in each tuple must be a column name as a '
+                                'string.')
+            elif arg[1] not in self._df._column_info:
+                raise ValueError(f'`{arg[1]}` is not a column name')
+
+            if not isinstance(arg[2], str):
+                raise TypeError('The third element in each tuple must be the name of the new '
+                                'column as a string')
+
+            if len(arg) == 4 and not isinstance(arg[3], dict):
+                raise TypeError('The fourth element in the tuple must be a dictionary of '
+                                'kwargs')
+
+            if arg[0] not in func_cols:
+                func_cols[arg[0]] = [arg[1]]
+                func_new_names[arg[0]] = [arg[2]]
+                func_order[arg[0]] = [i]
+                if len(arg) == 4:
+                    func_kwargs[arg[0]] = [arg[3]] # a list of dictionaries for kwargs
+                else:
+                    func_kwargs[arg[0]] = [None]
+            else:
+                func_cols[arg[0]].append(arg[1])
+                func_new_names[arg[0]].append(arg[2])
+                func_order[arg[0]].append(i)
+                if len(arg) == 4:
+                    func_kwargs[arg[0]].append(arg[3])
+                else:
+                    func_kwargs[arg[0]].append(None)
+
+        return self._single_agg(agg_cols=func_cols, new_names=func_new_names,
+                                new_order=func_order, num_agg_cols=i + 1,
+                                func_kwargs=func_kwargs)
