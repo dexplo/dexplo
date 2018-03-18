@@ -3423,8 +3423,75 @@ def nsmallest_bool(ndarray[np.uint8_t, cast=True] a, n):
     return topn_arg, ties
 
 def quick_select_int2(ndarray[np.int64_t] arr, int n, int k):
+    # Credit: Ryan Tibshirani - http://www.stat.cmu.edu/~ryantibs/median/
     cdef:
         long i, ir, j, l, mid, a, temp
+
+    l = 0
+    ir = n - 1
+    while True:
+        if ir <= l + 1:
+            if (ir == l + 1) and (arr[ir] < arr[l]):
+                temp = arr[l]
+                arr[l] = arr[ir]
+                arr[ir] = temp
+            return arr[k]
+        else:
+            mid = (l + ir) // 2
+
+            temp = arr[mid]
+            arr[mid] = arr[l + 1]
+            arr[l + 1] = temp
+
+            if arr[l] > arr[ir]:
+                temp = arr[l]
+                arr[l] = arr[ir]
+                arr[ir] = temp
+
+
+            if arr[l + 1] > arr[ir]:
+                temp = arr[l + 1]
+                arr[l + 1] = arr[ir]
+                arr[ir] = temp
+
+
+            if arr[l] > arr[l + 1]:
+                temp = arr[l]
+                arr[l] = arr[l + 1]
+                arr[l + 1] = temp
+
+            i = l+1
+            j = ir
+
+            a = arr[l+1]
+            while True:
+                i += 1
+                while arr[i] < a:
+                    i += 1
+
+                j -= 1
+                while arr[j] > a:
+                    j -= 1
+
+                if j < i:
+                    break
+
+                temp = arr[i]
+                arr[i] = arr[j]
+                arr[j] = temp
+
+            arr[l + 1] = arr[j]
+            arr[j] = a
+            if j >= k:
+                ir = j - 1
+            if j <= k:
+                l = i
+
+def quick_select_float2(ndarray[np.float64_t] arr, int n, int k):
+    # Credit: Ryan Tibshirani - http://www.stat.cmu.edu/~ryantibs/median/
+    cdef:
+        long i, ir, j, l, mid
+        np.float64_t a, temp
 
     l = 0
     ir = n - 1

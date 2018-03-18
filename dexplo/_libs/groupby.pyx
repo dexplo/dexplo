@@ -7,7 +7,7 @@ import cython
 from cpython cimport set, list, tuple
 from libc.math cimport isnan, sqrt
 from numpy import nan
-from .math import min_max_int, min_max_int2, get_first_non_nan, quick_select_int2
+from .math import min_max_int, min_max_int2, get_first_non_nan, quick_select_int2, quick_select_float2
 from libc.stdlib cimport malloc, free
 from cpython.bytes cimport PyBytes_FromStringAndSize
 from cpython cimport dict
@@ -1706,6 +1706,7 @@ def all_date(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] d
 def median_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data, list group_locs):
     cdef int i, j, k = 0
     cdef long start, end, xlen, med_idx
+    cdef np.float64_t first, second
     cdef int nr = data.shape[0]
     cdef int nc = data.shape[1]
     cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
@@ -1713,6 +1714,7 @@ def median_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2]
     cdef ndarray[np.int64_t] label_cumsum = np.empty(size, dtype='int64')
     cdef ndarray[np.int64_t] label_locs = np.empty(nr, dtype='int64')
     cdef ndarray[np.int64_t] label_count_cur = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] x
 
     for i in range(nr):
         label_count[labels[i]] += 1
@@ -1733,76 +1735,109 @@ def median_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2]
             if j in group_locs:
                 k += 1
                 continue
-            result[i, j - k] = quick_select_int2(data[:, j][label_locs[start:end]], end-start, (end-start) // 2)
-#             x_copy = x[:, j].copy()
-#             xlen = len(x_copy)
-#             med_idx = xlen // 2
+            x = data[:, j][label_locs[start:end]]
+            x_len = x.shape[0]
+            med_idx = x_len // 2
+            if x_len % 2 == 1:
+                result[i, j - k] = quick_select_int2(x, x_len, med_idx)
+            else:
+                first = quick_select_int2(x, x_len, med_idx - 1)
+                second = quick_select_int2(x, x_len, med_idx)
+                result[i, j - k] = (first + second) / 2
 
         start = end
     return result
 
 def median_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data, list group_locs):
     cdef int i, j, k = 0
-    cdef int start, end
+    cdef long start, end, xlen, med_idx
+    cdef np.float64_t first, second
     cdef int nr = data.shape[0]
     cdef int nc = data.shape[1]
     cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
-    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
-    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
-    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
-    cdef ndarray[np.float64_t, ndim=2] data_sorted = data[label_args]
-    cdef list medians = []
+    cdef ndarray[np.int64_t] label_count = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_cumsum = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_locs = np.empty(nr, dtype='int64')
+    cdef ndarray[np.int64_t] label_count_cur = np.zeros(size, dtype='int64')
+    cdef ndarray[np.float64_t] x
 
-    j = 0
-    for i in range(1, nr):
-        if ordered_labels[i - 1] != ordered_labels[i]:
-            group_end_idx[j] = i
-            j += 1
-    group_end_idx[size - 1] = nr
+    for i in range(nr):
+        label_count[labels[i]] += 1
+
+    label_cumsum = np.roll(label_count, 1)
+    label_cumsum[0] = 0
+    label_cumsum = label_cumsum.cumsum()
+
+    for i in range(nr):
+        label_locs[label_cumsum[labels[i]] + label_count_cur[labels[i]]] = i
+        label_count_cur[labels[i]] += 1
 
     start = 0
     for i in range(size):
-        end = group_end_idx[i]
-        x = data_sorted[start:end]
+        end = start + label_count[i]
         k = 0
         for j in range(nc):
             if j in group_locs:
                 k += 1
                 continue
-            result[i, j - k] = np.nanmedian(x[j])
+            x = data[:, j][label_locs[start:end]]
+            x = x[~np.isnan(x)]
+            x_len = x.shape[0]
+            med_idx = x_len // 2
+            if x_len == 0:
+                result[i, j - k] = nan
+            else:
+                if x_len % 2 == 1:
+                    result[i, j - k] = quick_select_float2(x, x_len, med_idx)
+                else:
+                    first = quick_select_float2(x, x_len, med_idx - 1)
+                    second = quick_select_float2(x, x_len, med_idx)
+                    result[i, j - k] = (first + second) / 2
 
         start = end
     return result
 
-
 def median_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data, list group_locs):
     cdef int i, j, k = 0
-    cdef int start, end
+    cdef long start, end, xlen, med_idx
+    cdef np.float64_t first, second
     cdef int nr = data.shape[0]
     cdef int nc = data.shape[1]
     cdef ndarray[np.float64_t, ndim=2] result = np.empty((size, nc - len(group_locs)), dtype='float64')
-    cdef ndarray[np.int64_t] group_end_idx = np.empty(size, dtype='int64')
-    cdef ndarray[np.int64_t]label_args = np.argsort(labels)
-    cdef ndarray[np.int64_t] ordered_labels = labels[label_args]
-    cdef ndarray[np.uint8_t, ndim=2] data_sorted = data[label_args]
+    cdef ndarray[np.int64_t] label_count = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_cumsum = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_locs = np.empty(nr, dtype='int64')
+    cdef ndarray[np.int64_t] label_count_cur = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] x
 
-    j = 0
-    for i in range(1, nr):
-        if ordered_labels[i - 1] != ordered_labels[i]:
-            group_end_idx[j] = i
-            j += 1
-    group_end_idx[size - 1] = nr
+    for i in range(nr):
+        label_count[labels[i]] += 1
+
+    label_cumsum = np.roll(label_count, 1)
+    label_cumsum[0] = 0
+    label_cumsum = label_cumsum.cumsum()
+
+    for i in range(nr):
+        label_locs[label_cumsum[labels[i]] + label_count_cur[labels[i]]] = i
+        label_count_cur[labels[i]] += 1
 
     start = 0
     for i in range(size):
-        end = group_end_idx[i]
-        x = data_sorted[start:end]
+        end = start + label_count[i]
         k = 0
         for j in range(nc):
             if j in group_locs:
                 k += 1
                 continue
-            result[i, j - k] = np.median(x[j])
+            x = data[:, j][label_locs[start:end]].astype('int64')
+            x_len = x.shape[0]
+            med_idx = x_len // 2
+            if x_len % 2 == 1:
+                result[i, j - k] = quick_select_int2(x, end-start, med_idx)
+            else:
+                first = quick_select_int2(x, end-start, med_idx - 1)
+                second = quick_select_int2(x, end-start, med_idx)
+                result[i, j - k] = (first + second) / 2
 
         start = end
     return result
