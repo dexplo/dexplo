@@ -17,7 +17,7 @@ class AccessorMixin(object):
     def _validate_columns(self, column):
         if isinstance(column, str):
             try:
-                dtype, loc, _ = self._df._column_info[column].values
+                dtype, loc, _ = self._df()._column_info[column].values
             except KeyError:
                 raise KeyError(f'Column "{column}" does not exist in the DataFrame')
             if dtype != self._dtype_acc:
@@ -28,22 +28,22 @@ class AccessorMixin(object):
             locs = []
             for col in column:
                 try:
-                    dtype, loc, _ = self._df._column_info[col].values
+                    dtype, loc, _ = self._df()._column_info[col].values
                 except KeyError:
                     raise KeyError(f'Column {col} does not exist in the DataFrame')
 
                 if dtype != 'O':
                     raise ValueError(f'Column name "{col}" is not a '
                                      f'{utils.convert_kind_to_dtype(self._dtype_acc)} column')
-                locs.append(self._df._column_info[col].loc)
+                locs.append(self._df()._column_info[col].loc)
             if len(column) != len(set(column)):
                 raise ValueError('You cannot complete this operation with duplicate columns')
             return column, locs
         elif column is None:
             locs = []
             columns = []
-            for col in self._df._columns:
-                dtype, loc, _ = self._df._column_info[col].values
+            for col in self._df()._columns:
+                dtype, loc, _ = self._df()._column_info[col].values
                 if dtype == self._dtype_acc:
                     columns.append(col)
                     locs.append(loc)
@@ -57,8 +57,8 @@ class AccessorMixin(object):
 
         str_cols = []
         str_locs = []
-        for col in self._df._columns:
-            dtype, loc, _ = self._df._column_info[col].values
+        for col in self._df()._columns:
+            dtype, loc, _ = self._df()._column_info[col].values
             if dtype == self._dtype_acc:
                 str_cols.append(col)
                 str_locs.append(loc)
@@ -70,7 +70,7 @@ class AccessorMixin(object):
             locs = []
             for col in column:
                 try:
-                    dtype, loc, _ = self._df._column_info[col].values
+                    dtype, loc, _ = self._df()._column_info[col].values
                 except KeyError:
                     raise KeyError(f'Column {col} does not exist in the DataFrame')
 
@@ -78,7 +78,7 @@ class AccessorMixin(object):
                     raise ValueError(f'Column name "{col}" is not a'
                                      f' {utils.convert_kind_to_dtype(self._dtype_acc)} column')
 
-                locs.append(self._df._column_info[col].loc)
+                locs.append(self._df()._column_info[col].loc)
             col_set = set(column)
             if len(column) != len(col_set):
                 raise ValueError('You cannot complete this operation with duplicate columns')
@@ -97,12 +97,12 @@ class AccessorMixin(object):
     def _create_df(self, arr, dtype, columns):
         new_data = {dtype: arr}
         new_column_info = {col: utils.Column(dtype, i, i) for i, col in enumerate(columns)}
-        return self._df._construct_from_new(new_data, new_column_info, columns)
+        return self._df()._construct_from_new(new_data, new_column_info, columns)
 
     def _create_df_all(self, arr, dtype):
         new_data = {}
         if dtype == self._dtype_acc:
-            for old_dtype, old_data in self._df._data.items():
+            for old_dtype, old_data in self._df()._data.items():
                 if old_dtype == self._dtype_acc:
                     new_data[self._dtype_acc] = arr
                 else:
@@ -112,7 +112,7 @@ class AccessorMixin(object):
             add_loc = 0
             if dtype in self._data:
                 add_loc = self._data[dtype].shape[1]
-            for old_dtype, old_data in self._df._data.items():
+            for old_dtype, old_data in self._df()._data.items():
                 if dtype != self._dtype_acc:
                     new_data[old_dtype] = old_data.copy('F')
 
@@ -122,24 +122,24 @@ class AccessorMixin(object):
                 new_data[dtype] = arr
 
             new_column_info = {}
-            for col, col_obj in self._df._column_info.items():
+            for col, col_obj in self._df()._column_info.items():
                 old_dtype, loc, order = col_obj.values
                 if old_dtype == self._dtype_acc:
                     new_column_info[col] = utils.Column(dtype, loc + add_loc, order)
                 else:
                     new_column_info[col] = utils.Column(old_dtype, loc, order)
 
-        new_column_info = self._df._copy_column_info()
-        return self._df._construct_from_new(new_data, new_column_info, self._df._columns.copy())
+        new_column_info = self._df()._copy_column_info()
+        return self._df()._construct_from_new(new_data, new_column_info, self._df()._columns.copy())
 
     def _create_df_multiple_dtypes(self, arr_new, columns, column_locs, columns_other, locs_other):
         new_data = {}
         dtype_new = arr_new.dtype.kind
         try:
-            add_loc = self._df._data[dtype_new].shape[1]
+            add_loc = self._df()._data[dtype_new].shape[1]
         except KeyError:
             add_loc = 0
-        for dtype, arr in self._df._data.items():
+        for dtype, arr in self._df()._data.items():
             if dtype == self._dtype_acc:
                 new_data[self._dtype_acc] = arr[:, locs_other]
             elif dtype == dtype_new:
@@ -151,31 +151,31 @@ class AccessorMixin(object):
             new_data[dtype_new] = arr_new
 
         new_column_info = {}
-        for col, col_obj in self._df._column_info.items():
+        for col, col_obj in self._df()._column_info.items():
             old_dtype, loc, order = col_obj.values
             if old_dtype != self._dtype_acc:
                 new_column_info[col] = utils.Column(old_dtype, loc, order)
 
         # str columns that have changed type
         for i, (col, loc) in enumerate(zip(columns, column_locs)):
-            order = self._df._column_info[col].order
+            order = self._df()._column_info[col].order
             new_column_info[col] = utils.Column(dtype_new, add_loc + i, order)
 
         # those that stayed self._dtype_acc
         for i, col in enumerate(columns_other):
-            order = self._df._column_info[col].order
+            order = self._df()._column_info[col].order
             new_column_info[col] = utils.Column(self._dtype_acc, i, order)
 
-        return self._df._construct_from_new(new_data, new_column_info, self._df._columns.copy())
+        return self._df()._construct_from_new(new_data, new_column_info, self._df()._columns.copy())
 
     def _get_other_str_cols(self, columns):
         col_set = set(columns)
         cols_other = []
         locs_other = []
-        for col in self._df._columns:
-            if col not in col_set and self._df._column_info[col].dtype == self._dtype_acc:
+        for col in self._df()._columns:
+            if col not in col_set and self._df()._column_info[col].dtype == self._dtype_acc:
                 cols_other.append(col)
-                locs_other.append(self._df._column_info[col].loc)
+                locs_other.append(self._df()._column_info[col].loc)
         return cols_other, locs_other
 
     def _generic_concat(self, name, column, keep, **kwargs):
@@ -185,15 +185,15 @@ class AccessorMixin(object):
         if column is None:
             columns = []
             locs = []
-            for col in self._df._columns:
-                dtype, loc, _ = self._df._column_info[col].values
+            for col in self._df()._columns:
+                dtype, loc, _ = self._df()._column_info[col].values
                 if dtype == self._dtype_acc:
                     columns.append(col)
                     locs.append(loc)
         else:
             columns, locs = self._validate_columns(column)
 
-        data = self._df._data[self._dtype_acc]
+        data = self._df()._data[self._dtype_acc]
         arrs = []
         all_cols = []
         for loc in locs:
@@ -218,7 +218,7 @@ class AccessorMixin(object):
         add_loc = 0
         add_order = 0
         if keep:
-            df = self._df.drop(columns=columns)
+            df = self._df().drop(columns=columns)
             if dtype_new in df._data:
                 add_loc = df._data[dtype_new].shape[1]
             add_order = df.shape[1]
@@ -241,7 +241,7 @@ class AccessorMixin(object):
         for i, col in enumerate(final_cols):
             new_column_info[col] = utils.Column(dtype_new, i + add_loc, i + add_order)
 
-        return self._df._construct_from_new(new_data, new_column_info, new_columns)
+        return self._df()._construct_from_new(new_data, new_column_info, new_columns)
 
     def _generic(self, name, column, keep, multiple, **kwargs):
         if not isinstance(keep, (bool, np.bool_)):
@@ -252,7 +252,7 @@ class AccessorMixin(object):
         else:
             columns, locs = self._validate_columns(column)
 
-        data = self._df._data[self._dtype_acc]
+        data = self._df()._data[self._dtype_acc]
         if len(locs) == 1:
             arr = getattr(self, name)(data[:, locs], **kwargs)
         else:
@@ -273,7 +273,7 @@ class AccessorMixin(object):
 class DateTimeClass(AccessorMixin):
 
     def __init__(self, df):
-        self._df = weakref.ref(df)()
+        self._df = weakref.ref(df)
         self._dtype_acc = 'M'
         self._2d = ''
 
@@ -469,12 +469,12 @@ class DateTimeClass(AccessorMixin):
 
     def to_pytime(self, column=None):
         columns, locs = self._validate_columns(column)
-        data = self._df._data['M'][:, locs]
+        data = self._df()._data['M'][:, locs]
         return _date.to_pytime(data.astype('float64'))
 
     def to_pydatetime(self, column=None):
         columns, locs = self._validate_columns(column)
-        data = self._df._data['M'][:, locs]
+        data = self._df()._data['M'][:, locs]
         # return _date.to_pydatetime(data.astype('int64'))
         return data.astype('datetime64[us]').astype(datetime.datetime)
 
@@ -512,7 +512,7 @@ class DateTimeClass(AccessorMixin):
 class TimeDeltaClass(AccessorMixin):
 
     def __init__(self, df):
-        self._df = weakref.ref(df)()
+        self._df = weakref.ref(df)
         self._dtype_acc = 'm'
         self._2d = ''
 

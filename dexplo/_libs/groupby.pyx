@@ -11,6 +11,7 @@ from .math import min_max_int, min_max_int2, get_first_non_nan, quick_select_int
 from libc.stdlib cimport malloc, free
 from cpython.bytes cimport PyBytes_FromStringAndSize
 from cpython cimport dict
+from dexplo import _utils
 
 try:
     import bottleneck as bn
@@ -25,6 +26,10 @@ cdef np.float64_t MIN_INT = np.iinfo(np.int64).min
 
 MAX_CHAR = chr(1_000_000)
 MIN_CHAR = chr(0)
+
+
+cdef extern from "numpy/npy_math.h":
+    bint npy_isnan(double x)
 
 
 def get_group_assignment_str_1d(ndarray[object] a):
@@ -2296,4 +2301,563 @@ def cumprod_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=
         for j in range(nr):
                 cur_sum[labels[j], i - k] *= data[j, i]
                 result[j, i - k] = cur_sum[labels[j], i - k]
+    return result
+
+
+def custom_int(ndarray[np.int64_t] labels, int size, ndarray[np.int64_t, ndim=2] data,
+               list group_locs, func, col_dict):
+    cdef int i, j, k = 0
+    cdef long start=0, end, xlen, med_idx
+    cdef np.float64_t first, second
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t] label_count = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_cumsum = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_locs = np.empty(nr, dtype='int64')
+    cdef ndarray[np.int64_t] label_count_cur = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] x
+    cdef ndarray result
+    cdef bint is_first_group = True
+
+    from dexplo._frame import DataFrame
+
+    for i in range(nr):
+        label_count[labels[i]] += 1
+
+    label_cumsum = np.roll(label_count, 1)
+    label_cumsum[0] = 0
+    label_cumsum = label_cumsum.cumsum()
+
+    for i in range(nr):
+        label_locs[label_cumsum[labels[i]] + label_count_cur[labels[i]]] = i
+        label_count_cur[labels[i]] += 1
+
+    for i in range(size):
+        end = start + label_count[i]
+        k = 0
+        for j in range(nc):
+            if j in group_locs:
+                k += 1
+                continue
+            x = data[:, j][label_locs[start:end]]
+
+            new_data = {'i': x[:, np.newaxis]}
+            col_name = col_dict[j]
+            col_info = {col_name: _utils.Column('i', 0, 0)}
+            df = DataFrame._construct_from_new(new_data, col_info, [col_name])
+
+            if is_first_group:
+                first_result = func(df)
+
+                if isinstance(first_result, (DataFrame, ndarray)):
+                    if first_result.size != 1:
+                        raise ValueError('When calling `agg` with a custom function, you must '
+                                         'return a scalar value')
+
+                    if isinstance(first_result, DataFrame):
+                        first_result = first_result[0, 0]
+                    else:
+                        first_result = first_result.flat[0]
+
+                if isinstance(first_result, (bool, np.bool_)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='bool')
+                    dtype = 'b'
+                elif isinstance(first_result, (np.integer, int)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='int64')
+                    dtype = 'i'
+                elif isinstance(first_result, (np.floating, float, np.number)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='float64')
+                    dtype = 'f'
+                elif isinstance(first_result, (str, type(None))):
+                    result = np.empty((size, nc - len(group_locs)), dtype='O')
+                    dtype = 'O'
+                else:
+                    raise TypeError(f'You returned the datatype {type(first_result)} from the '
+                                    '`agg` method which is unable '
+                                    'to be placed inside a DataFrame. Please return either a '
+                                    'one element DataFrame/ndarray or an int, float, '
+                                    'boolean, string, None, datetime, or timedelta. ')
+
+                is_first_group = False
+                result[i, j - k] = first_result
+            else:
+                next_result = func(df)
+                if isinstance(next_result, (DataFrame, ndarray)):
+                    if next_result.size != 1:
+                        raise ValueError('When calling `agg` with a custom function, you must '
+                                         'return a scalar value')
+
+                    if isinstance(next_result, DataFrame):
+                        next_result = next_result[0, 0]
+                    else:
+                        next_result = next_result.flat[0]
+
+                if isinstance(next_result, (bool, np.bool_)):
+                    if dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with a boolean.')
+                elif isinstance(next_result, (np.integer, int)):
+                    if dtype == 'b':
+                        result = result.astype('int64')
+                        dtype = 'i'
+                    elif dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with an integer.')
+                elif isinstance(next_result, (np.floating, float, np.number)):
+                    if dtype == 'b' or dtype == 'i':
+                        result = result.astype('float64')
+                        dtype = 'f'
+                    elif dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with a float.')
+                elif isinstance(next_result, (str, type(None))):
+                    if dtype != 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with non-strings')
+                else:
+                    raise TypeError(f'You returned the datatype {type(next_result)} from the '
+                                    '`agg` method which is unable '
+                                    'to be placed inside a DataFrame. Please return either a '
+                                    'one element DataFrame/ndarray or an int, float, '
+                                    'boolean, string, None, datetime, or timedelta. ')
+
+                result[i, j - k] = next_result
+
+        start = end
+    return result
+
+def custom_float(ndarray[np.int64_t] labels, int size, ndarray[np.float64_t, ndim=2] data,
+                 list group_locs, func, col_dict):
+    cdef int i, j, k = 0
+    cdef long start=0, end, xlen, med_idx
+    cdef np.float64_t first, second
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t] label_count = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_cumsum = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_locs = np.empty(nr, dtype='int64')
+    cdef ndarray[np.int64_t] label_count_cur = np.zeros(size, dtype='int64')
+    cdef ndarray[np.float64_t] x
+    cdef ndarray result
+    cdef bint is_first_group = True
+
+    from dexplo._frame import DataFrame
+
+    for i in range(nr):
+        label_count[labels[i]] += 1
+
+    label_cumsum = np.roll(label_count, 1)
+    label_cumsum[0] = 0
+    label_cumsum = label_cumsum.cumsum()
+
+    for i in range(nr):
+        label_locs[label_cumsum[labels[i]] + label_count_cur[labels[i]]] = i
+        label_count_cur[labels[i]] += 1
+
+    for i in range(size):
+        end = start + label_count[i]
+        k = 0
+        for j in range(nc):
+            if j in group_locs:
+                k += 1
+                continue
+
+            x = data[:, j][label_locs[start:end]]
+            new_data = {'f': x[:, np.newaxis]}
+            col_name = col_dict[j]
+            col_info = {col_name: _utils.Column('f', 0, 0)}
+
+            df = DataFrame._construct_from_new(new_data, col_info, [col_name])
+
+            if is_first_group:
+                first_result = func(df)
+                if isinstance(first_result, (DataFrame, ndarray)):
+                    if first_result.size != 1:
+                        raise ValueError('When calling `agg` with a custom function, you must '
+                                         'return a scalar value')
+
+                    if isinstance(first_result, DataFrame):
+                        first_result = first_result[0, 0]
+                    else:
+                        first_result = first_result.flat[0]
+
+                if isinstance(first_result, (bool, np.bool_)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='bool')
+                    dtype = 'b'
+                elif isinstance(first_result, (np.integer, int)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='int64')
+                    dtype = 'i'
+                elif isinstance(first_result, (np.floating, float, np.number)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='float64')
+                    dtype = 'f'
+                elif isinstance(first_result, (str, type(None))):
+                    result = np.empty((size, nc - len(group_locs)), dtype='O')
+                    dtype = 'O'
+                else:
+                    raise TypeError(f'You returned the datatype {type(first_result)} which is unable'
+                                    'to be placed inside a DataFrame. Please return either a'
+                                    'one element DataFrame/ndarray or an int, float, '
+                                    'boolean, string, None, datetime, or timedelta')
+
+                is_first_group = False
+                result[i, j - k] = first_result
+            else:
+                next_result = func(df)
+                if isinstance(next_result, (DataFrame, ndarray)):
+                    if next_result.size != 1:
+                        raise ValueError('When calling `agg` with a custom function, you must '
+                                         'return a scalar value')
+
+                    if isinstance(next_result, DataFrame):
+                        next_result = next_result[0, 0]
+                    else:
+                        next_result = next_result.flat[0]
+
+                if isinstance(next_result, (bool, np.bool_)):
+                    if dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with a boolean.')
+                elif isinstance(next_result, (np.integer, int)):
+                    if dtype == 'b':
+                        result = result.astype('int64')
+                        dtype = 'i'
+                    elif dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with an integer.')
+                elif isinstance(next_result, (np.floating, float, np.number)):
+                    if dtype == 'b' or dtype == 'i':
+                        result = result.astype('float64')
+                        dtype = 'f'
+                    elif dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with a float.')
+                elif isinstance(next_result, (str, type(None))):
+                    if dtype != 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with non-strings')
+                else:
+                    raise TypeError(f'You returned the datatype {type(next_result)} from the '
+                                    '`agg` method which is unable '
+                                    'to be placed inside a DataFrame. Please return either a '
+                                    'one element DataFrame/ndarray or an int, float, '
+                                    'boolean, string, None, datetime, or timedelta. ')
+
+                result[i, j - k] = next_result
+
+        start = end
+    return result
+
+
+def custom_str(ndarray[np.int64_t] labels, int size, ndarray[object, ndim=2] data,
+                 list group_locs, func, col_dict):
+    cdef int i, j, k = 0
+    cdef long start=0, end, xlen, med_idx
+    cdef np.float64_t first, second
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t] label_count = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_cumsum = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_locs = np.empty(nr, dtype='int64')
+    cdef ndarray[np.int64_t] label_count_cur = np.zeros(size, dtype='int64')
+    cdef ndarray[object] x
+    cdef ndarray result
+    cdef bint is_first_group = True
+
+    from dexplo._frame import DataFrame
+
+    for i in range(nr):
+        label_count[labels[i]] += 1
+
+    label_cumsum = np.roll(label_count, 1)
+    label_cumsum[0] = 0
+    label_cumsum = label_cumsum.cumsum()
+
+    for i in range(nr):
+        label_locs[label_cumsum[labels[i]] + label_count_cur[labels[i]]] = i
+        label_count_cur[labels[i]] += 1
+
+    for i in range(size):
+        end = start + label_count[i]
+        k = 0
+        for j in range(nc):
+            if j in group_locs:
+                k += 1
+                continue
+
+            x = data[:, j][label_locs[start:end]]
+            new_data = {'O': x[:, np.newaxis]}
+            col_name = col_dict[j]
+            col_info = {col_name: _utils.Column('O', 0, 0)}
+
+            df = DataFrame._construct_from_new(new_data, col_info, [col_name])
+
+            if is_first_group:
+                first_result = func(df)
+                if isinstance(first_result, (DataFrame, ndarray)):
+                    if first_result.size != 1:
+                        raise ValueError('When calling `agg` with a custom function, you must '
+                                         'return a scalar value')
+
+                    if isinstance(first_result, DataFrame):
+                        first_result = first_result[0, 0]
+                    else:
+                        first_result = first_result.flat[0]
+
+                if isinstance(first_result, (bool, np.bool_)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='bool')
+                    dtype = 'b'
+                elif isinstance(first_result, (np.integer, int)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='int64')
+                    dtype = 'i'
+                elif isinstance(first_result, (np.floating, float, np.number)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='float64')
+                    dtype = 'f'
+                elif isinstance(first_result, (str, type(None))):
+                    result = np.empty((size, nc - len(group_locs)), dtype='O')
+                    dtype = 'O'
+                else:
+                    raise TypeError(f'You returned the datatype {type(first_result)} from the '
+                                    '`agg` method which is unable '
+                                    'to be placed inside a DataFrame. Please return either a '
+                                    'one element DataFrame/ndarray or an int, float, '
+                                    'boolean, string, None, datetime, or timedelta. ')
+
+                is_first_group = False
+                result[i, j - k] = first_result
+            else:
+                next_result = func(df)
+                if isinstance(next_result, (DataFrame, ndarray)):
+                    if next_result.size != 1:
+                        raise ValueError('When calling `agg` with a custom function, you must '
+                                         'return a scalar value')
+
+                    if isinstance(next_result, DataFrame):
+                        next_result = next_result[0, 0]
+                    else:
+                        next_result = next_result.flat[0]
+
+                if isinstance(next_result, (bool, np.bool_)):
+                    if dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with a boolean.')
+                elif isinstance(next_result, (np.integer, int)):
+                    if dtype == 'b':
+                        result = result.astype('int64')
+                        dtype = 'i'
+                    elif dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with an integer.')
+                elif isinstance(next_result, (np.floating, float, np.number)):
+                    if dtype == 'b' or dtype == 'i':
+                        result = result.astype('float64')
+                        dtype = 'f'
+                    elif dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with a float.')
+                elif isinstance(next_result, (str, type(None))):
+                    if dtype != 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with non-strings')
+                else:
+                    raise TypeError(f'You returned the datatype {type(next_result)} from the '
+                                    '`agg` method which is unable '
+                                    'to be placed inside a DataFrame. Please return either a '
+                                    'one element DataFrame/ndarray or an int, float, '
+                                    'boolean, string, None, datetime, or timedelta. ')
+
+                result[i, j - k] = next_result
+
+        start = end
+    return result
+
+def custom_bool(ndarray[np.int64_t] labels, int size, ndarray[np.uint8_t, ndim=2, cast=True] data,
+                 list group_locs, func, col_dict):
+    cdef int i, j, k = 0
+    cdef long start=0, end, xlen, med_idx
+    cdef np.float64_t first, second
+    cdef int nr = data.shape[0]
+    cdef int nc = data.shape[1]
+    cdef ndarray[np.int64_t] label_count = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_cumsum = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_locs = np.empty(nr, dtype='int64')
+    cdef ndarray[np.int64_t] label_count_cur = np.zeros(size, dtype='int64')
+    cdef ndarray[np.uint8_t, cast=True] x
+    cdef ndarray result
+    cdef bint is_first_group = True
+
+    from dexplo._frame import DataFrame
+
+    for i in range(nr):
+        label_count[labels[i]] += 1
+
+    label_cumsum = np.roll(label_count, 1)
+    label_cumsum[0] = 0
+    label_cumsum = label_cumsum.cumsum()
+
+    for i in range(nr):
+        label_locs[label_cumsum[labels[i]] + label_count_cur[labels[i]]] = i
+        label_count_cur[labels[i]] += 1
+
+    for i in range(size):
+        end = start + label_count[i]
+        k = 0
+        for j in range(nc):
+            if j in group_locs:
+                k += 1
+                continue
+
+            x = data[:, j][label_locs[start:end]]
+            new_data = {'b': x[:, np.newaxis]}
+            col_name = col_dict[j]
+            col_info = {col_name: _utils.Column('b', 0, 0)}
+
+            df = DataFrame._construct_from_new(new_data, col_info, [col_name])
+
+            if is_first_group:
+                first_result = func(df)
+                if isinstance(first_result, (DataFrame, ndarray)):
+                    if first_result.size != 1:
+                        raise ValueError('When calling `agg` with a custom function, you must '
+                                         'return a scalar value')
+
+                    if isinstance(first_result, DataFrame):
+                        first_result = first_result[0, 0]
+                    else:
+                        first_result = first_result.flat[0]
+
+                if isinstance(first_result, (bool, np.bool_)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='bool')
+                    dtype = 'b'
+                elif isinstance(first_result, (np.integer, int)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='int64')
+                    dtype = 'i'
+                elif isinstance(first_result, (np.floating, float, np.number)):
+                    result = np.empty((size, nc - len(group_locs)), dtype='float64')
+                    dtype = 'f'
+                elif isinstance(first_result, (str, type(None))):
+                    result = np.empty((size, nc - len(group_locs)), dtype='O')
+                    dtype = 'O'
+                else:
+                    raise TypeError(f'You returned the datatype {type(first_result)} from the '
+                                    '`agg` method which is unable '
+                                    'to be placed inside a DataFrame. Please return either a '
+                                    'one element DataFrame/ndarray or an int, float, '
+                                    'boolean, string, None, datetime, or timedelta. ')
+
+
+                is_first_group = False
+                result[i, j - k] = first_result
+            else:
+                next_result = func(df)
+                if isinstance(next_result, (DataFrame, ndarray)):
+                    if next_result.size != 1:
+                        raise ValueError('When calling `agg` with a custom function, you must '
+                                         'return a scalar value')
+
+                    if isinstance(next_result, DataFrame):
+                        next_result = next_result[0, 0]
+                    else:
+                        next_result = next_result.flat[0]
+
+                if isinstance(next_result, (bool, np.bool_)):
+                    if dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with a boolean.')
+                elif isinstance(next_result, (np.integer, int)):
+                    if dtype == 'b':
+                        result = result.astype('int64')
+                        dtype = 'i'
+                    elif dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with an integer.')
+                elif isinstance(next_result, (np.floating, float, np.number)):
+                    if dtype == 'b' or dtype == 'i':
+                        result = result.astype('float64')
+                        dtype = 'f'
+                    elif dtype == 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with a float.')
+                elif isinstance(next_result, (str, type(None))):
+                    if dtype != 'O':
+                        raise TypeError('When aggregating, the return value for each column '
+                                        'must be of the same type. You have a string mixed '
+                                        'with non-strings')
+                else:
+                    raise TypeError(f'You returned the datatype {type(next_result)} from the '
+                                    '`agg` method which is unable '
+                                    'to be placed inside a DataFrame. Please return either a '
+                                    'one element DataFrame/ndarray or an int, float, '
+                                    'boolean, string, None, datetime, or timedelta. ')
+
+                result[i, j - k] = next_result
+
+        start = end
+    return result
+
+def filter(ndarray[np.int64_t] labels, int size, df, func, *args, **kwargs):
+    cdef int i, j
+    cdef long start=0, end
+    cdef int nr = df.shape[0]
+    cdef int nc = df.shape[1]
+    cdef ndarray[np.int64_t] label_count = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_cumsum = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_locs = np.empty(nr, dtype='int64')
+    cdef ndarray[np.int64_t] label_count_cur = np.zeros(size, dtype='int64')
+    cdef ndarray[np.uint8_t, cast=True] result = np.zeros(nr, dtype='bool')
+
+    from dexplo._frame import DataFrame
+
+    for i in range(nr):
+        label_count[labels[i]] += 1
+
+    label_cumsum = np.roll(label_count, 1)
+    label_cumsum[0] = 0
+    label_cumsum = label_cumsum.cumsum()
+
+    for i in range(nr):
+        label_locs[label_cumsum[labels[i]] + label_count_cur[labels[i]]] = i
+        label_count_cur[labels[i]] += 1
+
+    for i in range(size):
+        end = start + label_count[i]
+
+        locs = label_locs[start:end]
+        new_data = {kind: data[locs] for kind, data in df._data.items()}
+        col_info = df._column_info
+        columns = df._columns
+        cur_df = DataFrame._construct_from_new(new_data, col_info, columns)
+
+        next_result = func(cur_df, *args, **kwargs)
+
+        if isinstance(next_result, (DataFrame, ndarray)):
+            if next_result.size != 1:
+                raise TypeError('When calling `filter`, you must return a scalar boolean value')
+
+            if isinstance(next_result, DataFrame):
+                next_result = next_result[0, 0]
+            else:
+                next_result = next_result.flat[0]
+
+        if not isinstance(next_result, (bool, np.bool_)):
+            raise TypeError('When calling `filter`, you must return a scalar boolean value')
+
+        if next_result:
+            result[locs] = True
+
+        start = end
     return result

@@ -1169,13 +1169,14 @@ class DataFrame(object):
                     data1 = data1[:, cur_locs1]
                     data2 = data2[:, cur_locs2]
                     cur_locs1 = list(range(len(cur_locs1)))
+
                 # TODO: multiply string by number dataframe. very rare occurrence
                 if dtype1 == 'O':
                     if self.shape == other.shape and op_string in stat.funcs_str2:
                         func: Callable = stat.funcs_str2[op_string]
                         return func(data1, data2), cur_locs1
-                    elif (self.shape[0] == 1 or other.shape[
-                        0] == 1) and op_string in stat.funcs_str2_bc:
+                    elif (self.shape[0] == 1 or other.shape[0] == 1) and \
+                            op_string in stat.funcs_str2_bc:
 
                         func = stat.funcs_str2_bc[op_string]
                         return func(data1, data2), cur_locs1
@@ -1183,6 +1184,7 @@ class DataFrame(object):
 
             if self.shape == other.shape or (self.shape[1] == other.shape[1] and (
                     self.shape[0] == 1 or other.shape[0] == 1)):
+
                 kinds1: List[str]
                 kinds2: List[str]
                 locs1: Dict[str, List[int]]

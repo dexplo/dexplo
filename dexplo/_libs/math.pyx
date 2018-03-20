@@ -10,6 +10,8 @@ from libc.math cimport isnan, sqrt, floor, ceil
 import cmath
 import groupby as gb
 import math as _math
+from libc.stdlib cimport free, malloc
+from libc.string cimport memcpy
 
 try:
     import bottleneck as bn
@@ -879,13 +881,14 @@ def max_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     cdef ndarray[np.int64_t] amax
     
     if axis ==0:
-        amax = np.full(nc, MIN_INT, dtype=np.int64)
+        amax = np.empty(nc, dtype='int64')
         for i in range(nc):
+            amax[i] = a[i]
             for j in range(nr):
                 if arr[i * nr + j] > amax[i]:
                     amax[i] = arr[i * nr + j]
     else:
-        amax = np.full(nr, MIN_INT, dtype=np.int64)
+        amax = a[:, 0].copy('F')
         for i in range(nc):
             for j in range(nr):
                 if arr[i * nr + j] > amax[j]:
@@ -900,13 +903,14 @@ def min_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     cdef ndarray[np.int64_t] amin
 
     if axis == 0:
-        amin = np.full(nc, MAX_INT, dtype=np.int64)
+        amin = np.empty(nc, dtype='int64')
         for i in range(nc):
+            amin[i] = a[0]
             for j in range(nr):
                 if arr[i * nr + j] < amin[i]:
                     amin[i] = arr[i * nr + j]
     else:
-        amin = np.full(nr, MAX_INT, dtype=np.int64)
+        amin = a[:, 0].copy('F')
         for i in range(nc):
             for j in range(nr):
                 if arr[i * nr + j] < amin[j]:
@@ -1211,18 +1215,86 @@ def mean_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     return total
 
 def median_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
-    return np.median(a, axis=axis)
+    cdef:
+        Py_ssize_t i, nr = a.shape[0], nc = a.shape[1]
+        np.float64_t first, second
+        ndarray[np.float64_t] result
+
+    if axis == 0:
+        result = np.empty(nc, dtype='float64')
+    else:
+        result = np.empty(nr, dtype='float64')
+
+    if axis == 0:
+        if nr % 2 == 1:
+            for i in range(nc):
+                result[i] = quick_select_int2(a[:, i], nr, nr // 2)
+        else:
+            for i in range(nc):
+                first = quick_select_int2(a[:, i], nr, nr // 2 - 1)
+                second = quick_select_int2(a[:, i], nr, nr // 2)
+                result[i] = (first + second) / 2
+    else:
+        if nc % 2 == 1:
+            for i in range(nr):
+                result[i] = quick_select_int2(a[i], nc, nc // 2)
+        else:
+            for i in range(nc):
+                first = quick_select_int2(a[i], nc, nc // 2 - 1)
+                second = quick_select_int2(a[i], nc, nc // 2)
+                result[i] = (first + second) / 2
+    return result
 
 def median_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, **kwargs):
-    return np.median(a, axis=axis)
+    # return np.median(a, axis=axis)
+    return median_int(a.astype('int64'), axis=axis)
 
 def median_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     if axis == 0:
         if hasnans.any():
             return bn.nanmedian(a, axis=0)
-        return np.median(a, axis=0)
+        return bn.median(a, axis=0)
     else:
         return bn.nanmedian(a, axis=1)
+
+# def median_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
+#     cdef:
+#         Py_ssize_t i, nr = a.shape[0], nc = a.shape[1]
+#         long xlen
+#         np.float64_t first, second
+#         ndarray[np.float64_t] result, x
+#
+#     if axis == 0:
+#         result = np.empty(nc, dtype='float64')
+#     else:
+#         result = np.empty(nr, dtype='float64')
+#
+#     if axis == 0:
+#         if hasnans.any():
+#             for i in range(nc):
+#                 x = a[:, i]
+#                 x = x[~np.isnan(x)]
+#                 xlen = len(x)
+#                 if xlen % 2 == 1:
+#                     result[i] = quick_select_float2(x, xlen, xlen // 2)
+#                 else:
+#                     first = quick_select_float2(x, xlen, xlen // 2 - 1)
+#                     second = quick_select_float2(x, xlen, xlen // 2)
+#                     result[i] = (first + second) / 2
+#         else:
+#             if nr % 2 == 1:
+#                 for i in range(nc):
+#                     x = a[:, i]
+#                     result[i] = quick_select_float2(x, nr, nr // 2)
+#             else:
+#                 for i in range(nc):
+#                     x = a[:, i]
+#                     first = quick_select_float2(x, nr, nr // 2 - 1)
+#                     second = quick_select_float2(x, nr, nr // 2)
+#                     result[i] = (first + second) / 2
+#         return result
+#     else:
+#         return bn.nanmedian(a, axis=1)
 
 def var_float(ndarray[double, ndim=2] a, axis, int ddof, hasnans):
 
@@ -3448,12 +3520,10 @@ def quick_select_int2(ndarray[np.int64_t] arr, int n, int k):
                 arr[l] = arr[ir]
                 arr[ir] = temp
 
-
             if arr[l + 1] > arr[ir]:
                 temp = arr[l + 1]
                 arr[l + 1] = arr[ir]
                 arr[ir] = temp
-
 
             if arr[l] > arr[l + 1]:
                 temp = arr[l]
@@ -3514,12 +3584,10 @@ def quick_select_float2(ndarray[np.float64_t] arr, int n, int k):
                 arr[l] = arr[ir]
                 arr[ir] = temp
 
-
             if arr[l + 1] > arr[ir]:
                 temp = arr[l + 1]
                 arr[l + 1] = arr[ir]
                 arr[ir] = temp
-
 
             if arr[l] > arr[l + 1]:
                 temp = arr[l]
@@ -3552,3 +3620,15 @@ def quick_select_float2(ndarray[np.float64_t] arr, int n, int k):
                 ir = j - 1
             if j <= k:
                 l = i
+
+def copy(ndarray[np.float64_t] a):
+    cdef:
+        Py_ssize_t n = len(a), s = sizeof(np.float64_t) * n
+        np.float64_t *arr = <np.float64_t*> a.data
+        np.float64_t *arr2 = <np.float64_t *> malloc(s)
+
+    memcpy(arr2, arr, s)
+    try:
+        return np.asarray(<np.float64_t[:n]> arr2)
+    finally:
+        free(arr2)

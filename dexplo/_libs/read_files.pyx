@@ -4,6 +4,7 @@ from numpy cimport ndarray
 from numpy import nan
 
 from cpython cimport list
+from cpython.unicode cimport PyUnicode_InternFromString
 import cython
 
 from collections import defaultdict
@@ -56,7 +57,8 @@ def get_dtypes_first_line(char * chars, int nc, ndarray[np.uint8_t, cast=True] u
                         vals[j] = False
                         dtypes[j] = 1
                     else:
-                        vals[j] = temp.decode('utf-8')
+                        # vals[j] = temp.decode('utf-8')
+                        vals[j] = PyUnicode_InternFromString(temp)
                         dtypes[j] = 4
                 elif is_float:
                     vals[j] = sign * (x + <double> dec / denom)
@@ -131,7 +133,7 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
         list columns
         char * chars # const?
         char * first_line
-        Py_ssize_t i=0, j=0,k=0, nc, start=0, end=0, n, act_row = 0, use_col_idx=0
+        Py_ssize_t i=0, j=0,k=0, nc, start=0, end=0, n, act_row = 0, use_col_idx=0, count_py = 0
 
         ndarray[np.uint8_t, ndim=2, cast=True] a_bool
         ndarray[np.int64_t, ndim=2] a_int
@@ -184,7 +186,8 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
             columns = []
             col_set = set()
             for i, v in enumerate(f.readline().replace(b"\n", b"").split(py_sep)):
-                v = v.decode('utf8')
+                # v = v.decode('utf8')
+                v = PyUnicode_InternFromString(v)
                 if v == '':
                     col_name = col_name = 'a' + str(i)
                 else:
@@ -241,7 +244,7 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
     a_bool = np.empty((nr, dtype_summary[1]), dtype='bool', order='F')
     a_int = np.empty((nr, dtype_summary[2]), dtype='int64', order='F')
     a_float = np.empty((nr, dtype_summary[3]), dtype='float64', order='F')
-    a_str = np.empty((nr, dtype_summary[4]), dtype='O', order='F')
+    a_str = np.full((nr, dtype_summary[4]), '', dtype='O', order='F')
 
     for i in range(nc):
         if dtypes[i] == 1:
@@ -283,15 +286,18 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
 
         if dtypes[j] == 4:
             start = i
+            temp_list = []
             while chars[i] == b' ':
                 i += 1
 
             while chars[i] != sep and chars[i] != b'\n':
+                temp_list.append(chr(chars[i]))
                 i += 1
 
-            # only assign when a non-empty string is present - otherise its already None
+            # only assign when a non-empty string is present - otherwise its already None
             if i != start:
-                a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
+                # a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
+                a_str[k, dtype_loc[j]] = PyUnicode_InternFromString(chars[start:i])
 
         elif dtypes[j] == 2:
             ct_dec = 0
@@ -333,7 +339,8 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
                 dtypes[j] = 4
                 dtype_summary[4] += 1
                 if start != i:
-                    a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
+                    # a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
+                    a_str[k, dtype_loc[j]] = PyUnicode_InternFromString(chars[start:i])
             else: # ct_dec == 1 or start == i or not has_int:
                 dtypes_changed[2].append(j)
                 a_float = np.column_stack((a_float, a_int[:, dtype_loc[j]]))
@@ -392,7 +399,7 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
                 dtype_loc[j] = dtype_summary[4]
                 dtype_summary[4] += 1
                 dtypes[j] = 4
-                a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
+                a_str[k, dtype_loc[j]] = PyUnicode_InternFromString(chars[start:i])
 
         elif dtypes[j] == 1:
             while chars[i] == b' ':
@@ -416,7 +423,8 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
                 dtype_summary[4] += 1
                 dtypes[j] = 4
                 if start == i:
-                    a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
+                    # a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
+                    a_str[k, dtype_loc[j]] = PyUnicode_InternFromString(chars[start:i])
 
         # unknown data types - must either be str or float but default to str
         # can change to float if
@@ -470,7 +478,9 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
                 dtype_loc[j] = dtype_summary[4]
                 dtype_summary[4] += 1
                 dtypes[j] = 4
-                a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
+                a_str[k, dtype_loc[j]] = PyUnicode_InternFromString(chars[start:i])
+                count_py += 1
+                # a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
 
         i += 1
         j += 1

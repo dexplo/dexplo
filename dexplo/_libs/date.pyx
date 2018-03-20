@@ -1,6 +1,6 @@
 import numpy as np
 from numpy import nan
-from libc.math cimport ceil, round, abs
+from libc.math cimport ceil, round
 from numpy cimport ndarray
 cimport numpy as np
 import cython
@@ -30,6 +30,7 @@ cdef create_days_to_year():
                 days_to_year[j + idx] = i + 1600
             idx += 365
     return days_to_year
+
 
 def create_days_to_month():
     cdef long i, j, idx = 0

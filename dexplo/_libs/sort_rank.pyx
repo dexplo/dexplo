@@ -463,5 +463,3 @@ def rank_str_average(ndarray[np.int64_t, ndim=2] arg, ndarray[object, ndim=2] ac
             for k in range(ct):
                 result[arg[j - k, i], i] = avg
     return result
-
-
