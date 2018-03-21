@@ -883,7 +883,7 @@ def max_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     if axis ==0:
         amax = np.empty(nc, dtype='int64')
         for i in range(nc):
-            amax[i] = a[i]
+            amax[i] = a[0, i]
             for j in range(nr):
                 if arr[i * nr + j] > amax[i]:
                     amax[i] = arr[i * nr + j]

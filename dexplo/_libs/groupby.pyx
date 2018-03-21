@@ -12,6 +12,7 @@ from libc.stdlib cimport malloc, free
 from cpython.bytes cimport PyBytes_FromStringAndSize
 from cpython cimport dict
 from dexplo import _utils
+from collections import defaultdict
 
 try:
     import bottleneck as bn
@@ -2861,3 +2862,188 @@ def filter(ndarray[np.int64_t] labels, int size, df, func, *args, **kwargs):
 
         start = end
     return result
+
+def apply(ndarray[np.int64_t] labels, int size, df, func, *args, **kwargs):
+    cdef int i, j
+    cdef long start=0, end
+    cdef int nr = df.shape[0]
+    cdef int nc = df.shape[1]
+    cdef ndarray[np.int64_t] label_count = np.zeros(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_cumsum = np.empty(size, dtype='int64')
+    cdef ndarray[np.int64_t] label_locs = np.empty(nr, dtype='int64')
+    cdef ndarray[np.int64_t] label_count_cur = np.zeros(size, dtype='int64')
+    cdef ndarray[np.uint8_t, cast=True] result = np.zeros(nr, dtype='bool')
+    cdef int result_nc
+    cdef ndarray result_columns
+    cdef bint returns_df = False
+    cdef bint all_dfs_same = True
+    cdef list return_items = []
+    cdef list column_dtype_final
+    cdef ndarray[np.int64_t] group_repeats = np.zeros(size, dtype='int64')
+
+    from dexplo._frame import DataFrame
+
+    for i in range(nr):
+        label_count[labels[i]] += 1
+
+    label_cumsum = np.roll(label_count, 1)
+    label_cumsum[0] = 0
+    label_cumsum = label_cumsum.cumsum()
+
+    for i in range(nr):
+        label_locs[label_cumsum[labels[i]] + label_count_cur[labels[i]]] = i
+        label_count_cur[labels[i]] += 1
+
+    for i in range(size):
+        end = start + label_count[i]
+        locs = label_locs[start:end]
+        new_data = {kind: data[locs] for kind, data in df._data.items()}
+        col_info = df._column_info
+        columns = df._columns
+        cur_df = DataFrame._construct_from_new(new_data, col_info, columns)
+
+        if i == 0:
+            next_result = func(cur_df, *args, **kwargs)
+            if isinstance(next_result, DataFrame):
+                group_repeats[i] = next_result.shape[0]
+                result_nc = next_result.shape[1]
+                result_columns = next_result._columns
+                returns_df = True
+                column_dtype_final = [(col, next_result._column_info[col].dtype)
+                                      for col in next_result._columns]
+            elif isinstance(next_result, ndarray):
+                if result.ndim == 2:
+                    result_nc = next_result.shape[1]
+                elif result.ndim == 1:
+                    next_result = next_result[:, np.newaxis]
+                    result_nc = 1
+                else:
+                    raise ValueError('You returned an array with more than 2 dimensions')
+                group_repeats[i] = next_result.shape[0]
+                dtype = next_result.dtype.kind
+            elif isinstance(next_result, (int, np.integer)):
+                group_repeats[i] = 1
+                result_nc = 1
+                next_result = [next_result]
+                dtype = 'i'
+
+            elif isinstance(next_result, (bool, np.bool_)):
+                group_repeats[i] = 1
+                result_nc = 1
+                next_result = [next_result]
+                dtype = 'b'
+            elif isinstance(next_result, (float, np.floating)):
+                group_repeats[i] = 1
+                result_nc = 1
+                next_result = [next_result]
+                dtype = 'f'
+            elif isinstance(next_result, (str, type(None))):
+                group_repeats[i] = 1
+                result_nc = 1
+                next_result = [next_result]
+                dtype = 'O'
+            else:
+                raise TypeError(f'The result from your apply function is {type(next_result)} '
+                                'which is not supported. Return a DataFrane, NumPy array or '
+                                'scalar value')
+            return_items.append(next_result)
+        else:
+            next_result = func(cur_df, *args, **kwargs)
+            if returns_df:
+                if not isinstance(next_result, DataFrame):
+                    raise TypeError('The first value returned from your apply function was a '
+                                    'DataFrame. All subsequent objects returned must also '
+                                    f'be DataFrames. This group returned a {type(next_result)}')
+                if next_result.shape[1] != result_nc:
+                    raise ValueError('The first DataFrame returned from your apply function '
+                                     f'had {result_nc} columns, while the current group had '
+                                     f'{next_result.shape[1]}. They must be equivalent')
+
+                group_repeats[i] = next_result.shape[0]
+                # compare the _column_info of next_result to first one
+                first_column_info = return_items[0]._column_info
+                cur_column_info = next_result._column_info
+                if first_column_info != cur_column_info:
+                    all_dfs_same = False
+                    for i, col in enumerate(next_result._columns):
+                        cur_dtype = next_result._column_info[col].dtype
+                        final_dtype = column_dtype_final[i][1]
+                        if final_dtype == 'O':
+                            continue
+                        if cur_dtype == 'b':
+                            continue
+                        if cur_dtype == 'i':
+                            if final_dtype == 'b':
+                                final_dtype == 'i'
+                        if cur_dtype == 'f':
+                            if final_dtype in 'ib':
+                                final_dtype = 'f'
+
+            elif isinstance(next_result, ndarray):
+                if result.ndim == 2:
+                    if next_result.shape[1] != result_nc:
+                        raise ValueError('Your first returned array from the `apply` groupby '
+                                         f'method had {result_nc} columns. Your current returned '
+                                         f'array has {next_result.shape[1]} columns')
+                elif result.ndim == 1:
+                    if result_nc != 1:
+                        raise ValueError('Your first returned array from the `apply` groupby '
+                                         f'method had {result_nc} columns. Your current returned '
+                                         f'array has 1 column')
+                    next_result = next_result[:, np.newaxis]
+                else:
+                    raise ValueError('You returned an array with more than 2 dimensions')
+                group_repeats[i] = next_result.shape[0]
+            elif isinstance(next_result, (int, np.integer)):
+                if result_nc != 1:
+                        raise ValueError('Your first returned array from the `apply` groupby '
+                                         f'method had {result_nc} columns. Your current returned '
+                                         f'array has 1 column')
+                next_result = [next_result]
+                group_repeats[i] = 1
+            elif isinstance(next_result, (bool, np.bool_)):
+                if result_nc != 1:
+                        raise ValueError('Your first returned array from the `apply` groupby '
+                                         f'method had {result_nc} columns. Your current returned '
+                                         f'array has 1 column')
+                next_result = [next_result]
+                group_repeats[i] = 1
+            elif isinstance(next_result, (float, np.floating)):
+                if result_nc != 1:
+                        raise ValueError('Your first returned array from the `apply` groupby '
+                                         f'method had {result_nc} columns. Your current returned '
+                                         f'array has 1 column')
+                next_result = [next_result]
+                group_repeats[i] = 1
+            elif isinstance(next_result, (str, type(None))):
+                if result_nc != 1:
+                        raise ValueError('Your first returned array from the `apply` groupby '
+                                         f'method had {result_nc} columns. Your current returned '
+                                         f'array has 1 column')
+                next_result = [next_result]
+                group_repeats[i] = 1
+            else:
+                raise TypeError(f'The result from your apply function is {type(next_result)} '
+                                'which is not supported. Return a DataFrane, NumPy array or '
+                                'scalar value')
+
+            return_items.append(next_result)
+        start = end
+
+    if returns_df:
+        if all_dfs_same:
+            data_dict = defaultdict(list)
+            for df in return_items:
+                for dtype, data in df._data.items():
+                    data_dict[dtype].append(data)
+            new_data = {dtype: np.concatenate(data) for dtype, data in data_dict.items()}
+            new_column_info = df._copy_column_info()
+            new_columns = df._columns.copy()
+    else:
+        # we have a list of arrays
+        data = np.concatenate(return_items)
+        dtype = data.dtype.kind
+        new_data = {dtype: data}
+        new_columns = ['a' + str(i) for i in data.shape[1]]
+        new_column_info = {col: _utils.Column(dtype, i, i) for i, col in enumerate(new_columns)}
+    return new_data, new_column_info, new_columns, group_repeats

@@ -27,7 +27,7 @@ def get_func_kwargs(name):
 class Grouper(object):
 
     def __init__(self, df: DataFrame, columns: List[str]) -> None:
-        self._df: DataFrame = weakref.ref(df)
+        self._df = weakref.ref(df)
         self._group_labels, self._group_position = self._create_groups(columns)
         self._group_columns = columns
 
@@ -532,3 +532,50 @@ class Grouper(object):
         columns = self._df()._columns.copy()
 
         return self._df()._construct_from_new(new_data, new_col_info, columns)
+
+    def apply(self, func, *args, **kwargs):
+        if not isinstance(func, Callable):
+            raise TypeError('The `func` variable must be a function or any callable object')
+        labels = self._group_labels
+        size = len(self._group_position)
+        new_data, new_column_info, new_columns, group_repeats = _gb.apply(labels, size, self._df(), func, *args, **kwargs)
+
+        grouped_data_dict = self._get_group_col_data()
+        grouped_column_info = self._get_new_column_info()
+        grouped_columns = self._group_columns.copy()
+        order_add = len(grouped_columns)
+
+        new_column_info_final = {}
+        for col in new_columns:
+            dtype, loc, order = new_column_info[col].values
+            loc_add = grouped_data_dict.get(dtype, 0)
+            if loc_add != 0:
+                loc_add = loc_add[0].shape[1]
+            new_column_info_final[col] = utils.Column(dtype, loc + loc_add, order + order_add)
+
+        new_grouped_columns = []
+        for col in grouped_columns:
+            if col in new_column_info_final:
+                new_grouped_columns.append(col + '_group')
+            else:
+                new_grouped_columns.append(col)
+
+        dtype_loc = defaultdict(int)
+        for i, col in enumerate(grouped_columns):
+            dtype = grouped_column_info[col].dtype
+            loc = dtype_loc[dtype]
+            new_col = new_grouped_columns[i]
+            new_column_info_final[new_col] = utils.Column(dtype, loc, i)
+            dtype_loc[dtype] += 1
+
+        new_columns = np.concatenate((new_grouped_columns, new_columns))
+
+        for dtype, data_list in grouped_data_dict.items():
+            data = np.concatenate(data_list, 1)
+            data = np.repeat(data, group_repeats, axis=0)
+            if dtype not in new_data:
+                new_data[dtype] = data
+            else:
+                new_data[dtype] = np.concatenate((data, new_data[dtype]), 1)
+
+        return DataFrame._construct_from_new(new_data, new_column_info_final, new_columns)

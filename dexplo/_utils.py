@@ -51,6 +51,11 @@ class Column:
     def __repr__(self) -> str:
         return f'dtype={self.dtype}, loc={self.loc}, order={self.order}'
 
+    def __eq__(self, other):
+        for v1, v2 in zip(self.values, other.values):
+            if v1 != v2:
+                return False
+        return True
 
 def get_num_cols(arrs: List[ndarray]) -> int:
     col_length: int = 0
