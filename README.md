@@ -141,14 +141,14 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 
 **Functions**
 
-- [ ] read_csv
+- [x] read_csv
 - [ ] read_sql
 - [ ] concat
 
 **Group By** - specifically with `groupby` method
-- [ ] agg
+- [x] agg
 - [x] all
-- [ ] apply
+- [x] apply
 - [x] any
 - [x] corr
 - [x] count
@@ -161,7 +161,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] head
 - [x] first
 - [ ] fillna
-- [ ] filter
+- [x] filter
 - [x] last
 - [x] max
 - [x] median
