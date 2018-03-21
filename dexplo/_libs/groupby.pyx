@@ -2924,23 +2924,23 @@ def apply(ndarray[np.int64_t] labels, int size, df, func, *args, **kwargs):
             elif isinstance(next_result, (int, np.integer)):
                 group_repeats[i] = 1
                 result_nc = 1
-                next_result = [next_result]
+                next_result = np.array([[next_result]])
                 dtype = 'i'
 
             elif isinstance(next_result, (bool, np.bool_)):
                 group_repeats[i] = 1
                 result_nc = 1
-                next_result = [next_result]
+                next_result = np.array([[next_result]])
                 dtype = 'b'
             elif isinstance(next_result, (float, np.floating)):
                 group_repeats[i] = 1
                 result_nc = 1
-                next_result = [next_result]
+                next_result = np.array([[next_result]])
                 dtype = 'f'
             elif isinstance(next_result, (str, type(None))):
                 group_repeats[i] = 1
                 result_nc = 1
-                next_result = [next_result]
+                next_result = np.array([[next_result]])
                 dtype = 'O'
             else:
                 raise TypeError(f'The result from your apply function is {type(next_result)} '
@@ -2999,28 +2999,28 @@ def apply(ndarray[np.int64_t] labels, int size, df, func, *args, **kwargs):
                         raise ValueError('Your first returned array from the `apply` groupby '
                                          f'method had {result_nc} columns. Your current returned '
                                          f'array has 1 column')
-                next_result = [next_result]
+                next_result = np.array([[next_result]])
                 group_repeats[i] = 1
             elif isinstance(next_result, (bool, np.bool_)):
                 if result_nc != 1:
                         raise ValueError('Your first returned array from the `apply` groupby '
                                          f'method had {result_nc} columns. Your current returned '
                                          f'array has 1 column')
-                next_result = [next_result]
+                next_result = np.array([[next_result]])
                 group_repeats[i] = 1
             elif isinstance(next_result, (float, np.floating)):
                 if result_nc != 1:
                         raise ValueError('Your first returned array from the `apply` groupby '
                                          f'method had {result_nc} columns. Your current returned '
                                          f'array has 1 column')
-                next_result = [next_result]
+                next_result = np.array([[next_result]])
                 group_repeats[i] = 1
             elif isinstance(next_result, (str, type(None))):
                 if result_nc != 1:
                         raise ValueError('Your first returned array from the `apply` groupby '
                                          f'method had {result_nc} columns. Your current returned '
                                          f'array has 1 column')
-                next_result = [next_result]
+                next_result = np.array([[next_result]])
                 group_repeats[i] = 1
             else:
                 raise TypeError(f'The result from your apply function is {type(next_result)} '
@@ -3029,7 +3029,6 @@ def apply(ndarray[np.int64_t] labels, int size, df, func, *args, **kwargs):
 
             return_items.append(next_result)
         start = end
-
     if returns_df:
         if all_dfs_same:
             data_dict = defaultdict(list)
@@ -3041,9 +3040,18 @@ def apply(ndarray[np.int64_t] labels, int size, df, func, *args, **kwargs):
             new_columns = df._columns.copy()
     else:
         # we have a list of arrays
-        data = np.concatenate(return_items)
+        for item in return_items:
+            data = np.concatenate(return_items)
+        if data.ndim == 1:
+            data = data[:, np.newaxis]
         dtype = data.dtype.kind
         new_data = {dtype: data}
-        new_columns = ['a' + str(i) for i in data.shape[1]]
-        new_column_info = {col: _utils.Column(dtype, i, i) for i, col in enumerate(new_columns)}
+        new_columns = []
+        for i in range(result_nc):
+            new_columns.append('a' + str(i))
+
+        new_column_info = {}
+        for i in range(result_nc):
+            new_column_info[new_columns[i]] = _utils.Column(dtype, i, i)
+
     return new_data, new_column_info, new_columns, group_repeats
