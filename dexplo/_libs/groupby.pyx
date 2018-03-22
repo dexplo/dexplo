@@ -22,8 +22,8 @@ except ImportError:
 cdef np.float64_t MAX_FLOAT = np.finfo(np.float64).max
 cdef np.float64_t MIN_FLOAT = np.finfo(np.float64).min
 
-cdef np.float64_t MAX_INT = np.iinfo(np.int64).max
-cdef np.float64_t MIN_INT = np.iinfo(np.int64).min
+cdef np.int64_t MAX_INT = np.iinfo(np.int64).max
+cdef np.int64_t MIN_INT = np.iinfo(np.int64).min
 
 MAX_CHAR = chr(1_000_000)
 MIN_CHAR = chr(0)

@@ -4120,3 +4120,23 @@ class DataFrame(object):
 
     def _ipython_key_completions_(self):
         return self._columns.tolist()
+
+    def rolling(self, left, right, min_window=None, kept_columns=False):
+        if not isinstance(left, int):
+            raise TypeError('`left` must be an integer')
+        if not isinstance(right, int):
+            raise TypeError('`right` must be an integer')
+        if min_window is None:
+            min_window = 0
+        if not isinstance(min_window, int):
+            raise TypeError('`min_window` must be either an integer or None')
+
+        if left > right:
+            raise ValueError('The `left` value must be less than or equal to the right')
+
+        if not isinstance(kept_columns, (bool, str, list)):
+            raise TypeError('`kept_columns` must be either a bool, a column name as a string, or '
+                            'a list of column names')
+
+        from ._rolling import Roller
+        return Roller(self, left, right + 1, min_window, kept_columns)
