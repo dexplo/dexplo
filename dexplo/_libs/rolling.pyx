@@ -4,14 +4,8 @@ import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
 import cython
-from cpython cimport set, list, tuple
-from libc.math cimport isnan, sqrt
 from numpy import nan
-from .math import min_max_int, min_max_int2, get_first_non_nan, quick_select_int2, quick_select_float2
-from libc.stdlib cimport malloc, free
-from cpython.bytes cimport PyBytes_FromStringAndSize
-from cpython cimport dict
-from dexplo import _utils
+from .math import var_int as var_int_math
 from collections import defaultdict
 
 try:
@@ -36,38 +30,53 @@ cdef extern from "numpy/npy_math.h":
 def sum_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, k, j_act
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
         ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
-        np.int64_t total
+        ndarray[np.int64_t] temp
+        np.int64_t total = 0
+        bint not_started = True
+
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            total = 0
-            for k in range(right + i):
-                total += a[k, j_act]
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        total += temp[k]
+                else:
+                    continue
+            else:
+                total += temp[i + right - 1]
             result[i, j] = total
 
-        for i in range(first_n, middle_n):
-            total = 0
-            for k in range(i + left, i + right):
-                total += a[k, j_act]
+        for i in range(start, middle):
+            total = total + temp[i + right - 1] - temp[i + left - 1]
             result[i, j] = total
 
-        for i in range(nr - last_n, nr):
-            total = 0
-            for k in range(i + left, nr):
-                total += a[k, j_act]
+        if middle != nr:
+            total += temp[i + right]
+
+        for i in range(middle, end):
+            total -= temp[i + left - 1]
             result[i, j] = total
 
     return result
@@ -75,41 +84,53 @@ def sum_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
 def sum_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
         ndarray[np.float64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='float64')
-        np.float64_t total
+        ndarray[np.float64_t] temp
+        np.float64_t total = 0
+        bint not_started = True
+
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            total = 0
-            for k in range(right + i):
-                if not npy_isnan(a[k, j_act]):
-                    total += a[k, j_act]
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        total += temp[k]
+                else:
+                    continue
+            else:
+                total += temp[i + right - 1]
             result[i, j] = total
 
-        for i in range(first_n, middle_n):
-            total = 0
-            for k in range(i + left, i + right):
-                if not npy_isnan(a[k, j_act]):
-                    total += a[k, j_act]
+        for i in range(start, middle):
+            total = total + temp[i + right - 1] - temp[i + left - 1]
             result[i, j] = total
 
-        for i in range(nr - last_n, nr):
-            total = 0
-            for k in range(i + left, nr):
-                if not npy_isnan(a[k, j_act]):
-                    total += a[k, j_act]
+        if middle != nr:
+            total += temp[i + right]
+
+        for i in range(middle, end):
+            total -= temp[i + left - 1]
             result[i, j] = total
 
     return result
@@ -117,38 +138,53 @@ def sum_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
 def sum_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
         ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
-        np.int64_t total
+        ndarray[np.uint8_t, cast=True] temp
+        np.int64_t total = 0
+        bint not_started = True
+
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            total = 0
-            for k in range(right + i):
-                total += a[k, j_act]
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        total += temp[k]
+                else:
+                    continue
+            else:
+                total += temp[i + right - 1]
             result[i, j] = total
 
-        for i in range(first_n, middle_n):
-            total = 0
-            for k in range(i + left, i + right):
-                total += a[k, j_act]
+        for i in range(start, middle):
+            total = total + temp[i + right - 1] - temp[i + left - 1]
             result[i, j] = total
 
-        for i in range(nr - last_n, nr):
-            total = 0
-            for k in range(i + left, nr):
-                total += a[k, j_act]
+        if middle != nr:
+            total += temp[i + right]
+
+        for i in range(middle, end):
+            total -= temp[i + left - 1]
             result[i, j] = total
 
     return result
@@ -157,308 +193,496 @@ def sum_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
 def min_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, k, j_act
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, idx
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
-        np.int64_t amin
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.int64_t] temp
+        np.int64_t val
+        bint not_started = True, first = True
 
-    if (left < 0 and right < 0) or (left > 0 and right > 0):
-        result = np.full((nr, nc_actual), nan, dtype='float64')
-    else:
-        result = np.empty((nr, nc_actual), dtype='int64')
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            amin = MAX_INT
-            for k in range(right + i):
-                if a[k, j_act] < amin:
-                    amin = a[k, j_act]
-            result[i, j] = amin
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        if first:
+                            first = False
+                            val = temp[k]
+                            idx = k
+                        elif temp[k] < val:
+                            val = temp[k]
+                            idx = k
+                else:
+                    continue
+            else:
+                if temp[i + right - 1] < val:
+                    val = temp[i + right - 1]
+                    idx = i + right - 1
+            result[i, j] = val
 
-        for i in range(first_n, middle_n):
-            amin = MAX_INT
-            for k in range(i + left, i + right):
-                if a[k, j_act] < amin:
-                    amin = a[k, j_act]
-            result[i, j] = amin
+        for i in range(start, middle):
+            if temp[i + right - 1] < val:
+                val = temp[i + right - 1]
+                idx = i + right - 1
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, i + right - 1):
+                    if temp[k] < val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
-        for i in range(nr - last_n, nr):
-            amin = MAX_INT
-            for k in range(i + left, nr):
-                if a[k, j_act] < amin:
-                    amin = a[k, j_act]
-            result[i, j] = amin
+        for i in range(middle, end):
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, nr):
+                    if temp[k] < val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
     return result
 
 def min_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, idx
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
         ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
-        np.float64_t amin
+        ndarray[np.float64_t] temp
+        np.float64_t val
+        bint not_started = True, first = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            amin = MAX_FLOAT
-            for k in range(right + i):
-                if a[k, j_act] < amin:
-                    amin = a[k, j_act]
-            if amin != MAX_FLOAT:
-                result[i, j] = amin
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        if first:
+                            first = False
+                            val = temp[k]
+                            idx = k
+                        elif temp[k] < val:
+                            val = temp[k]
+                            idx = k
+                else:
+                    continue
+            else:
+                if temp[i + right - 1] < val:
+                    val = temp[i + right - 1]
+                    idx = i + right - 1
+            result[i, j] = val
 
-        for i in range(first_n, middle_n):
-            amin = MAX_FLOAT
-            for k in range(i + left, i + right):
-                if a[k, j_act] < amin:
-                    amin = a[k, j_act]
-            if amin != MAX_FLOAT:
-                result[i, j] = amin
+        for i in range(start, middle):
+            if temp[i + right - 1] < val:
+                val = temp[i + right - 1]
+                idx = i + right - 1
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, i + right - 1):
+                    if temp[k] < val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
-        for i in range(nr - last_n, nr):
-            amin = MAX_FLOAT
-            for k in range(i + left, nr):
-                if a[k, j_act] < amin:
-                    amin = a[k, j_act]
-            if amin != MAX_FLOAT:
-                result[i, j] = amin
+        for i in range(middle, end):
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, nr):
+                    if temp[k] < val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
     return result
 
 def min_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, idx
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
+        ndarray[np.uint8_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='bool')
+        ndarray[np.uint8_t] temp
+        bint val
+        bint not_started = True, first = True
 
-    if (left < 0 and right < 0) or (left > 0 and right > 0):
-        result = np.full((nr, nc_actual), nan, dtype='float64')
-    else:
-        result = np.ones((nr, nc_actual), dtype='bool')
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            for k in range(right + i):
-                if not a[k, j_act]:
-                    result[i, j] = False
-                    break
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        if first:
+                            first = False
+                            val = temp[k]
+                            idx = k
+                        elif temp[k] < val:
+                            val = temp[k]
+                            idx = k
+                else:
+                    continue
+            else:
+                if temp[i + right - 1] < val:
+                    val = temp[i + right - 1]
+                    idx = i + right - 1
+            result[i, j] = val
 
+        for i in range(start, middle):
+            if temp[i + right - 1] < val:
+                val = temp[i + right - 1]
+                idx = i + right - 1
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, i + right - 1):
+                    if temp[k] < val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
-        for i in range(first_n, middle_n):
-            for k in range(i + left, i + right):
-                if not a[k, j_act]:
-                    result[i, j] = False
-                    break
-
-        for i in range(nr - last_n, nr):
-            for k in range(i + left, nr):
-                if not a[k, j_act]:
-                    result[i, j] = False
-                    break
+        for i in range(middle, end):
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, nr):
+                    if temp[k] < val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
     return result
 
 def max_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, k, j_act
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, idx
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
-        np.int64_t amax
-
-    if (left < 0 and right < 0) or (left > 0 and right > 0):
-        result = np.full((nr, nc_actual), nan, dtype='float64')
-    else:
-        result = np.empty((nr, nc_actual), dtype='int64')
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.int64_t] temp
+        np.int64_t val
+        bint not_started = True, first = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            amax = MIN_INT
-            for k in range(right + i):
-                if a[k, j_act] > amax:
-                    amax = a[k, j_act]
-            result[i, j] = amax
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        if first:
+                            first = False
+                            val = temp[k]
+                            idx = k
+                        elif temp[k] > val:
+                            val = temp[k]
+                            idx = k
+                else:
+                    continue
+            else:
+                if temp[i + right - 1] > val:
+                    val = temp[i + right - 1]
+                    idx = i + right - 1
+            result[i, j] = val
 
-        for i in range(first_n, middle_n):
-            amax = MIN_INT
-            for k in range(i + left, i + right):
-                if a[k, j_act] > amax:
-                    amax = a[k, j_act]
-            result[i, j] = amax
+        for i in range(start, middle):
+            if temp[i + right - 1] > val:
+                val = temp[i + right - 1]
+                idx = i + right - 1
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, i + right - 1):
+                    if temp[k] < val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
-        for i in range(nr - last_n, nr):
-            amax = MIN_INT
-            for k in range(i + left, nr):
-                if a[k, j_act] > amax:
-                    amax = a[k, j_act]
-            result[i, j] = amax
+        for i in range(middle, end):
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, nr):
+                    if temp[k] > val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
     return result
 
 def max_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, idx
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
         ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
-        np.float64_t amax
+        ndarray[np.float64_t] temp
+        np.float64_t val
+        bint not_started = True, first = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            amax = MIN_FLOAT
-            for k in range(right + i):
-                if a[k, j_act] > amax:
-                    amax = a[k, j_act]
-            if amax != MIN_FLOAT:
-                result[i, j] = amax
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        if first:
+                            first = False
+                            val = temp[k]
+                            idx = k
+                        elif temp[k] > val:
+                            val = temp[k]
+                            idx = k
+                else:
+                    continue
+            else:
+                if temp[i + right - 1] > val:
+                    val = temp[i + right - 1]
+                    idx = i + right - 1
+            result[i, j] = val
 
-        for i in range(first_n, middle_n):
-            amax = MIN_FLOAT
-            for k in range(i + left, i + right):
-                if a[k, j_act] > amax:
-                    amax = a[k, j_act]
-            if amax != MIN_FLOAT:
-                result[i, j] = amax
+        for i in range(start, middle):
+            if temp[i + right - 1] > val:
+                val = temp[i + right - 1]
+                idx = i + right - 1
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, i + right - 1):
+                    if temp[k] > val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
-        for i in range(nr - last_n, nr):
-            amax = MIN_FLOAT
-            for k in range(i + left, nr):
-                if a[k, j_act] > amax:
-                    amax = a[k, j_act]
-            if amax != MIN_FLOAT:
-                result[i, j] = amax
+        for i in range(middle, end):
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, nr):
+                    if temp[k] > val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
+
     return result
 
 def max_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, idx
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
-
-    if (left < 0 and right < 0) or (left > 0 and right > 0):
-        result = np.full((nr, nc_actual), nan, dtype='float64')
-    else:
-        result = np.zeros((nr, nc_actual), dtype='bool')
+        ndarray[np.uint8_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='bool')
+        ndarray[np.uint8_t] temp
+        bint val
+        bint not_started = True, first = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            for k in range(right + i):
-                if a[k, j_act]:
-                    result[i, j] = True
-                    break
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        if first:
+                            first = False
+                            val = temp[k]
+                            idx = k
+                        elif temp[k] > val:
+                            val = temp[k]
+                            idx = k
+                else:
+                    continue
+            else:
+                if temp[i + right - 1] > val:
+                    val = temp[i + right - 1]
+                    idx = i + right - 1
+            result[i, j] = val
 
-        for i in range(first_n, middle_n):
-            for k in range(i + left, i + right):
-                if a[k, j_act]:
-                    result[i, j] = True
-                    break
+        for i in range(start, middle):
+            if temp[i + right - 1] > val:
+                val = temp[i + right - 1]
+                idx = i + right - 1
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, i + right - 1):
+                    if temp[k] > val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
-        for i in range(nr - last_n, nr):
-            for k in range(i + left, nr):
-                if a[k, j_act]:
-                    result[i, j] = True
-                    break
+        for i in range(middle, end):
+            if idx == i + left - 1:
+                val = temp[i + left]
+                idx = i + left
+                for k in range(i + left, nr):
+                    if temp[k] > val:
+                        val = temp[k]
+                        idx = k
+            result[i, j] = val
 
     return result
 
 def mean_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, k, j_act
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
-        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64', order='F')
-        np.int64_t total, n = right - left, n1
+        ndarray[np.float64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='float64')
+        ndarray[np.int64_t] temp
+        np.int64_t total = 0
+        bint not_started = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            total = 0
-            n1 = 0
-            for k in range(right + i):
-                total += a[k, j_act]
-                n1 += 1
-            result[i, j] = total / n1
-
-        for i in range(first_n, middle_n):
-            total = 0
-            for k in range(i + left, i + right):
-                total += a[k, j_act]
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        total += temp[k]
+                        n += 1
+                else:
+                    continue
+            else:
+                n += 1
+                total += temp[i + right - 1]
             result[i, j] = total / n
 
-        for i in range(nr - last_n, nr):
-            total = 0
-            n1 = 0
-            for k in range(i + left, nr):
-                total += a[k, j_act]
-                n1 += 1
+        for i in range(start, middle):
+            total = total + temp[i + right - 1] - temp[i + left - 1]
+            result[i, j] = total / n1
+
+        if middle != nr:
+            total += temp[i + right]
+
+        for i in range(middle, end):
+            total -= temp[i + left - 1]
+            n1 -= 1
             result[i, j] = total / n1
 
     return result
@@ -466,47 +690,68 @@ def mean_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
 def mean_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
-        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
-        np.float64_t total, n
+        ndarray[np.float64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='float64')
+        ndarray[np.float64_t] temp
+        np.float64_t total = 0
+        bint not_started = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            total = 0
-            n = 0
-            for k in range(right + i):
-                if not npy_isnan(a[k, j_act]):
-                    total += a[k, j_act]
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        if not npy_isnan(temp[k]):
+                            total += temp[k]
+                            n += 1
+                else:
+                    continue
+            else:
+                if not npy_isnan(temp[k]):
+                    total += temp[i + right - 1]
                     n += 1
+
+            if n != 0:
+                result[i, j] = total / n
+
+        for i in range(start, middle):
+            if not npy_isnan(temp[i + right - 1]):
+                total += temp[i + right - 1]
+                n += 1
+            if not npy_isnan(temp[i + left - 1]):
+                total -= temp[i + left - 1]
+                n -= 1
             result[i, j] = total / n
 
-        for i in range(first_n, middle_n):
-            total = 0
-            n = 0
-            for k in range(i + left, i + right):
-                if not npy_isnan(a[k, j_act]):
-                    total += a[k, j_act]
-                    n += 1
-            result[i, j] = total / n
+        if middle != nr:
+            if not npy_isnan(temp[i + right]):
+                total += temp[i + right]
+                n += 1
 
-        for i in range(nr - last_n, nr):
-            total = 0
-            n = 0
-            for k in range(i + left, nr):
-                if not npy_isnan(a[k, j_act]):
-                    total += a[k, j_act]
-                    n += 1
+        for i in range(middle, end):
+            if not npy_isnan(temp[i + left - 1]):
+                total -= temp[i + left - 1]
+                n -= 1
             result[i, j] = total / n
 
     return result
@@ -514,121 +759,173 @@ def mean_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
 def mean_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
-        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
-        np.float64_t total, n = right - left, n1
+        ndarray[np.float64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='float64')
+        ndarray[np.uint8_t, cast=True] temp
+        np.int64_t total = 0
+        bint not_started = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            total = 0
-            n1 = 0
-            for k in range(right + i):
-                total += a[k, j_act]
-                n1 += 1
-            result[i, j] = total / n1
-
-        for i in range(first_n, middle_n):
-            total = 0
-            for k in range(i + left, i + right):
-                total += a[k, j_act]
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        total += temp[k]
+                        n += 1
+                else:
+                    continue
+            else:
+                n += 1
+                total += temp[i + right - 1]
             result[i, j] = total / n
 
-        for i in range(nr - last_n, nr):
-            total = 0
-            n1 = 0
-            for k in range(i + left, nr):
-                total += a[k, j_act]
-                n1 += 1
+        for i in range(start, middle):
+            total = total + temp[i + right - 1] - temp[i + left - 1]
+            result[i, j] = total / n1
+
+        if middle != nr:
+            total += temp[i + right]
+
+        for i in range(middle, end):
+            total -= temp[i + left - 1]
+            n1 -= 1
             result[i, j] = total / n1
 
     return result
 
-
 def count_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, k, j_act
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
         ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
-        np.int64_t n, n1 = right - left
+        ndarray[np.int64_t] temp
+        np.int64_t total = 0
+        bint not_started = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
-        j_act = locs[j]
 
-        for i in range(first_n):
-            n = 0
-            for k in range(right + i):
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        total += temp[k]
+                        n += 1
+                else:
+                    continue
+            else:
                 n += 1
+                total += temp[i + right - 1]
             result[i, j] = n
 
-        for i in range(first_n, middle_n):
+        for i in range(start, middle):
             result[i, j] = n1
 
-        for i in range(nr - last_n, nr):
-            n = 0
-            for k in range(i + left, nr):
-                n += 1
-            result[i, j] = n
+        if middle != nr:
+            total += temp[i + right]
+
+        for i in range(middle, end):
+            n1 -= 1
+            result[i, j] = n1
 
     return result
 
 def count_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
+
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n=0, n1 = right - left
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
         ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
-        np.int64_t n
+        ndarray[np.float64_t] temp
+        bint not_started = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            n = 0
-            for k in range(right + i):
-                if not npy_isnan(a[k, j_act]):
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        if not npy_isnan(temp[k]):
+                            n += 1
+                else:
+                    continue
+            else:
+                if not npy_isnan(temp[i + right - 1]):
                     n += 1
+            if n != 0:
+                result[i, j] = n
+
+        for i in range(start, middle):
+            if not npy_isnan(temp[i + right - 1]):
+                n += 1
+            if not npy_isnan(temp[i + left - 1]):
+                n -= 1
             result[i, j] = n
 
-        for i in range(first_n, middle_n):
-            n = 0
-            for k in range(i + left, i + right):
-                if not npy_isnan(a[k, j_act]):
-                    n += 1
-            result[i, j] = n
+        if middle != nr:
+            if not npy_isnan(temp[i + right]):
+                n += 1
 
-        for i in range(nr - last_n, nr):
-            n = 0
-            for k in range(i + left, nr):
-                if not npy_isnan(a[k, j_act]):
-                    n += 1
+        for i in range(middle, end):
+            if not npy_isnan(temp[i + left - 1]):
+                n -= 1
             result[i, j] = n
 
     return result
@@ -636,77 +933,110 @@ def count_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
 def count_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
-        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
-        np.int64_t n, n1 = right - left
+        ndarray[np.float64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='float64')
+        ndarray[np.uint8_t, cast=True] temp
+        bint not_started = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
-        j_act = locs[j]
 
-        for i in range(first_n):
-            n = 0
-            for k in range(right + i):
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        n += 1
+                else:
+                    continue
+            else:
                 n += 1
             result[i, j] = n
 
-        for i in range(first_n, middle_n):
+        for i in range(start, middle):
             result[i, j] = n1
 
-        for i in range(nr - last_n, nr):
-            n = 0
-            for k in range(i + left, nr):
-                n += 1
-            result[i, j] = n
+        for i in range(middle, end):
+            n1 -= 1
+            result[i, j] = n1
 
     return result
 
 def count_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
         ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
-        np.int64_t n
+        ndarray[object] temp
+        bint not_started = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            n = 0
-            for k in range(right + i):
-                if a[k, j_act] is not None:
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        if temp[k] is not None:
+                            n += 1
+                else:
+                    continue
+            else:
+                if temp[i + right - 1] is not None:
                     n += 1
+
+            if n != 0:
+                result[i, j] = n
+
+        for i in range(start, middle):
+            if temp[i + right - 1] is not None:
+                n += 1
+            if temp[i + left - 1] is not None:
+                n -= 1
             result[i, j] = n
 
-        for i in range(first_n, middle_n):
-            n = 0
-            for k in range(i + left, i + right):
-                if a[k, j_act] is not None:
-                    n += 1
-            result[i, j] = n
+        if middle != nr:
+            if temp[i + right] is not None:
+                n += 1
 
-        for i in range(nr - last_n, nr):
-            n = 0
-            for k in range(i + left, nr):
-                if a[k, j_act] is not None:
-                    n += 1
+        for i in range(middle, end):
+            if temp[i + left - 1] is not None:
+                n -= 1
             result[i, j] = n
 
     return result
@@ -714,38 +1044,62 @@ def count_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
 def prod_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, k, j_act
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
-        ndarray[np.int64_t, ndim=2] result = np.ones((nr, nc_actual), dtype='int64')
-        np.int64_t total
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.int64_t] temp
+        np.int64_t total = 1
+        bint not_started = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            total = 1
-            for k in range(right + i):
-                total *= a[k, j_act]
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        total *= temp[k]
+                else:
+                    continue
+            else:
+                total *= temp[i + right - 1]
             result[i, j] = total
 
-        for i in range(first_n, middle_n):
-            total = 1
-            for k in range(i + left, i + right):
-                total *= a[k, j_act]
+        for i in range(start, middle):
+            if temp[i + left - 1] == 0:
+                total = 1
+                for k in range(i + left, i + right):
+                    total *= temp[k]
+            else:
+                total = total * temp[i + right - 1] / temp[i + left - 1]
             result[i, j] = total
 
-        for i in range(nr - last_n, nr):
-            total = 1
-            for k in range(i + left, nr):
-                total *= a[k, j_act]
+        if middle != nr:
+            total *= temp[i + right]
+
+        for i in range(middle, end):
+            if temp[i + left - 1] == 0:
+                total = 1
+                for k in range(i + left, nr):
+                    total *= temp[k]
+            else:
+                total /= temp[i + left - 1]
             result[i, j] = total
 
     return result
@@ -753,41 +1107,71 @@ def prod_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
 def prod_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
-        ndarray[np.float64_t, ndim=2] result = np.ones((nr, nc_actual), dtype='float64')
-        np.float64_t total
+        ndarray[np.float64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='float64')
+        ndarray[np.float64_t] temp
+        np.float64_t total = 1
+        bint not_started = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
+
         j_act = locs[j]
+        temp = a[:, j_act]
 
-        for i in range(first_n):
-            total = 1
-            for k in range(right + i):
-                if not npy_isnan(a[k, j_act]):
-                    total *= a[k, j_act]
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        if not npy_isnan(temp[k]):
+                            total *= temp[k]
+                else:
+                    continue
+            else:
+                if npy_isnan(temp[i + right - 1]):
+                    total *= temp[i + right - 1]
             result[i, j] = total
 
-        for i in range(first_n, middle_n):
-            total = 1
-            for k in range(i + left, i + right):
-                if not npy_isnan(a[k, j_act]):
-                    total *= a[k, j_act]
+        for i in range(start, middle):
+            if temp[i + left - 1] == 0:
+                total = 1
+                for k in range(i + left, i + right):
+                    if not npy_isnan(temp[k]):
+                        total *= temp[k]
+            else:
+                if not npy_isnan(temp[i + right - 1]):
+                    total = total * temp[i + right - 1]
+                if not npy_isnan(temp[i + left - 1]):
+                    total /= temp[i + left - 1]
             result[i, j] = total
 
-        for i in range(nr - last_n, nr):
-            total = 1
-            for k in range(i + left, nr):
-                if not npy_isnan(a[k, j_act]):
-                    total *= a[k, j_act]
+        if middle != nr:
+            if not npy_isnan(temp[i + right]):
+                total *= temp[i + right]
+
+        for i in range(middle, end):
+            if temp[i + left - 1] == 0:
+                total = 1
+                for k in range(i + left, nr):
+                    if not npy_isnan(temp[k]):
+                        total *= temp[k]
+            else:
+                if not npy_isnan(temp[i + left - 1]):
+                    total /= temp[i + left - 1]
             result[i, j] = total
 
     return result
@@ -795,38 +1179,1191 @@ def prod_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
 def prod_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, j_act, k
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        Py_ssize_t first_n=0, middle_n=nr, last_n=0
-        ndarray[np.int64_t, ndim=2] result = np.ones((nr, nc_actual), dtype='int64')
-        np.int64_t total
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.uint8_t, cast=True] temp
+        np.int64_t total = 1
+        bint not_started = True
 
     if left < 0:
-        first_n = -left
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
 
     if right > 0:
-        middle_n = nr - right
-        last_n = right
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        total *= temp[k]
+                else:
+                    continue
+            else:
+                total *= temp[i + right - 1]
+            result[i, j] = total
+
+        for i in range(start, middle):
+            if temp[i + left - 1] == 0:
+                total = 1
+                for k in range(i + left, i + right):
+                    total *= temp[k]
+            else:
+                total = total * temp[i + right - 1] / temp[i + left - 1]
+            result[i, j] = total
+
+        if middle != nr:
+            total *= temp[i + right]
+
+        for i in range(middle, end):
+            if temp[i + left - 1] == 0:
+                total = 1
+                for k in range(i + left, nr):
+                    total *= temp[k]
+            else:
+                total /= temp[i + left - 1]
+            result[i, j] = total
+
+    return result
+
+def median_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
+               int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, l=0, n=0, n1 = right - left
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        Py_ssize_t first_n=0, middle_n=nr, last_n=0
+        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
+        ndarray[np.int64_t] data = np.empty(n1, dtype='int64')
+        bint not_started = True
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
 
     for j in range(nc_actual):
         j_act = locs[j]
 
-        for i in range(first_n):
-            total = 1
-            for k in range(right + i):
-                total *= a[k, j_act]
-            result[i, j] = total
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        data[n] = a[k, j_act]
+                        n += 1
+                else:
+                    continue
+            else:
+                data[n] = a[i + right - 1, j_act]
+                n += 1
+            result[i, j] = bn.median(data[:n])
 
-        for i in range(first_n, middle_n):
-            total = 1
+        for i in range(start, middle):
+            l = 0
             for k in range(i + left, i + right):
-                total *= a[k, j_act]
-            result[i, j] = total
+                data[l] = a[k, j_act]
+                l += 1
+            result[i, j] = bn.median(data)
 
-        for i in range(nr - last_n, nr):
-            total = 1
+        for i in range(middle, end):
+            l = 0
             for k in range(i + left, nr):
-                total *= a[k, j_act]
-            result[i, j] = total
+                data[l] = a[k, j_act]
+                l += 1
+            result[i, j] = bn.median(data[:l])
+
+    return result
+
+def median_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, l=0, n=0, n1 = right - left
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        Py_ssize_t first_n=0, middle_n=nr, last_n=0
+        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
+        ndarray[np.float64_t] data = np.full(right - left, nan, dtype='float64')
+        bint not_started = True
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+        j_act = locs[j]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        if not npy_isnan(a[k, j_act]):
+                            data[n] = a[k, j_act]
+                            n += 1
+                else:
+                    continue
+            else:
+                if not npy_isnan(a[i + right - 1, j_act]):
+                    data[n] = a[i + right - 1, j_act]
+                    n += 1
+            if n > 0:
+                result[i, j] = bn.median(data[:n])
+
+        for i in range(start, middle):
+            l = 0
+            for k in range(i + left, i + right):
+                if not npy_isnan(a[k, j_act]):
+                    data[l] = a[k, j_act]
+                    l += 1
+            if l > 0:
+                result[i, j] = bn.median(data[:l])
+
+        for i in range(middle, end):
+            l = 0
+            for k in range(i + left, nr):
+                if not npy_isnan(a[k, j_act]):
+                    data[l] = a[k, j_act]
+                    l += 1
+            if l > 0:
+                result[i, j] = bn.median(data[:l])
+
+    return result
+
+def median_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, l=0, n=0, n1 = right - left
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        Py_ssize_t first_n=0, middle_n=nr, last_n=0
+        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
+        ndarray[np.uint8_t, cast=True] data = np.empty(n1, dtype='bool')
+        bint not_started = True
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+        j_act = locs[j]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        data[n] = a[k, j_act]
+                        n += 1
+                else:
+                    continue
+            else:
+                data[n] = a[i + right - 1, j_act]
+                n += 1
+            result[i, j] = bn.median(data[:n])
+
+        for i in range(start, middle):
+            l = 0
+            for k in range(i + left, i + right):
+                data[l] = a[k, j_act]
+                l += 1
+            result[i, j] = bn.median(data)
+
+        for i in range(middle, end):
+            l = 0
+            for k in range(i + left, nr):
+                data[l] = a[k, j_act]
+                l += 1
+            result[i, j] = bn.median(data[:l])
+
+    return result
+
+def var_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window, int ddof):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
+        ndarray[np.int64_t] temp
+        np.float64_t ex = 0, ex2 = 0, total=0
+        bint not_started = True
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        ex += temp[k]
+                        ex2 += temp[k] ** 2
+                        n += 1
+                else:
+                    continue
+            else:
+                n += 1
+                ex += temp[i + right - 1]
+                ex2 += temp[i + right - 1] ** 2
+            if n > ddof:
+                result[i, j] = ex2 / (n - ddof) - ex ** 2 / (n * (n - ddof))
+
+        if n1 > ddof:
+            for i in range(start, middle):
+                ex = ex + temp[i + right - 1] - temp[i + left - 1]
+                ex2 = ex2 + temp[i + right - 1] ** 2 - (temp[i + left - 1] ** 2)
+                result[i, j] = ex2 / (n1 - ddof) - ex ** 2 / (n1 * (n1 - ddof))
+
+        if middle != nr:
+            ex += temp[i + right]
+            ex2 += temp[i + right] ** 2
+            n1 += 1
+
+        for i in range(middle, end):
+            ex -= temp[i + left - 1]
+            ex2 -= (temp[i + left - 1] ** 2)
+            n1 -= 1
+            if n1 > ddof:
+                result[i, j] = ex2 / (n1 - ddof) - ex ** 2 / (n1 * (n1 - ddof))
+    return result
+
+def var_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window, int ddof):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
+        ndarray[np.float64_t] temp
+        np.float64_t ex = 0, ex2 = 0, total=0
+        bint not_started = True
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        if not npy_isnan(temp[k]):
+                            ex += temp[k]
+                            ex2 += temp[k] ** 2
+                            n += 1
+                else:
+                    continue
+            else:
+                if not npy_isnan(temp[i + right - 1]):
+                    ex += temp[i + right - 1]
+                    ex2 += temp[i + right - 1] ** 2
+                    n += 1
+            if n > ddof:
+                result[i, j] = ex2 / (n - ddof) - ex ** 2 / (n * (n - ddof))
+
+        for i in range(start, middle):
+            if not npy_isnan(temp[i + right - 1]):
+                ex = ex + temp[i + right - 1]
+                ex2 = ex2 + temp[i + right - 1] ** 2
+                n += 1
+
+            if not npy_isnan(temp[i + left - 1]):
+                ex = ex - temp[i + left - 1]
+                ex2 = ex2 - temp[i + left - 1] ** 2
+                n -= 1
+            if n > ddof:
+                result[i, j] = ex2 / (n - ddof) - ex ** 2 / (n * (n - ddof))
+
+        if middle != nr:
+            if not npy_isnan(temp[i + right]):
+                ex += temp[i + right]
+                ex2 += temp[i + right] ** 2
+                n += 1
+
+        for i in range(middle, end):
+            if not npy_isnan(temp[i + left - 1]):
+                ex -= temp[i + left - 1]
+                ex2 -= (temp[i + left - 1] ** 2)
+                n -= 1
+            if n > ddof:
+                result[i, j] = ex2 / (n - ddof) - ex ** 2 / (n * (n - ddof))
+    return result
+
+def var_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window, int ddof):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
+        ndarray[np.uint8_t, cast=True] temp
+        np.float64_t ex = 0, ex2 = 0, total=0
+        bint not_started = True
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        ex += temp[k]
+                        ex2 += temp[k] ** 2
+                        n += 1
+                else:
+                    continue
+            else:
+                n += 1
+                ex += temp[i + right - 1]
+                ex2 += temp[i + right - 1] ** 2
+            if n > ddof:
+                result[i, j] = ex2 / (n - ddof) - ex ** 2 / (n * (n - ddof))
+
+        if n1 > ddof:
+            for i in range(start, middle):
+                ex = ex + temp[i + right - 1] - temp[i + left - 1]
+                ex2 = ex2 + temp[i + right - 1] ** 2 - (temp[i + left - 1] ** 2)
+                result[i, j] = ex2 / (n1 - ddof) - ex ** 2 / (n1 * (n1 - ddof))
+
+        if middle != nr:
+            ex += temp[i + right]
+            ex2 += temp[i + right] ** 2
+            n1 += 1
+
+        for i in range(middle, end):
+            ex -= temp[i + left - 1]
+            ex2 -= (temp[i + left - 1] ** 2)
+            n1 -= 1
+            if n1 > ddof:
+                result[i, j] = ex2 / (n1 - ddof) - ex ** 2 / (n1 * (n1 - ddof))
+    return result
+
+
+def std_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window, int ddof):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
+        ndarray[np.int64_t] temp
+        np.float64_t ex = 0, ex2 = 0, total=0
+        bint not_started = True
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        ex += temp[k]
+                        ex2 += temp[k] ** 2
+                        n += 1
+                else:
+                    continue
+            else:
+                n += 1
+                ex += temp[i + right - 1]
+                ex2 += temp[i + right - 1] ** 2
+            if n > ddof:
+                result[i, j] = np.sqrt(ex2 / (n - ddof) - ex ** 2 / (n * (n - ddof)))
+
+        if n1 > ddof:
+            for i in range(start, middle):
+                ex = ex + temp[i + right - 1] - temp[i + left - 1]
+                ex2 = ex2 + temp[i + right - 1] ** 2 - (temp[i + left - 1] ** 2)
+                result[i, j] = np.sqrt(ex2 / (n1 - ddof) - ex ** 2 / (n1 * (n1 - ddof)))
+
+        if middle != nr:
+            ex += temp[i + right]
+            ex2 += temp[i + right] ** 2
+            n1 += 1
+
+        for i in range(middle, end):
+            ex -= temp[i + left - 1]
+            ex2 -= (temp[i + left - 1] ** 2)
+            n1 -= 1
+            if n1 > ddof:
+                result[i, j] = np.sqrt(ex2 / (n1 - ddof) - ex ** 2 / (n1 * (n1 - ddof)))
+    return result
+
+def std_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window, int ddof):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
+        ndarray[np.float64_t] temp
+        np.float64_t ex = 0, ex2 = 0, total=0
+        bint not_started = True
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        if not npy_isnan(temp[k]):
+                            ex += temp[k]
+                            ex2 += temp[k] ** 2
+                            n += 1
+                else:
+                    continue
+            else:
+                if not npy_isnan(temp[i + right - 1]):
+                    ex += temp[i + right - 1]
+                    ex2 += temp[i + right - 1] ** 2
+                    n += 1
+            if n > ddof:
+                result[i, j] = np.sqrt(ex2 / (n - ddof) - ex ** 2 / (n * (n - ddof)))
+
+        for i in range(start, middle):
+            if not npy_isnan(temp[i + right - 1]):
+                ex = ex + temp[i + right - 1]
+                ex2 = ex2 + temp[i + right - 1] ** 2
+                n += 1
+
+            if not npy_isnan(temp[i + left - 1]):
+                ex = ex - temp[i + left - 1]
+                ex2 = ex2 - temp[i + left - 1] ** 2
+                n -= 1
+            if n > ddof:
+                result[i, j] = np.sqrt(ex2 / (n - ddof) - ex ** 2 / (n * (n - ddof)))
+
+        if middle != nr:
+            if not npy_isnan(temp[i + right]):
+                ex += temp[i + right]
+                ex2 += temp[i + right] ** 2
+                n += 1
+
+        for i in range(middle, end):
+            if not npy_isnan(temp[i + left - 1]):
+                ex -= temp[i + left - 1]
+                ex2 -= (temp[i + left - 1] ** 2)
+                n -= 1
+            if n > ddof:
+                result[i, j] = np.sqrt(ex2 / (n - ddof) - ex ** 2 / (n * (n - ddof)))
+    return result
+
+def std_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window, int ddof):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
+        ndarray[np.uint8_t, cast=True] temp
+        np.float64_t ex = 0, ex2 = 0, total=0
+        bint not_started = True
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    n = 0
+                    for k in range(max(0, i + left), i + right):
+                        ex += temp[k]
+                        ex2 += temp[k] ** 2
+                        n += 1
+                else:
+                    continue
+            else:
+                n += 1
+                ex += temp[i + right - 1]
+                ex2 += temp[i + right - 1] ** 2
+            if n > ddof:
+                result[i, j] = np.sqrt(ex2 / (n - ddof) - ex ** 2 / (n * (n - ddof)))
+
+        if n1 > ddof:
+            for i in range(start, middle):
+                ex = ex + temp[i + right - 1] - temp[i + left - 1]
+                ex2 = ex2 + temp[i + right - 1] ** 2 - (temp[i + left - 1] ** 2)
+                result[i, j] = np.sqrt(ex2 / (n1 - ddof) - ex ** 2 / (n1 * (n1 - ddof)))
+
+        if middle != nr:
+            ex += temp[i + right]
+            ex2 += temp[i + right] ** 2
+            n1 += 1
+
+        for i in range(middle, end):
+            ex -= temp[i + left - 1]
+            ex2 -= (temp[i + left - 1] ** 2)
+            n1 -= 1
+            if n1 > ddof:
+                result[i, j] = np.sqrt(ex2 / (n1 - ddof) - ex ** 2 / (n1 * (n1 - ddof)))
+    return result
+
+def nunique_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.int64_t] temp
+        bint not_started = True
+        d = defaultdict(int)
+
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        d[temp[k]] += 1
+                else:
+                    continue
+            else:
+                d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        for i in range(start, middle):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        if middle != nr:
+            d[temp[i + right]] += 1
+
+        for i in range(middle, end):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            result[i, j] = len(d)
+
+    return result
+
+def nunique_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.float64_t] temp
+        bint not_started = True
+        d = defaultdict(int)
+
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        if npy_isnan(temp[k]):
+                            d[nan] += 1
+                        else:
+                            d[temp[k]] += 1
+                else:
+                    continue
+            else:
+                if npy_isnan(temp[i + right - 1]):
+                    d[nan] += 1
+                else:
+                    d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        for i in range(start, middle):
+            if npy_isnan(temp[i + left - 1]):
+                d[nan] -= 1
+                if d[nan] == 0:
+                    d.pop(nan)
+            else:
+                d[temp[i + left - 1]] -= 1
+                if d[temp[i + left - 1]] == 0:
+                    d.pop(temp[i + left - 1])
+
+            if npy_isnan(temp[i + right - 1]):
+                d[nan] += 1
+            else:
+                d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        if middle != nr:
+            if npy_isnan(temp[i + right]):
+                d[nan] += 1
+            else:
+                d[temp[i + right]] += 1
+
+        for i in range(middle, end):
+            if npy_isnan(temp[i + left - 1]):
+                d[nan] -= 1
+                if d[nan] == 0:
+                    d.pop(nan)
+            else:
+                d[temp[i + left - 1]] -= 1
+                if d[temp[i + left - 1]] == 0:
+                    d.pop(temp[i + left - 1])
+
+            result[i, j] = len(d)
+
+    return result
+
+def nunique_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.int64_t] temp
+        bint not_started = True
+        d = defaultdict(int)
+
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        d[temp[k]] += 1
+                else:
+                    continue
+            else:
+                d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        for i in range(start, middle):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        if middle != nr:
+            d[temp[i + right]] += 1
+
+        for i in range(middle, end):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            result[i, j] = len(d)
+
+    return result
+
+def nunique_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[object] temp
+        bint not_started = True
+        d = defaultdict(int)
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        d[temp[k]] += 1
+                else:
+                    continue
+            else:
+                d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        for i in range(start, middle):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        if middle != nr:
+            d[temp[i + right]] += 1
+
+        for i in range(middle, end):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            result[i, j] = len(d)
+
+    return result
+
+def mode_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, ct2=0, prev_ct=0, cur_ct=0
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.int64_t] temp
+        bint not_started = True
+        d = defaultdict(int)
+        np.int64_t val
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        d[temp[k]] += 1
+                        if d[temp[k]] > ct:
+                            val = temp[k]
+                            ct = d[temp[k]]
+                else:
+                    continue
+            else:
+                d[temp[i + right - 1]] += 1
+                if d[temp[i + right - 1]] > ct:
+                    val = temp[i + right - 1]
+                    ct = d[temp[i + right - 1]]
+
+            result[i, j] = val
+
+        for i in range(start, middle):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            d[temp[i + right - 1]] += 1
+
+            ct = d.get(val, 0)
+            if ct == prev_ct:
+                if d[temp[i + right - 1]] > ct:
+                    val = temp[i + right - 1]
+                    ct += 1
+            elif ct < prev_ct:
+                ct = 0
+                for val2, ct2 in d.items():
+                    if ct2 > ct:
+                        ct = ct2
+                        val = val2
+
+            result[i, j] = val
+            prev_ct = ct
+
+        if middle != nr:
+            d[temp[i + right]] += 1
+
+        for i in range(middle, end):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+
+            if val in d:
+                ct = d[val]
+            else:
+                ct = 0
+
+            for val2, ct2 in d.items():
+                if ct2 > ct:
+                    val = val2
+                    ct = ct2
+
+            result[i, j] = val
+
+    return result
+
+def mode_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.float64_t] temp
+        bint not_started = True
+        d = defaultdict(int)
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        if npy_isnan(temp[k]):
+                            d[nan] += 1
+                        else:
+                            d[temp[k]] += 1
+                else:
+                    continue
+            else:
+                if npy_isnan(temp[i + right - 1]):
+                    d[nan] += 1
+                else:
+                    d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        for i in range(start, middle):
+            if npy_isnan(temp[i + left - 1]):
+                d[nan] -= 1
+                if d[nan] == 0:
+                    d.pop(nan)
+            else:
+                d[temp[i + left - 1]] -= 1
+                if d[temp[i + left - 1]] == 0:
+                    d.pop(temp[i + left - 1])
+
+            if npy_isnan(temp[i + right - 1]):
+                d[nan] += 1
+            else:
+                d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        if middle != nr:
+            if npy_isnan(temp[i + right]):
+                d[nan] += 1
+            else:
+                d[temp[i + right]] += 1
+
+        for i in range(middle, end):
+            if npy_isnan(temp[i + left - 1]):
+                d[nan] -= 1
+                if d[nan] == 0:
+                    d.pop(nan)
+            else:
+                d[temp[i + left - 1]] -= 1
+                if d[temp[i + left - 1]] == 0:
+                    d.pop(temp[i + left - 1])
+
+            result[i, j] = len(d)
+
+    return result
+
+def mode_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.int64_t] temp
+        bint not_started = True
+        d = defaultdict(int)
+
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        d[temp[k]] += 1
+                else:
+                    continue
+            else:
+                d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        for i in range(start, middle):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        if middle != nr:
+            d[temp[i + right]] += 1
+
+        for i in range(middle, end):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            result[i, j] = len(d)
+
+    return result
+
+def mode_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[object] temp
+        bint not_started = True
+        d = defaultdict(int)
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+
+        j_act = locs[j]
+        temp = a[:, j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        d[temp[k]] += 1
+                else:
+                    continue
+            else:
+                d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        for i in range(start, middle):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            d[temp[i + right - 1]] += 1
+            result[i, j] = len(d)
+
+        if middle != nr:
+            d[temp[i + right]] += 1
+
+        for i in range(middle, end):
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            result[i, j] = len(d)
 
     return result

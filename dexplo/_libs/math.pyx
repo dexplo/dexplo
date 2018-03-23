@@ -1257,6 +1257,28 @@ def median_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     else:
         return bn.nanmedian(a, axis=1)
 
+def median_int_1d(ndarray[np.int64_t] a):
+    cdef:
+        Py_ssize_t i, n = a.shape[0]
+        np.float64_t first, second
+        np.float64_t result
+
+    if n % 2 == 1:
+        result = quick_select_int2(a, n, n // 2)
+    else:
+        first = quick_select_int2(a, n, n // 2 - 1)
+        second = quick_select_int2(a, n, n // 2)
+        result = (first + second) / 2
+    return result
+
+def median_bool_1d(ndarray[np.uint8_t, cast=True] a):
+    return median_int_1d(a.astype('int64'))
+
+def median_float_1d(ndarray[np.float64_t] a, hasnans):
+    if hasnans.any():
+        return bn.nanmedian(a)
+    return bn.median(a)
+
 # def median_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
 #     cdef:
 #         Py_ssize_t i, nr = a.shape[0], nc = a.shape[1]
