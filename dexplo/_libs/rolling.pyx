@@ -2126,6 +2126,7 @@ def mode_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
                     ct = d[temp[i + right - 1]]
 
             result[i, j] = val
+            prev_ct = ct
 
         for i in range(start, middle):
             d[temp[i + left - 1]] -= 1
@@ -2139,11 +2140,15 @@ def mode_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
                     val = temp[i + right - 1]
                     ct += 1
             elif ct < prev_ct:
-                ct = 0
-                for val2, ct2 in d.items():
-                    if ct2 > ct:
-                        ct = ct2
-                        val = val2
+                if ct == 0 and d[temp[i + right - 1]] == 1:
+                    val = temp[i + left]
+                    ct = d[val]
+                else:
+                    ct = 0
+                    for val2, ct2 in d.items():
+                        if ct2 > ct:
+                            ct = ct2
+                            val = val2
 
             result[i, j] = val
             prev_ct = ct
@@ -2172,13 +2177,15 @@ def mode_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
 
 def mode_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
+
     cdef:
-        Py_ssize_t i=0, j, k, j_act, start, middle, end
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, ct2=0, prev_ct=0, cur_ct=0
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[np.float64_t, ndim=2] result = np.full((nr, nc_actual), nan, dtype='float64')
         ndarray[np.float64_t] temp
         bint not_started = True
         d = defaultdict(int)
+        np.float64_t val
 
     if left < 0:
         start = -left + 1
@@ -2197,70 +2204,84 @@ def mode_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
         j_act = locs[j]
         temp = a[:, j_act]
 
+        # must enter first for loop before subtraction can begin
         for i in range(start):
             if not_started:
                 if i + right > 0:
                     not_started = False
                     for k in range(max(0, i + left), i + right):
-                        if npy_isnan(temp[k]):
-                            d[nan] += 1
-                        else:
-                            d[temp[k]] += 1
+                        d[temp[k]] += 1
+                        if d[temp[k]] > ct:
+                            val = temp[k]
+                            ct = d[temp[k]]
                 else:
                     continue
             else:
-                if npy_isnan(temp[i + right - 1]):
-                    d[nan] += 1
-                else:
-                    d[temp[i + right - 1]] += 1
-            result[i, j] = len(d)
+                d[temp[i + right - 1]] += 1
+                if d[temp[i + right - 1]] > ct:
+                    val = temp[i + right - 1]
+                    ct = d[temp[i + right - 1]]
+
+            result[i, j] = val
+            prev_ct = ct
 
         for i in range(start, middle):
-            if npy_isnan(temp[i + left - 1]):
-                d[nan] -= 1
-                if d[nan] == 0:
-                    d.pop(nan)
-            else:
-                d[temp[i + left - 1]] -= 1
-                if d[temp[i + left - 1]] == 0:
-                    d.pop(temp[i + left - 1])
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
+            d[temp[i + right - 1]] += 1
 
-            if npy_isnan(temp[i + right - 1]):
-                d[nan] += 1
-            else:
-                d[temp[i + right - 1]] += 1
-            result[i, j] = len(d)
+            ct = d.get(val, 0)
+            if ct == prev_ct:
+                if d[temp[i + right - 1]] > ct:
+                    val = temp[i + right - 1]
+                    ct += 1
+            elif ct < prev_ct:
+                if ct == 0 and d[temp[i + right - 1]] == 1:
+                    val = temp[i + left]
+                    ct = d[val]
+                else:
+                    ct = 0
+                    for val2, ct2 in d.items():
+                        if ct2 > ct:
+                            ct = ct2
+                            val = val2
+
+            result[i, j] = val
+            prev_ct = ct
 
         if middle != nr:
-            if npy_isnan(temp[i + right]):
-                d[nan] += 1
-            else:
-                d[temp[i + right]] += 1
+            d[temp[i + right]] += 1
 
         for i in range(middle, end):
-            if npy_isnan(temp[i + left - 1]):
-                d[nan] -= 1
-                if d[nan] == 0:
-                    d.pop(nan)
-            else:
-                d[temp[i + left - 1]] -= 1
-                if d[temp[i + left - 1]] == 0:
-                    d.pop(temp[i + left - 1])
+            d[temp[i + left - 1]] -= 1
+            if d[temp[i + left - 1]] == 0:
+                d.pop(temp[i + left - 1])
 
-            result[i, j] = len(d)
+            if val in d:
+                ct = d[val]
+            else:
+                ct = 0
+
+            for val2, ct2 in d.items():
+                if ct2 > ct:
+                    val = val2
+                    ct = ct2
+
+            result[i, j] = val
 
     return result
 
 def mode_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, ct2=0, prev_ct=0, cur_ct=0
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
-        ndarray[np.int64_t] temp
+        ndarray[np.uint8_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='bool')
+        ndarray[np.uint8_t] temp
         bint not_started = True
         d = defaultdict(int)
-
+        bint val
 
     if left < 0:
         start = -left + 1
@@ -2286,18 +2307,44 @@ def mode_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs
                     not_started = False
                     for k in range(max(0, i + left), i + right):
                         d[temp[k]] += 1
+                        if d[temp[k]] > ct:
+                            val = temp[k]
+                            ct = d[temp[k]]
                 else:
                     continue
             else:
                 d[temp[i + right - 1]] += 1
-            result[i, j] = len(d)
+                if d[temp[i + right - 1]] > ct:
+                    val = temp[i + right - 1]
+                    ct = d[temp[i + right - 1]]
+
+            result[i, j] = val
+            prev_ct = ct
 
         for i in range(start, middle):
             d[temp[i + left - 1]] -= 1
             if d[temp[i + left - 1]] == 0:
                 d.pop(temp[i + left - 1])
             d[temp[i + right - 1]] += 1
-            result[i, j] = len(d)
+
+            ct = d.get(val, 0)
+            if ct == prev_ct:
+                if d[temp[i + right - 1]] > ct:
+                    val = temp[i + right - 1]
+                    ct += 1
+            elif ct < prev_ct:
+                if ct == 0 and d[temp[i + right - 1]] == 1:
+                    val = temp[i + left]
+                    ct = d[val]
+                else:
+                    ct = 0
+                    for val2, ct2 in d.items():
+                        if ct2 > ct:
+                            ct = ct2
+                            val = val2
+
+            result[i, j] = val
+            prev_ct = ct
 
         if middle != nr:
             d[temp[i + right]] += 1
@@ -2306,19 +2353,31 @@ def mode_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs
             d[temp[i + left - 1]] -= 1
             if d[temp[i + left - 1]] == 0:
                 d.pop(temp[i + left - 1])
-            result[i, j] = len(d)
+
+            if val in d:
+                ct = d[val]
+            else:
+                ct = 0
+
+            for val2, ct2 in d.items():
+                if ct2 > ct:
+                    val = val2
+                    ct = ct2
+
+            result[i, j] = val
 
     return result
 
 def mode_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, ct2=0, prev_ct=0, cur_ct=0
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray[object, ndim=2] result = np.empty((nr, nc_actual), dtype='O')
         ndarray[object] temp
         bint not_started = True
         d = defaultdict(int)
+        object val
 
     if left < 0:
         start = -left + 1
@@ -2344,18 +2403,44 @@ def mode_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
                     not_started = False
                     for k in range(max(0, i + left), i + right):
                         d[temp[k]] += 1
+                        if d[temp[k]] > ct:
+                            val = temp[k]
+                            ct = d[temp[k]]
                 else:
                     continue
             else:
                 d[temp[i + right - 1]] += 1
-            result[i, j] = len(d)
+                if d[temp[i + right - 1]] > ct:
+                    val = temp[i + right - 1]
+                    ct = d[temp[i + right - 1]]
+
+            result[i, j] = val
+            prev_ct = ct
 
         for i in range(start, middle):
             d[temp[i + left - 1]] -= 1
             if d[temp[i + left - 1]] == 0:
                 d.pop(temp[i + left - 1])
             d[temp[i + right - 1]] += 1
-            result[i, j] = len(d)
+
+            ct = d.get(val, 0)
+            if ct == prev_ct:
+                if d[temp[i + right - 1]] > ct:
+                    val = temp[i + right - 1]
+                    ct += 1
+            elif ct < prev_ct:
+                if ct == 0 and d[temp[i + right - 1]] == 1:
+                    val = temp[i + left]
+                    ct = d[val]
+                else:
+                    ct = 0
+                    for val2, ct2 in d.items():
+                        if ct2 > ct:
+                            ct = ct2
+                            val = val2
+
+            result[i, j] = val
+            prev_ct = ct
 
         if middle != nr:
             d[temp[i + right]] += 1
@@ -2364,6 +2449,17 @@ def mode_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
             d[temp[i + left - 1]] -= 1
             if d[temp[i + left - 1]] == 0:
                 d.pop(temp[i + left - 1])
-            result[i, j] = len(d)
+
+            if val in d:
+                ct = d[val]
+            else:
+                ct = 0
+
+            for val2, ct2 in d.items():
+                if ct2 > ct:
+                    val = val2
+                    ct = ct2
+
+            result[i, j] = val
 
     return result

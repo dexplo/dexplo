@@ -6,7 +6,6 @@ from numpy import ndarray
 from typing import Union, Dict, List, Tuple, Callable
 from dexplo._libs import groupby as _gb
 import warnings
-import weakref
 
 ColInfoT = Dict[str, utils.Column]
 
@@ -27,11 +26,11 @@ def get_func_kwargs(name):
 class Grouper(object):
 
     def __init__(self, df: DataFrame, columns: List[str]) -> None:
-        self._df = weakref.ref(df)
+        self._df = df
         self._group_labels, self._group_position = self._create_groups(columns)
         self._group_columns = columns
 
-        if len(self._group_position) == self._df().shape[0]:
+        if len(self._group_position) == self._df.shape[0]:
             warnings.warn("Each group contains exactly one row of data. "
                           "Are you sure you are grouping correctly?")
 
@@ -39,14 +38,14 @@ class Grouper(object):
         self._group_dtype_loc: Dict[str, List[int]] = defaultdict(list)
         self._column_info: ColInfoT = {}
         for i, col in enumerate(columns):
-            dtype, loc, _ = self._df()._column_info[col].values  # type: str, int, int
+            dtype, loc, _ = self._df._column_info[col].values  # type: str, int, int
             cur_loc = len(self._group_dtype_loc[dtype])
             self._group_dtype_loc[dtype].append(loc)
             self._column_info[col] = utils.Column(dtype, cur_loc, i)
 
         if len(columns) == 1:
             # since there is just one column, dtype is from the for-loop
-            final_arr = self._df()._data[dtype][:, loc]
+            final_arr = self._df._data[dtype][:, loc]
             if dtype in 'mM':
                 final_arr = final_arr.view('int64')
             dtype = final_arr.dtype.kind
@@ -55,7 +54,7 @@ class Grouper(object):
         elif len(self._group_dtype_loc) == 1 or 'O' not in self._group_dtype_loc:
             arrs = []
             for dtype, locs in self._group_dtype_loc.items():
-                arr = self._df()._data[dtype][:, locs]
+                arr = self._df._data[dtype][:, locs]
                 if dtype in 'mM':
                     arr = arr.view('int64')
                 arrs.append(arr)
@@ -72,9 +71,9 @@ class Grouper(object):
             arrs = []
             for dtype, locs in self._group_dtype_loc.items():
                 if dtype == 'O':
-                    arr_str = self._df()._data['O'][:, locs]
+                    arr_str = self._df._data['O'][:, locs]
                 else:
-                    arr = self._df()._data[dtype][:, locs]
+                    arr = self._df._data[dtype][:, locs]
                     if dtype in 'mM':
                         arr = arr.view('int64')
                     arrs.append(arr)
@@ -100,7 +99,7 @@ class Grouper(object):
         data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         for dtype, locs in self._group_dtype_loc.items():
             ix = np.ix_(self._group_position, locs)
-            arr = self._df()._data[dtype][ix]
+            arr = self._df._data[dtype][ix]
             if arr.ndim == 1:
                 arr = arr[:, np.newaxis]
             data_dict[dtype].append(arr)
@@ -109,7 +108,7 @@ class Grouper(object):
     def _get_group_col_data_all(self) -> Dict[str, List[ndarray]]:
         data_dict: Dict[str, List[ndarray]] = defaultdict(list)
         for dtype, locs in self._group_dtype_loc.items():
-            arr = self._df()._data[dtype][:, locs]
+            arr = self._df._data[dtype][:, locs]
             if arr.ndim == 1:
                 arr = arr[:, np.newaxis]
             data_dict[dtype].append(arr)
@@ -146,7 +145,7 @@ class Grouper(object):
         size = len(self._group_position)
 
         old_dtype_col: Dict[str, List[str]] = defaultdict(list)
-        for col, col_obj in self._df()._column_info.items():
+        for col, col_obj in self._df._column_info.items():
             if col not in self._group_columns:
                 old_dtype_col[col_obj.dtype].append(col)
 
@@ -159,7 +158,7 @@ class Grouper(object):
             new_column_info = {}
             new_columns = []
 
-        for dtype, data in self._df()._data.items():
+        for dtype, data in self._df._data.items():
             if ignore_str and dtype == 'O':
                 continue
             if ignore_date and dtype in 'mM':
@@ -189,7 +188,7 @@ class Grouper(object):
 
             for col in old_dtype_col[dtype]:
                 count_less = 0
-                old_kind, old_loc, old_order = self._df()._column_info[col].values
+                old_kind, old_loc, old_order = self._df._column_info[col].values
                 for k in self._group_dtype_loc.get(dtype, []):
                     count_less += old_loc > k
 
@@ -197,7 +196,7 @@ class Grouper(object):
 
         i = len(new_columns)
         j = 0
-        for col in self._df()._columns:
+        for col in self._df._columns:
             if col not in new_column_info:
                 continue
             if col in self._group_columns and keep_group_cols:
@@ -258,11 +257,11 @@ class Grouper(object):
 
     def first(self) -> DataFrame:
         new_columns = self._group_columns.copy()
-        for col in self._df()._columns:
+        for col in self._df._columns:
             if col in self._group_columns:
                 continue
             new_columns.append(col)
-        return self._df()[self._group_position, new_columns]
+        return self._df[self._group_position, new_columns]
 
     def last(self) -> DataFrame:
         return self._group_agg('last', False)
@@ -280,17 +279,17 @@ class Grouper(object):
         calc_columns: List[str] = []
         calc_dtype_loc: List[Tuple[str, int]] = []
         np_dtype = 'int64'
-        for col in self._df()._columns:
+        for col in self._df._columns:
             if col in self._group_columns:
                 continue
-            dtype, loc, order = self._df()._column_info[col].values
+            dtype, loc, order = self._df._column_info[col].values
             if dtype in 'fib':
                 if dtype == 'f':
                     np_dtype = 'float64'
                 calc_columns.append(col)
                 calc_dtype_loc.append((dtype, loc))
 
-        data = self._df()._values_number_drop(calc_columns, calc_dtype_loc, np_dtype)
+        data = self._df._values_number_drop(calc_columns, calc_dtype_loc, np_dtype)
         dtype_word = utils.convert_kind_to_dtype(data.dtype.kind)
         func = getattr(_gb, name + '_' + dtype_word)
         result = func(self._group_labels, len(self), data, [])
@@ -335,11 +334,11 @@ class Grouper(object):
 
     def head(self, n=5) -> DataFrame:
         row_idx = _gb.head(self._group_labels, len(self), n=n)
-        return self._df()[row_idx, :]
+        return self._df[row_idx, :]
 
     def tail(self, n=5) -> DataFrame:
         row_idx = _gb.tail(self._group_labels, len(self), n=n)
-        return self._df()[row_idx, :]
+        return self._df[row_idx, :]
 
     def cummax(self) -> DataFrame:
         return self._group_agg('cummax', keep_group_cols=False, ignore_date=False)
@@ -390,9 +389,9 @@ class Grouper(object):
             cur_new_order = new_order[name]
             kwargs_list = func_kwargs[name]
 
-            for col in self._df()._columns:
+            for col in self._df._columns:
 
-                dtype, loc, _ = self._df()._column_info[col].values
+                dtype, loc, _ = self._df._column_info[col].values
                 try:
                     idx = agg_cols.index(col)
                 except ValueError:
@@ -404,7 +403,7 @@ class Grouper(object):
                     agg_dtype_order[dtype].append(cur_new_order[idx])
                     agg_dtype_kwargs[dtype].append(kwargs_list[idx])
 
-            for dtype, data in self._df()._data.items():
+            for dtype, data in self._df._data.items():
                 if dtype not in agg_dtype_locs:
                     continue
                 if ignore_str and dtype == 'O':
@@ -487,7 +486,7 @@ class Grouper(object):
             if not isinstance(arg[1], str):
                 raise TypeError('The second element in each tuple must be a column name as a '
                                 'string.')
-            elif arg[1] not in self._df()._column_info:
+            elif arg[1] not in self._df._column_info:
                 raise ValueError(f'`{arg[1]}` is not a column name')
 
             if not isinstance(arg[2], str):
@@ -525,20 +524,20 @@ class Grouper(object):
             raise TypeError('The `func` varialbe must a function or any callable object')
         labels = self._group_labels
         size = len(self._group_position)
-        result = _gb.filter(labels, size, self._df(), func, *args, **kwargs)
+        result = _gb.filter(labels, size, self._df, func, *args, **kwargs)
 
-        new_data = {kind: data[result] for kind, data in self._df()._data.items()}
-        new_col_info = self._df()._copy_column_info()
-        columns = self._df()._columns.copy()
+        new_data = {kind: data[result] for kind, data in self._df._data.items()}
+        new_col_info = self._df._copy_column_info()
+        columns = self._df._columns.copy()
 
-        return self._df()._construct_from_new(new_data, new_col_info, columns)
+        return self._df._construct_from_new(new_data, new_col_info, columns)
 
     def apply(self, func, *args, **kwargs):
         if not isinstance(func, Callable):
             raise TypeError('The `func` variable must be a function or any callable object')
         labels = self._group_labels
         size = len(self._group_position)
-        new_data, new_column_info, new_columns, group_repeats = _gb.apply(labels, size, self._df(), func, *args, **kwargs)
+        new_data, new_column_info, new_columns, group_repeats = _gb.apply(labels, size, self._df, func, *args, **kwargs)
 
         grouped_data_dict = self._get_group_col_data()
         grouped_column_info = self._get_new_column_info()
