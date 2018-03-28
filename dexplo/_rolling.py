@@ -278,7 +278,7 @@ class Roller(object):
             else:
                 new_data[dtype] = np.column_stack((new_data[dtype], *data))
 
-        return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
+        return DataFrame._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     def agg(self, *args):
         func_cols = OrderedDict()

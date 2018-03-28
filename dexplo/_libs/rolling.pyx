@@ -2473,65 +2473,9 @@ def custom_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
     cdef:
         Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, ct_final = right - left
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray result
         ndarray[np.int64_t] temp
         ndarray[np.int64_t] cur_arr = np.empty(ct_final, dtype='int64')
-        np.int64_t total = 0
-        bint not_started = True
-
-    if left < 0:
-        start = -left + 1
-        end = nr
-    else:
-        end = nr - left
-        start = 1
-
-    if right > 0:
-        middle = nr - right
-    else:
-        middle = nr
-
-    for j in range(nc_actual):
-
-        j_act = locs[j]
-        temp = a[:, j_act]
-
-        # must enter first for loop before subtraction can begin
-        for i in range(start):
-            if not_started:
-                if i + right > 0:
-                    not_started = False
-                    for k in range(max(0, i + left), i + right):
-                        total += temp[k]
-                else:
-                    continue
-            else:
-                total += temp[i + right - 1]
-            result[i, j] = total
-
-        for i in range(start, middle):
-            total = total + temp[i + right - 1] - temp[i + left - 1]
-            result[i, j] = total
-
-        if middle != nr:
-            total += temp[i + right]
-
-        for i in range(middle, end):
-            total -= temp[i + left - 1]
-            result[i, j] = total
-
-    return result
-
-def custom_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
-            int left, int right, int min_window, func, col_dict, **kwargs):
-    cdef:
-        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, ct_final = right - left
-        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        # ndarray[np.float64_t, ndim=2] result = np.empty((nr, nc_actual), dtype='float64')
-        ndarray result
-        ndarray[np.float64_t] temp
-        ndarray[np.float64_t] cur_arr = np.empty(ct_final, dtype='float64')
-        np.float64_t total = 0
         bint not_started = True
         bint has_first_result = False
 
@@ -2569,6 +2513,7 @@ def custom_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
             if not has_first_result:
                 first_result = func(cur_arr[:ct], **kwargs)
                 result = determine_first_agg_dtype(first_result, nr, nc_actual, i, j)
+                has_first_result = True
             else:
                 a_result = func(cur_arr[:ct], **kwargs)
                 result = determine_other_agg_type(result, a_result, i, j, **kwargs)
@@ -2584,6 +2529,73 @@ def custom_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
             for k in range(ct_final):
                 cur_arr[k] = temp[i + left + k + 1]
             for i in range(middle, end):
+                a_result = func(cur_arr[ct:], **kwargs)
+                result = determine_other_agg_type(result, a_result, i, j, **kwargs)
+                ct += 1
+    return result
+
+def custom_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.int64_t] locs,
+            int left, int right, int min_window, func, col_dict, **kwargs):
+    cdef:
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, ct_final = right - left
+        Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        ndarray result
+        ndarray[np.float64_t] temp
+        ndarray[np.float64_t] cur_arr = np.empty(ct_final, dtype='float64')
+        bint not_started = True
+        bint has_first_result = False
+
+    if left < 0:
+        start = -left + 1
+        end = nr
+    else:
+        end = nr - left
+        start = 1
+
+    if right > 0:
+        middle = nr - right
+    else:
+        middle = nr
+
+    for j in range(nc_actual):
+
+        j_act = locs[j]
+        temp = a[:, j_act]
+        col_name = col_dict[j_act]
+
+        # must enter first for loop before subtraction can begin
+        for i in range(start):
+            if not_started:
+                if i + right > 0:
+                    not_started = False
+                    for k in range(max(0, i + left), i + right):
+                        cur_arr[ct] = temp[k]
+                        ct += 1
+                else:
+                    continue
+            else:
+                cur_arr[ct] = temp[i + right - 1]
+                ct += 1
+            if not has_first_result:
+                first_result = func(cur_arr[:ct], **kwargs)
+                result = determine_first_agg_dtype(first_result, nr, nc_actual, i, j)
+                has_first_result = True
+            else:
+                a_result = func(cur_arr[:ct], **kwargs)
+                result = determine_other_agg_type(result, a_result, i, j, **kwargs)
+
+        for i in range(start, middle):
+            for k in range(ct_final):
+                cur_arr[k] = temp[i + left + k]
+            a_result = func(cur_arr, **kwargs)
+            result = determine_other_agg_type(result, a_result, i, j, **kwargs)
+
+        if middle != nr:
+            ct = 0
+            for k in range(ct_final):
+                cur_arr[k] = temp[i + left + k + 1]
+            for i in range(middle, end):
+                a_result = func(cur_arr[ct:], **kwargs)
                 result = determine_other_agg_type(result, a_result, i, j, **kwargs)
                 ct += 1
     return result
@@ -2593,11 +2605,11 @@ def custom_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] lo
     cdef:
         Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, ct_final = right - left
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        ndarray[np.int64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='int64')
+        ndarray result
         ndarray[np.uint8_t, cast=True] temp
         ndarray[np.uint8_t, cast=True] cur_arr = np.empty(ct_final, dtype='bool')
-        np.int64_t total = 0
         bint not_started = True
+        bint has_first_result = False
 
     if left < 0:
         start = -left + 1
@@ -2615,6 +2627,7 @@ def custom_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] lo
 
         j_act = locs[j]
         temp = a[:, j_act]
+        col_name = col_dict[j_act]
 
         # must enter first for loop before subtraction can begin
         for i in range(start):
@@ -2629,22 +2642,28 @@ def custom_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] lo
             else:
                 cur_arr[ct] = temp[i + right - 1]
                 ct += 1
-            result[i, j] = func(cur_arr[:ct], **kwargs)
+            if not has_first_result:
+                first_result = func(cur_arr[:ct], **kwargs)
+                result = determine_first_agg_dtype(first_result, nr, nc_actual, i, j)
+                has_first_result = True
+            else:
+                a_result = func(cur_arr[:ct], **kwargs)
+                result = determine_other_agg_type(result, a_result, i, j, **kwargs)
 
         for i in range(start, middle):
             for k in range(ct_final):
                 cur_arr[k] = temp[i + left + k]
-            result[i, j] = func(cur_arr, **kwargs)
+            a_result = func(cur_arr, **kwargs)
+            result = determine_other_agg_type(result, a_result, i, j, **kwargs)
 
         if middle != nr:
             ct = 0
             for k in range(ct_final):
                 cur_arr[k] = temp[i + left + k + 1]
             for i in range(middle, end):
-                # result[i, j] = help_custom_agg_first(cur_arr[ct:], col_dict, func, nr, nc_actual,
-                #                                      **kwargs)
+                a_result = func(cur_arr[ct:], **kwargs)
+                result = determine_other_agg_type(result, a_result, i, j, **kwargs)
                 ct += 1
-
     return result
 
 def custom_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
@@ -2652,10 +2671,11 @@ def custom_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
     cdef:
         Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, ct_final = right - left
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
-        ndarray[object, ndim=2] result = np.empty((nr, nc_actual), dtype='object')
+        ndarray result
         ndarray[object] temp
-        ndarray[object] cur_arr = np.empty(ct_final, dtype='object')
+        ndarray[object] cur_arr = np.empty(ct_final, dtype='O')
         bint not_started = True
+        bint has_first_result = False
 
     if left < 0:
         start = -left + 1
@@ -2673,6 +2693,7 @@ def custom_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
 
         j_act = locs[j]
         temp = a[:, j_act]
+        col_name = col_dict[j_act]
 
         # must enter first for loop before subtraction can begin
         for i in range(start):
@@ -2687,21 +2708,28 @@ def custom_str(ndarray[object, ndim=2] a, ndarray[np.int64_t] locs,
             else:
                 cur_arr[ct] = temp[i + right - 1]
                 ct += 1
-            result[i, j] = func(cur_arr[:ct], **kwargs)
+            if not has_first_result:
+                first_result = func(cur_arr[:ct], **kwargs)
+                result = determine_first_agg_dtype(first_result, nr, nc_actual, i, j)
+                has_first_result = True
+            else:
+                a_result = func(cur_arr[:ct], **kwargs)
+                result = determine_other_agg_type(result, a_result, i, j, **kwargs)
 
         for i in range(start, middle):
             for k in range(ct_final):
                 cur_arr[k] = temp[i + left + k]
-            result[i, j] = func(cur_arr, **kwargs)
+            a_result = func(cur_arr, **kwargs)
+            result = determine_other_agg_type(result, a_result, i, j, **kwargs)
 
         if middle != nr:
             ct = 0
             for k in range(ct_final):
                 cur_arr[k] = temp[i + left + k + 1]
             for i in range(middle, end):
-                result[i, j] = func(cur_arr[ct:], **kwargs)
+                a_result = func(cur_arr[ct:], **kwargs)
+                result = determine_other_agg_type(result, a_result, i, j, **kwargs)
                 ct += 1
-
     return result
 
 def determine_first_agg_dtype(first_result, nr, nc, i, j):
