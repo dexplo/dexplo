@@ -122,8 +122,6 @@ class DataFrame(object):
         else:
             raise TypeError('data parameter must be either a dict of arrays or an array')
 
-        self._add_accessors()
-
     @property
     def columns(self) -> List[str]:
         """
@@ -320,11 +318,6 @@ class DataFrame(object):
             self._column_info[col] = utils.Column(kind, loc, i)
 
         self._data = self._concat_arrays(data_dict)
-
-    def _add_accessors(self):
-        self.str = StringClass(self)
-        self.dt = DateTimeClass(self)
-        self.td = TimeDeltaClass(self)
 
     def _concat_arrays(self, data_dict: Dict[str, List[ndarray]]) -> Dict[str, ndarray]:
         """
@@ -806,7 +799,7 @@ class DataFrame(object):
         self._validate_column_name(col_selection)
         dtype, loc, _ = self._column_info[col_selection].values
         new_data = {dtype: self._data[dtype][:, [loc]]}
-        new_columns = [col_selection]
+        new_columns = np.array([col_selection], dtype='O')
         new_column_info = {col_selection: utils.Column(dtype, 0, 0)}
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
@@ -834,7 +827,7 @@ class DataFrame(object):
 
             new_data[dtype] = np.asfortranarray(arr)
 
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        return self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     @overload
     def __getitem__(self, value: Tuple[List, slice]) -> 'DataFrame':
@@ -1017,7 +1010,7 @@ class DataFrame(object):
                 new_column_info[col] = utils.Column(dtype, loc, order)
                 new_columns.append(col)
                 order += 1
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        return self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     @classmethod
     def _construct_from_new(cls: Type[object], data: Dict[str, ndarray],
@@ -1025,9 +1018,8 @@ class DataFrame(object):
         df_new: 'DataFrame' = super().__new__(cls)
         df_new._column_info = column_info
         df_new._data = data
-        df_new._columns = np.asarray(columns, dtype='O')
+        df_new._columns = columns
         df_new._hasnans = {}
-        df_new._add_accessors()
         return df_new
 
     def _do_eval(self, op_string: str, other: Any) -> Tuple[Dict[str, List[ndarray]], ColInfoT]:
@@ -1358,7 +1350,7 @@ class DataFrame(object):
                 new_columns = ['a' + str(i) for i in range(other.shape[1])]
                 new_column_info = {col: utils.Column(dtype, i, i) for i, col in
                                    enumerate(new_columns)}
-                other = self._construct_from_new(new_data, new_column_info, new_columns)
+                other = self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
             return eval(f"{'self'} .{op_string}({'other'})")
         else:
             raise TypeError('other must be int, float, str, bool, timedelta, '
@@ -1488,7 +1480,7 @@ class DataFrame(object):
         new_data: Dict[str, ndarray] = {'O': data}
         new_column_info: ColInfoT = {'Column Name': utils.Column('O', 0, 0),
                                      'Data Type': utils.Column('O', 1, 1)}
-        return self._construct_from_new(new_data, new_column_info, columns)
+        return self._construct_from_new(new_data, new_column_info, np.array(columns, dtype='O'))
 
     def __and__(self, other: Any) -> 'DataFrame':
         return self._op_logical(other, '__and__')
@@ -2109,7 +2101,7 @@ class DataFrame(object):
 
             for i, col in enumerate(new_columns):
                 new_column_info[col] = utils.Column(new_kind, i, i)
-            return self._construct_from_new(new_data, new_column_info, new_columns)
+            return self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     def sum(self, axis: str = 'rows') -> 'DataFrame':
         return self._stat_funcs('sum', axis)
@@ -2430,7 +2422,7 @@ class DataFrame(object):
         else:
             raise NotImplementedError('non-numeric summary not available yet')
 
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        return self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     def dropna(self, axis: str = 'rows', how: str = 'any', thresh: Union[int, float] = None,
                subset: List[IntStr] = None) -> 'DataFrame':
@@ -2529,7 +2521,7 @@ class DataFrame(object):
             new_columns[i + 1] = col
             i += 1
         new_data['O'] = np.asfortranarray(new_columns[1:])[:, np.newaxis]
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        return self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     def corr(self) -> 'DataFrame':
         """
@@ -2587,7 +2579,7 @@ class DataFrame(object):
             new_columns[i + 1] = col
             i += 1
         new_data['O'] = np.asfortranarray(new_columns[1:])[:, np.newaxis]
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        return self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     def unique(self, subset: Union[str, List[str], None] = None, only_subset: bool = False,
                keep: str = 'first') -> ndarray:
@@ -3389,7 +3381,7 @@ class DataFrame(object):
             new_column_info = {col: utils.Column(unique_kind, 0, 0),
                                'count': utils.Column(counts_kind, 0, 1)}
 
-        new_columns = [col, 'count']
+        new_columns = np.array([col, 'count'], dtype='O')
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
@@ -3512,7 +3504,7 @@ class DataFrame(object):
         for dtype, arr in self._data.items():
             new_data[dtype] = arr.copy('F')
 
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        return self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     def _drop_just_cols(self, columns):
         if isinstance(columns, (int, str, np.integer)):
@@ -3564,7 +3556,7 @@ class DataFrame(object):
                 keep[locs] = False
                 new_data[dtype] = arr[:, keep]
 
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        return self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     def _drop_just_rows(self, rows):
         if isinstance(rows, int):
@@ -3635,7 +3627,7 @@ class DataFrame(object):
         for dtype, locs in data_dict.items():
             new_data[dtype] = self._data[dtype][np.ix_(new_rows, locs)]
 
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        return self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     def _nest(self, n: int, column: str, keep: str, name: str) -> 'DataFrame':
         if not isinstance(n, (int, np.integer)):
@@ -3859,7 +3851,7 @@ class DataFrame(object):
                 new_columns.append(col_new)
 
             new_data = utils.concat_stat_arrays(data_dict)
-            return self._construct_from_new(new_data, new_column_info, new_columns)
+            return self._construct_from_new(new_data, new_column_info, np.asarray(new_columns, dtype='O'))
 
     def isin(self, values: Union[
         Scalar, List[Scalar], Dict[str, Union[Scalar, List[Scalar]]]]) -> 'DataFrame':
@@ -4143,3 +4135,15 @@ class DataFrame(object):
 
     def _ipython_key_completions_(self):
         return self._columns.tolist()
+
+    @property
+    def str(self):
+        return StringClass(self)
+
+    @property
+    def dt(self):
+        return DateTimeClass(self)
+
+    @property
+    def td(self):
+        return TimeDeltaClass(self)

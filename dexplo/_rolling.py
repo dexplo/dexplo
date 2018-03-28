@@ -3,19 +3,40 @@ import dexplo._utils as utils
 from collections import defaultdict, OrderedDict
 import numpy as np
 from numpy import ndarray
-from typing import Union, Dict, List, Tuple, Callable
+from typing import Union, Dict, List, Tuple, Callable, Set
 from dexplo._libs import rolling as _roll
-import warnings
-import weakref
 
 ColInfoT = Dict[str, utils.Column]
 
+def get_func_kwargs(name):
+    if name in {'sum', 'prod', 'mean', 'median', 'size'}:
+        return {}
+    elif name in {'min', 'max'}:
+        return dict(ignore_str=False, ignore_date=False)
+    elif name in {'count'}:
+        return dict(ignore_str=False, ignore_date=False, keep_date_type=False)
+    elif name in {'first', 'last'}:
+        return dict(ignore_str=False)
+    elif name in {'any', 'all', 'nunique'}:
+        return dict(ignore_str=False, ignore_date=False, keep_date_type=False)
+    elif name in {'var'}:
+        return dict(add_positions=True)
+
+def _get_kept_col_data(self) -> Dict[str, List[ndarray]]:
+    data_dict: Dict[str, List[ndarray]] = defaultdict(list)
+    for dtype, locs in self._group_dtype_loc.items():
+        ix = np.ix_(self._group_position, locs)
+        arr = self._df._data[dtype][ix]
+        if arr.ndim == 1:
+            arr = arr[:, np.newaxis]
+        data_dict[dtype].append(arr)
+    return data_dict
 
 class Roller(object):
 
     def __init__(self, df: DataFrame, left: int, right: int, min_window: int,
                  kept_columns: Union[bool, str, List[str]]) -> None:
-        self._df = weakref.ref(df)
+        self._df = df
         self._left = left
         self._right = right
         self._min_window = min_window
@@ -33,16 +54,16 @@ class Roller(object):
         if kept_columns is False:
             return []
         elif kept_columns is True:
-            return self._df().columns
+            return self._df.columns
         else:
             if isinstance(kept_columns, str):
                 kept_columns = [kept_columns]
-            self._df()._validate_column_name_list(kept_columns)
+            self._df._validate_column_name_list(kept_columns)
             return kept_columns
 
     def _roll_generic(self, name, columns, **kwargs):
         if columns is None:
-            columns = self._df().columns
+            columns = self._df.columns
         elif isinstance(columns, str):
             columns = [columns]
         elif not isinstance(columns, list):
@@ -52,7 +73,7 @@ class Roller(object):
 
         dtype_locs = defaultdict(list)
         dtype_cols = defaultdict(list)
-        col_info = self._df()._column_info
+        col_info = self._df._column_info
         for i, col in enumerate(columns):
             try:
                 dtype, loc, order = col_info[col].values
@@ -75,7 +96,7 @@ class Roller(object):
         data_dict = defaultdict(list)
         for dtype, locs in dtype_locs.items():
             func_name = name + '_' + utils.convert_kind_to_dtype_generic(dtype)
-            data = self._df()._data[dtype]
+            data = self._df._data[dtype]
             result = getattr(_roll, func_name)(data, np.array(locs), self._left, self._right,
                                                self._min_window, **kwargs)
             result_dtype = result.dtype.kind
@@ -92,7 +113,7 @@ class Roller(object):
 
         new_data = {}
         for dtype, locs in kept_dtype_loc.items():
-            data = self._df()._data[dtype][:, locs]
+            data = self._df._data[dtype][:, locs]
             if data.ndim == 1:
                 data = data[:, np.newaxis]
             new_data[dtype] = data
@@ -139,132 +160,188 @@ class Roller(object):
     def nunique(self, columns) -> DataFrame:
         return self._roll_generic('nunique', columns)
 
-    # def cov(self) -> DataFrame:
-    #     return self._cov_corr('cov')
-    #
-    # def corr(self) -> DataFrame:
-    #     return self._cov_corr('corr')
-    #
-    # def _cov_corr(self, name: str) -> DataFrame:
-    #     calc_columns: List[str] = []
-    #     calc_dtype_loc: List[Tuple[str, int]] = []
-    #     np_dtype = 'int64'
-    #     for col in self._df()._columns:
-    #         if col in self._group_columns:
-    #             continue
-    #         dtype, loc, order = self._df()._column_info[col].values
-    #         if dtype in 'fib':
-    #             if dtype == 'f':
-    #                 np_dtype = 'float64'
-    #             calc_columns.append(col)
-    #             calc_dtype_loc.append((dtype, loc))
-    #
-    #     data = self._df()._values_number_drop(calc_columns, calc_dtype_loc, np_dtype)
-    #     dtype_word = utils.convert_kind_to_dtype(data.dtype.kind)
-    #     func = getattr(_gb, name + '_' + dtype_word)
-    #     result = func(self._group_labels, len(self), data, [])
-    #
-    #     data_dict = self._get_group_col_data()
-    #     data_dict_final: Dict[str, List[ndarray]] = defaultdict(list)
-    #     for dtype, arrs in data_dict.items():
-    #         data_dict_final[dtype] = [np.repeat(arrs[0], len(calc_columns), axis=0)]
-    #
-    #     new_column_info = self._get_new_column_info()
-    #     num_group_cols = len(self._group_columns)
-    #     new_columns = self._group_columns.copy()
-    #
-    #     cur_obj_loc = utils.get_num_cols(data_dict_final.get('O', []))
-    #     column_name_array = np.tile(calc_columns, len(self))[:, np.newaxis]
-    #     data_dict_final['O'].append(column_name_array)
-    #     new_columns.append('Column Name')
-    #     new_column_info['Column Name'] = utils.Column('O', cur_obj_loc, num_group_cols)
-    #
-    #     cur_loc = utils.get_num_cols(data_dict_final.get('f', []))
-    #
-    #     for i, col in enumerate(calc_columns):
-    #         new_column_info[col] = utils.Column('f', i + cur_loc, i + num_group_cols + 1)
-    #         new_columns.append(col)
-    #
-    #     data_dict_final['f'].append(result)
-    #     new_data = utils.concat_stat_arrays(data_dict_final)
-    #
-    #     return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
-    #
-    # def agg(self, *args):
-    #     func_cols = OrderedDict()
-    #     func_new_names = OrderedDict()
-    #     func_order = OrderedDict()
-    #     func_kwargs = OrderedDict()
-    #
-    #     for i, arg in enumerate(args):
-    #         if not isinstance(arg, tuple):
-    #             raise TypeError('`Each argument to `agg` must be a 3-item tuple consisting '
-    #                             'of aggregation function (name or callable), '
-    #                             'aggregating column and resulting column name')
-    #         if len(arg) not in (3, 4):
-    #             raise ValueError(f'The tuple {arg} must have either three or four values '
-    #                              '- the aggregation function, aggregating column, and resulting '
-    #                              'column name. Optionally, it may have a dictionary of kwargs '
-    #                              'for its fourth element')
-    #         if isinstance(arg[0], str):
-    #             if arg[0] not in {'size', 'count', 'sum', 'prod', 'mean',
-    #                               'max', 'min', 'first', 'last', 'var',
-    #                               'cov', 'corr', 'any', 'all', 'median',
-    #                               'nunique'}:
-    #                 raise ValueError(f'{arg[0]} is not a possible aggregation function')
-    #         elif not isinstance(arg[0], Callable):
-    #             raise TypeError('The first item of the tuple must be an aggregating function name '
-    #                             'as a string or a user-defined function')
-    #
-    #         if not isinstance(arg[1], str):
-    #             raise TypeError('The second element in each tuple must be a column name as a '
-    #                             'string.')
-    #         elif arg[1] not in self._df()._column_info:
-    #             raise ValueError(f'`{arg[1]}` is not a column name')
-    #
-    #         if not isinstance(arg[2], str):
-    #             raise TypeError('The third element in each tuple must be the name of the new '
-    #                             'column as a string')
-    #
-    #         if len(arg) == 4 and not isinstance(arg[3], dict):
-    #             raise TypeError('The fourth element in the tuple must be a dictionary of '
-    #                             'kwargs')
-    #
-    #         func_name = arg[0]
-    #         if arg[0] not in func_cols:
-    #             func_cols[func_name] = [arg[1]]
-    #             func_new_names[func_name] = [arg[2]]
-    #             func_order[func_name] = [i]
-    #             if len(arg) == 4:
-    #                 func_kwargs[func_name] = [arg[3]] # a list of dictionaries for kwargs
-    #             else:
-    #                 func_kwargs[func_name] = [None]
-    #         else:
-    #             func_cols[func_name].append(arg[1])
-    #             func_new_names[func_name].append(arg[2])
-    #             func_order[func_name].append(i)
-    #             if len(arg) == 4:
-    #                 func_kwargs[func_name].append(arg[3])
-    #             else:
-    #                 func_kwargs[func_name].append(None)
-    #
-    #     return self._single_agg(agg_cols=func_cols, new_names=func_new_names,
-    #                             new_order=func_order, num_agg_cols=i + 1,
-    #                             func_kwargs=func_kwargs)
+    def _roll_agg(self, agg_cols: Dict = None, new_names: Dict = None,
+                  new_order: Dict = None, num_agg_cols: int = None,
+                  func_kwargs: Dict = None):
 
-    # def filter(self, func, *args, **kwargs):
-    #     if not isinstance(func, Callable):
-    #         raise TypeError('The `func` varialbe must a function or any callable object')
-    #     labels = self._group_labels
-    #     size = len(self._group_position)
-    #     result = _gb.filter(labels, size, self._df(), func, *args, **kwargs)
-    #
-    #     new_data = {kind: data[result] for kind, data in self._df()._data.items()}
-    #     new_col_info = self._df()._copy_column_info()
-    #     columns = self._df()._columns.copy()
-    #
-    #     return self._df()._construct_from_new(new_data, new_col_info, columns)
-    #
+        col_info = self._df._column_info
+        kept_dtype_loc = defaultdict(list)
+        new_column_info = {}
+        dtype_ct = defaultdict(int)
+        for i, col in enumerate(self._kept_columns):
+            dtype, loc, _ = col_info[col].values
+            new_loc = len(kept_dtype_loc[dtype])
+            kept_dtype_loc[dtype].append(loc)
+            new_column_info[col] = utils.Column(dtype, new_loc, i)
+            dtype_ct[dtype] += 1
+
+        data_dict = defaultdict(list)
+        new_columns = self._kept_columns.copy() + [''] * num_agg_cols
+
+        for name, agg_cols in agg_cols.items():
+
+            agg_dtype_locs = defaultdict(list)
+            agg_dtype_names = defaultdict(list)
+            agg_dtype_new_names = defaultdict(list)
+            agg_dtype_order = defaultdict(list)
+            non_agg_dtype_locs = defaultdict(list)
+            agg_dtype_kwargs = defaultdict(list)
+
+            if isinstance(name, str):
+                # name can also be a custom function
+                name_kwargs = get_func_kwargs(name)
+                ignore_str = name_kwargs.get('ignore_str', True)
+                ignore_date = name_kwargs.get('ignore_date', True)
+                keep_date_type = name_kwargs.get('keep_date_type', True)
+            else:
+                ignore_str = False
+                ignore_date = False
+                keep_date_type = True
+
+            cur_new_names = new_names[name]
+            cur_new_order = new_order[name]
+            kwargs_list = func_kwargs[name]
+
+            for col in self._df._columns:
+
+                dtype, loc, _ = self._df._column_info[col].values
+                try:
+                    idx = agg_cols.index(col)
+                except ValueError:
+                    non_agg_dtype_locs[dtype].append(loc)
+                else:
+                    agg_dtype_locs[dtype].append(loc)
+                    agg_dtype_names[dtype].append(col)
+                    agg_dtype_new_names[dtype].append(cur_new_names[idx])
+                    agg_dtype_order[dtype].append(cur_new_order[idx])
+                    agg_dtype_kwargs[dtype].append(kwargs_list[idx])
+
+            for dtype, data in self._df._data.items():
+                if dtype not in agg_dtype_locs:
+                    continue
+                if ignore_str and dtype == 'O':
+                    continue
+                if ignore_date and dtype in 'mM':
+                    continue
+
+                if dtype in 'mM':
+                    data = data.view('int64')
+
+                kwargs = {}
+                for kw in agg_dtype_kwargs[dtype]:
+                    if kw is not None:
+                        kwargs = kw
+                        break
+
+                if isinstance(name, str):
+                    func_name = name + '_' + utils.convert_kind_to_dtype_generic(dtype)
+                else:
+                    func_name = 'custom_' + utils.convert_kind_to_dtype_generic(dtype)
+                    # 'name' is actually a function here
+                    kwargs['func'] = name
+                    kwargs['col_dict'] = dict(zip(agg_dtype_locs[dtype], agg_dtype_names[dtype]))
+
+                func = getattr(_roll, func_name)
+
+                arr = func(data, np.array(agg_dtype_locs[dtype]), self._left, self._right,
+                           self._min_window, **kwargs)
+
+                if dtype in 'mM' and keep_date_type:
+                    new_kind = dtype
+                    arr = arr.astype(utils.convert_kind_to_dtype(dtype))
+                else:
+                    new_kind = arr.dtype.kind
+
+                cur_loc = utils.get_num_cols(data_dict.get(new_kind, [])) + dtype_ct[new_kind]
+                data_dict[new_kind].append(arr)
+
+                old_locs = agg_dtype_locs[dtype]
+                order = np.argsort(old_locs).tolist()
+
+                cur_names = np.array(agg_dtype_new_names[dtype])[order]
+                cur_order = len(self._kept_columns) + np.array(agg_dtype_order[dtype])[order]
+
+                for i, cur_name in enumerate(cur_names):
+                    new_column_info[cur_name] = utils.Column(new_kind, cur_loc + i, cur_order[i])
+                    new_columns[cur_order[i]] = cur_name
+
+        new_data = {}
+        for dtype, locs in kept_dtype_loc.items():
+            data = self._df._data[dtype][:, locs]
+            if data.ndim == 1:
+                data = data[:, np.newaxis]
+            new_data[dtype] = data
+
+        for dtype, data in data_dict.items():
+            if dtype not in new_data:
+                new_data[dtype] = np.column_stack((*data,))
+            else:
+                new_data[dtype] = np.column_stack((new_data[dtype], *data))
+
+        return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
+
+    def agg(self, *args):
+        func_cols = OrderedDict()
+        func_new_names = OrderedDict()
+        func_order = OrderedDict()
+        func_kwargs = OrderedDict()
+
+        for i, arg in enumerate(args):
+            if not isinstance(arg, tuple):
+                raise TypeError('`Each argument to `agg` must be a 3-item tuple consisting '
+                                'of aggregation function (name or callable), '
+                                'aggregating column and resulting column name')
+            if len(arg) not in (3, 4):
+                raise ValueError(f'The tuple {arg} must have either three or four values '
+                                 '- the aggregation function, aggregating column, and resulting '
+                                 'column name. Optionally, it may have a dictionary of kwargs '
+                                 'for its fourth element')
+            if isinstance(arg[0], str):
+                if arg[0] not in {'size', 'count', 'sum', 'prod', 'mean',
+                                  'max', 'min', 'first', 'last', 'var',
+                                  'cov', 'corr', 'any', 'all', 'median',
+                                  'nunique'}:
+                    raise ValueError(f'{arg[0]} is not a possible aggregation function')
+            elif not isinstance(arg[0], Callable):
+                raise TypeError('The first item of the tuple must be an aggregating function name '
+                                'as a string or a user-defined function')
+
+            if not isinstance(arg[1], str):
+                raise TypeError('The second element in each tuple must be a column name as a '
+                                'string.')
+            elif arg[1] not in self._df._column_info:
+                raise ValueError(f'`{arg[1]}` is not a column name')
+
+            if not isinstance(arg[2], str):
+                raise TypeError('The third element in each tuple must be the name of the new '
+                                'column as a string')
+
+            if len(arg) == 4 and not isinstance(arg[3], dict):
+                raise TypeError('The fourth element in the tuple must be a dictionary of '
+                                'kwargs')
+
+            func_name = arg[0]
+            if arg[0] not in func_cols:
+                func_cols[func_name] = [arg[1]]
+                func_new_names[func_name] = [arg[2]]
+                func_order[func_name] = [i]
+                if len(arg) == 4:
+                    func_kwargs[func_name] = [arg[3]] # a list of dictionaries for kwargs
+                else:
+                    func_kwargs[func_name] = [None]
+            else:
+                func_cols[func_name].append(arg[1])
+                func_new_names[func_name].append(arg[2])
+                func_order[func_name].append(i)
+                if len(arg) == 4:
+                    func_kwargs[func_name].append(arg[3])
+                else:
+                    func_kwargs[func_name].append(None)
+
+        return self._roll_agg(agg_cols=func_cols, new_names=func_new_names,
+                              new_order=func_order, num_agg_cols=i + 1,
+                              func_kwargs=func_kwargs)
+
     # def apply(self, func, *args, **kwargs):
     #     if not isinstance(func, Callable):
     #         raise TypeError('The `func` variable must be a function or any callable object')

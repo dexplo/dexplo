@@ -512,7 +512,7 @@ class DateTimeClass(AccessorMixin):
 class TimeDeltaClass(AccessorMixin):
 
     def __init__(self, df):
-        self._df = weakref.ref(df)
+        self._df = df
         self._dtype_acc = 'm'
         self._2d = ''
 
