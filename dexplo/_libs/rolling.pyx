@@ -637,8 +637,9 @@ def max_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, ndarray[np.int64_t] locs,
 def mean_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] locs,
             int left, int right, int min_window):
     cdef:
-        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0, n, n1 = right - left
+        Py_ssize_t i=0, j, k, j_act, start, middle, end, ct = 0
         Py_ssize_t nr = a.shape[0], nc = a.shape[1], nc_actual = len(locs)
+        np.float64_t n, n1 = right - left
         ndarray[np.float64_t, ndim=2] result = np.zeros((nr, nc_actual), dtype='float64')
         ndarray[np.int64_t] temp
         np.int64_t total = 0

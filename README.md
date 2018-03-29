@@ -123,7 +123,6 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 
 - [ ] append
 - [ ] apply
-- [ ] assign
 - [x] astype
 - [ ] cut
 - [x] factorize
@@ -135,7 +134,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] plot
 - [ ] profile
 - [ ] replace
-- [ ] rolling
+- [x] rolling
 - [x] sort_values
 - [ ] to_csv
 

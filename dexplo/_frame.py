@@ -1015,7 +1015,7 @@ class DataFrame(object):
     @classmethod
     def _construct_from_new(cls: Type[object], data: Dict[str, ndarray],
                             column_info: ColInfoT, columns: ColumnT) -> 'DataFrame':
-        df_new: 'DataFrame' = super().__new__(cls)
+        df_new: 'DataFrame' = object.__new__(cls)
         df_new._column_info = column_info
         df_new._data = data
         df_new._columns = columns
