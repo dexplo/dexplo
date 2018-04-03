@@ -35,6 +35,7 @@ ScalarT = TypeVar('ScalarT', int, float, str, bool)
 ColSelection = Union[int, str, slice, List[IntStr], 'DataFrame']
 RowSelection = Union[int, slice, List[int], 'DataFrame']
 Scalar = Union[int, str, bool, float]
+NaT = np.datetime64('nat')
 
 
 class DataFrame(object):
@@ -4147,3 +4148,462 @@ class DataFrame(object):
     @property
     def td(self):
         return TimeDeltaClass(self)
+
+    def append(self, objs, axis: str = 'rows', *args, **kwargs):
+        axis_int: int = utils.convert_axis_string(axis)
+
+        if isinstance(objs, dict):
+            if axis_int == 0:
+                raise NotImplementedError('Using a dictionary of strings mapped to functions '
+                                          'is only available for adding columns')
+            for k, v in objs.items():
+                if not isinstance(k, str):
+                    raise TypeError('The keys of the `objs` dict must be a string')
+
+            n = self.shape[0]
+            data_dict = defaultdict(list)
+            names = []
+            new_column_info = self._copy_column_info()
+            order = len(self._columns)
+            for col_name, func in objs.items():
+                if isinstance(func, Callable):
+                    result = func(self, *args, **kwargs)
+                else:
+                    result = func
+
+                dtype = utils.get_kind_from_scalar(result)
+                if dtype == '':
+                    if isinstance(result, DataFrame):
+                        if result.size == 1:
+                            dtype = list(result._data.keys())[0]
+                            arr = np.repeat(result[0, 0], n)
+                        elif result.shape[1] != 1:
+                            raise ValueError('Returned DataFrame from function mapped from '
+                                             f'{col_name} did not return a single column DataFrame')
+                        else:
+                            dtype = list(result._data.keys())[0]
+                            arr = result._data[dtype]
+
+                    elif isinstance(result, ndarray):
+                        if result.size == 1:
+                            dtype = result.dtype.kind
+                            np.repeat(result.flat[0], n)
+                        elif (result.ndim == 2 and result.shape[1] != 1) or result.ndim > 2:
+                            raise ValueError('Your returned array must have only one column')
+                        else:
+                            dtype = result.dtype.kind
+                            arr = result
+                    else:
+                        raise TypeError("The return type from the function mapped from "
+                                        f"column {col_name} was not a scalar, DataFrame, or array")
+                else:
+                    arr = np.repeat(result, n)
+
+                if len(arr) < n:
+                    arr_old = arr
+                    if dtype in 'ifb':
+                        arr = np.full((n, 1), nan, dtype='float64')
+                    elif dtype == 'M':
+                        arr = np.full((n, 1), NaT, dtype='datetime64[ns]')
+                    elif dtype == 'm':
+                        nat = np.datetime64('NaT')
+                        arr = np.full((n, 1), NaT, dtype='timedelta64[ns]')
+                    elif dtype == 'O':
+                        arr = np.empty((n, 1), dtype='O')
+
+                    if arr_old.ndim == 1:
+                        arr_old = arr_old[:, np.newaxis]
+                    arr[:len(arr_old)] = arr_old
+                elif len(arr) > n:
+                    arr = arr[:n]
+
+                if arr.ndim == 1:
+                    arr = arr[:, np.newaxis]
+
+                names.append(col_name)
+                loc_add = len(data_dict[dtype])
+                loc = self._data[dtype].shape[1]
+                new_column_info[col_name] = utils.Column(dtype, loc + loc_add, order)
+                order += 1
+                data_dict[dtype].append(arr)
+
+            new_columns = np.append(self._columns, names)
+            new_data = {}
+            for dt, data in self._data.items():
+                if dt in data_dict:
+                    new_data[dt] = np.column_stack((data, *data_dict[dt]))
+                else:
+                    new_data[dt] = data.copy('F')
+
+        elif isinstance(objs, DataFrame):
+            if axis_int == 0:
+                nc = max(self.shape[1], objs.shape[1])
+                nr1 = len(self)
+                nr2 = len(objs)
+                nr = nr1 + nr2
+                new_column_info = {}
+                new_columns = []
+                data_pieces = defaultdict(list)
+                loc_count = defaultdict(int)
+
+                for i in range(nc):
+                    try:
+                        col1 = self._columns[i]
+                        kind1, loc1, _ = self._column_info[col1].values
+                    except IndexError:
+                        col1 = None
+                    try:
+                        col2 = objs._columns[i]
+                        kind2, loc2, _ = objs._column_info[col2].values
+                    except IndexError:
+                        col2 = None
+
+                    def add_data_piece(data, kind, loc, first, column):
+                        if kind in 'ibf':
+                            new_kind = 'f'
+                            new_dtype = 'float64'
+                        else:
+                            new_kind = kind
+                            new_dtype = utils.convert_kind_to_numpy(kind)
+
+                        new_loc = loc_count[new_kind]
+
+                        if first:
+                            piece = (new_loc, (data[kind][:, loc], None))
+                        else:
+                            piece = (new_loc, (None, data[kind][:, loc]))
+
+                        data_pieces[new_kind].append(piece)
+                        loc_count[new_kind] += 1
+                        new_columns.append(column)
+                        new_column_info[column] = utils.Column(new_kind, new_loc, i)
+
+                    if col1 is None:
+                        add_data_piece(objs._data, kind2, loc2, False, col2)
+                    elif col2 is None:
+                        add_data_piece(self._data, kind1, loc1, True, col1)
+                    else:
+                        d1 = self._data[kind1][:, loc1]
+                        d2 = objs._data[kind2][:, loc2]
+                        if kind1 == 'b':
+                            if kind2 == 'b':
+                                new_kind = 'b'
+                                new_dtype = 'bool'
+                            elif kind2 == 'i':
+                                new_kind = 'i'
+                                new_dtype = 'int64'
+                            elif kind2 == 'f':
+                                new_kind = 'f'
+                                new_dtype = 'float64'
+                            elif kind2 == 'O':
+                                new_kind = 'O'
+                                new_dtype = 'O'
+                            elif kind2 in 'mM':
+                                err_kind = 'datetime' if kind2 == 'M' else 'timedelta'
+                                raise ValueError(
+                                    f'Attempting to concatenate column {col1} which is '
+                                    f'a boolean with column {col2} which is '
+                                    f'{err_kind} which is not possible. You will '
+                                    f'have to convert one of the columns from the '
+                                    f'DataFrames manually.')
+                        elif kind1 == 'i':
+                            if kind2 in 'ib':
+                                new_kind = 'i'
+                                new_dtype = 'int64'
+                            elif kind2 == 'f':
+                                new_kind = 'f'
+                                new_dtype = 'float64'
+                            elif kind2 == 'O':
+                                new_kind = 'O'
+                                new_dtype = 'O'
+                            elif kind2 in 'mM':
+                                err_kind = 'datetime' if kind2 == 'M' else 'timedelta'
+                                raise ValueError(
+                                    f'Attempting to concatenate column {col1} which is '
+                                    f'an integer with column {col2} which is '
+                                    f'{err_kind} which is not possible. You will '
+                                    f'have to convert one of the from one of the '
+                                    f'DataFrames manually.')
+                        elif kind1 == 'f':
+                            if kind2 in 'ibf':
+                                new_kind = 'f'
+                                new_dtype = 'float64'
+                            elif kind2 == 'O':
+                                new_kind = 'O'
+                                new_dtype = 'O'
+                            elif kind2 in 'mM':
+                                err_kind = 'datetime' if kind2 == 'M' else 'timedelta'
+                                raise ValueError(
+                                    f'Attempting to concatenate column {col1} which is '
+                                    f'an integer with column {col2} which is '
+                                    f'{err_kind} which is not possible. You will '
+                                    f'have to convert one of the columns from one of the '
+                                    f'DataFrames manually.')
+                        elif kind1 == 'O':
+                            if kind2 in 'ibf':
+                                new_kind = 'O'
+                                new_dtype = 'O'
+                            elif kind2 == 'O':
+                                new_kind = 'O'
+                                new_dtype = 'O'
+                            elif kind2 in 'mM':
+                                err_kind = 'datetime' if kind2 == 'M' else 'timedelta'
+                                raise ValueError(
+                                    f'Attempting to concatenate column {col1} which is '
+                                    f'a string with column {col2} which is '
+                                    f'{err_kind} which is not possible. You will '
+                                    f'have to convert one of the columns from one of the '
+                                    f'DataFrames manually.')
+                        elif kind1 == 'M':
+                            if kind2 == 'M':
+                                new_kind = 'M'
+                                new_dtype = 'datetime64[ns]'
+                            else:
+                                err_kind = utils.convert_kind_to_numpy(kind2)
+                                raise ValueError(
+                                    f'Attempting to concatenate column {col1} which is '
+                                    f'a datetime64[ns] with column {col2} which is '
+                                    f'{err_kind} which is not possible. You will '
+                                    f'have to convert one of the columns from one of the '
+                                    f'DataFrames manually.')
+                        elif kind1 == 'm':
+                            if kind2 == 'm':
+                                new_kind = 'm'
+                                new_dtype = 'timedelta64[ns]'
+                            else:
+                                err_kind = utils.convert_kind_to_numpy(kind2)
+                                raise ValueError(
+                                    f'Attempting to concatenate column {col1} which is '
+                                    f'a timedelta64[ns] with column {col2} which is '
+                                    f'{err_kind} which is not possible. You will '
+                                    f'have to convert one of the columns from one of the '
+                                    f'DataFrames manually.')
+
+                        loc = loc_count[new_kind]
+                        data_pieces[new_kind].append((loc, (d1, d2)))
+                        loc_count[new_kind] += 1
+                        new_columns.append(col1)
+                        new_column_info[col1] = utils.Column(new_kind, loc, i)
+
+                make_fast_empty = {}
+                for dtype, pieces in data_pieces.items():
+                    make_fast_empty[dtype] = True
+                    for piece in pieces:
+                        # piece[-1] is a 2 item tuple of the one dimensional data arrays or None
+                        for p in piece[-1]:
+                            if p is None:
+                                make_fast_empty[dtype] = False
+                                break
+
+                new_data = {}
+                for dtype, ct in loc_count.items():
+                    if dtype in 'bi':
+                        dtype_word = utils.convert_kind_to_numpy(dtype)
+                        new_data[dtype] = np.empty((nr, ct), dtype=dtype_word, order='F')
+                    elif dtype == 'f':
+                        if make_fast_empty['f']:
+                            new_data[dtype] = np.empty((nr, ct), dtype='float64', order='F')
+                        else:
+                            new_data[dtype] = np.full((nr, ct), nan, dtype='float64', order='F')
+                    elif dtype == 'O':
+                        new_data[dtype] = np.empty((nr, ct), dtype='O', order='F')
+                    elif dtype == 'm':
+                        if make_fast_empty['m']:
+                            new_data[dtype] = np.empty((nr, ct), dtype='timedelta64[ns]', order='F')
+                        else:
+                            new_data[dtype] = np.full((nr, ct), NaT, dtype='timedelta64[ns]', order='F')
+                    elif dtype == 'M':
+                        if make_fast_empty['M']:
+                            new_data[dtype] = np.empty((nr, ct), dtype='datetime64[ns]', order='F')
+                        else:
+                            new_data[dtype] = np.full((nr, ct), NaT, dtype='datetime64[ns]', order='F')
+
+                for dtype, pieces in data_pieces.items():
+                    for piece in pieces:
+                        loc, (d1, d2) = piece
+                        if d1 is not None:
+                            new_data[dtype][:nr1, loc] = d1
+                        if d2 is not None:
+                            new_data[dtype][nr1:, loc] = d2
+
+                new_columns = np.array(new_columns, dtype='O')
+
+            else:
+                cur_n = len(self)
+                oth_n = len(objs)
+                new_data = {}
+                total_float_cols = 0
+                orig_col_set = set(self._columns)
+                new_col_map = {}
+                other_columns = []
+                for col in objs._columns:
+                    i = 1
+                    new_col = col
+                    while new_col in orig_col_set:
+                        new_col = col + '_' + str(i)
+                        i += 1
+                    new_col_map[col] = new_col
+                    other_columns.append(new_col)
+
+                new_columns = np.concatenate((self._columns, other_columns))
+
+                if oth_n != cur_n:
+                    # all i, b, f data in calling df must be put in a single f
+                    # concat to f in other df
+                    new_data = {}
+                    new_column_info = {}
+
+                    if cur_n > oth_n:
+                        big_n = cur_n
+                        small_n = oth_n
+                        big_df = self
+                        small_df = objs
+
+                        big_locs = locs1
+                        small_locs = locs2
+
+                        big_cols = cols1
+                        small_cols = cols2
+
+                        big_ord = ords1
+                        small_ord = ords2
+
+                        big_ord_add = 0
+                        small_ord_add = len(objs._columns)
+
+                        big_map = dict(zip(self._columns, self._columns))
+                        small_map = new_col_map
+                    else:
+                        big_n = oth_n
+                        small_n = cur_n
+                        big_df = objs
+                        small_df = self
+
+                        big_locs = locs2
+                        small_locs = locs1
+
+                        big_cols = cols2
+                        small_cols = cols1
+
+                        big_ord = ords2
+                        small_ord = ords1
+
+                        big_ord_add = len(self._columns)
+                        small_ord_add = 0
+
+                        big_map = new_col_map
+                        small_map = dict(zip(self._columns, self._columns))
+
+                    if 'i' in small_df._data:
+                        total_float_cols += small_df._data['i'].shape[1]
+                    if 'b' in small_df._data:
+                        total_float_cols += small_df._data['b'].shape[1]
+                    if 'f' in small_df._data:
+                        total_float_cols += small_df._data['f'].shape[1]
+                    total_orig_float_cols = total_float_cols
+                    if 'f' in big_df._data:
+                        total_float_cols += big_df._data['f'].shape[1]
+
+                    arr = np.full((big_n, total_float_cols), nan, dtype='float64', order='F')
+                    cur_left_col = 0
+                    cur_right_col = 0
+                    loc_add = 0
+                    for dtype in 'ibf':
+                        if dtype in small_df._data:
+                            cur_right_col += small_df._data[dtype].shape[1]
+                            arr[:small_n, cur_left_col:cur_right_col] = small_df._data[dtype]
+                            cur_left_col = cur_right_col
+                            for col, loc, order in zip(small_cols[dtype], small_locs[dtype],
+                                                       small_ord[dtype]):
+                                new_column_info[small_map[col]] = utils.Column('f', loc + loc_add,
+                                                                               order +
+                                                                               small_ord_add)
+                            loc_add += len(small_locs[dtype])
+                    if 'f' in big_df._data:
+                        arr[:big_n, cur_right_col:] = big_df._data['f']
+                        for col, loc, order in zip(big_cols['f'], big_locs['f'], big_ord['f']):
+                            new_column_info[big_map[col]] = utils.Column('f', loc + loc_add,
+                                                                         order + big_ord_add)
+                    arr[small_n:, :cur_right_col] = nan
+                    new_data['f'] = arr
+
+                    for dtype in 'ib':
+                        if dtype in big_df._data:
+                            new_data[dtype] = big_df._data[dtype].copy('F')
+                            for col, loc, order in zip(big_cols[dtype], big_locs[dtype],
+                                                       big_ord[dtype]):
+                                # there can be no i, b in calling df because they've been
+                                # converted to float. No need for loc_add
+                                new_column_info[big_map[col]] = utils.Column(dtype, loc,
+                                                                             order + big_ord_add)
+                    for dtype in 'OmM':
+                        if dtype in small_df._data:
+                            n_col_left = small_df._data[dtype].shape[1]
+                            if dtype in big_df._data:
+                                n_col = n_col_left + big_df._data[dtype].shape[1]
+                                dtype_name = utils.convert_kind_to_numpy(dtype)
+                                if dtype_name == 'O':
+                                    fill_val = None
+                                else:
+                                    fill_val = NaT
+                                arr = np.full((big_n, n_col), fill_val, dtype=dtype_name, order='F')
+                                arr[:small_n, :n_col_left] = small_df._data[dtype]
+                                arr[:, n_col_left:] = big_df._data[dtype]
+                                loc_add = small_df._data[dtype].shape[1]
+                                for col, loc, order in zip(small_cols[dtype], small_locs[dtype],
+                                                           small_ord[dtype]):
+                                    new_column_info[small_map[col]] = utils.Column(dtype, loc,
+                                                                                   order +
+                                                                                   small_ord_add)
+                                for col, loc, order in zip(big_cols[dtype], big_locs[dtype],
+                                                           big_ord[dtype]):
+                                    new_column_info[big_map[col]] = utils.Column(dtype,
+                                                                                 loc + loc_add,
+                                                                                 order +
+                                                                                 big_ord_add)
+                            else:
+                                dtype_name = utils.convert_kind_to_numpy(dtype)
+                                if dtype_name == 'O':
+                                    fill_val = None
+                                else:
+                                    fill_val = NaT
+                                arr = np.full((big_n, n_col_left), fill_val, dtype=dtype_name,
+                                              order='F')
+                                arr[:small_n] = small_df._data[dtype]
+                                for col, loc, order in zip(small_cols[dtype], small_locs[dtype],
+                                                           small_ord[dtype]):
+                                    new_column_info[small_map[col]] = utils.Column(dtype, loc,
+                                                                                   order +
+                                                                                   small_ord_add)
+                            new_data[dtype] = arr
+                        elif dtype in big_df._data:
+                            new_data[dtype] = big_df._data[dtype].copy('F')
+                            for col, loc, order in zip(big_cols[dtype], big_locs[dtype],
+                                                       big_ord[dtype]):
+                                new_column_info[big_map[col]] = utils.Column(dtype, loc,
+                                                                             order + big_ord_add)
+                else:
+                    new_column_info = self._copy_column_info()
+                    for dtype in 'fibOmM':
+                        if dtype in self._data:
+                            if dtype in objs._data:
+                                new_data[dtype] = np.column_stack(
+                                    (self._data[dtype], objs._data[dtype]))
+                                loc_add = self._data[dtype].shape[1]
+                                for loc, col, order in zip(locs2[dtype], cols2[dtype],
+                                                           ords2[dtype]):
+                                    new_column_info[new_col_map[col]] = utils.Column(dtype,
+                                                                                     loc + loc_add,
+                                                                                     order + order_add)
+                            else:
+                                new_data[dtype] = self._data[dtype].copy('F')
+        elif isinstance(objs, list):
+            for obj in objs:
+                if not isinstance(obj, DataFrame):
+                    raise TypeError('All values in the list passed to `objs` must be DataFrames')
+
+                first_df = self.append(objs[0], axis=axis)
+                for obj in objs[1:]:
+                    first_df = first_df.append(obj, axis=axis)
+            return first_df
+        return self._construct_from_new(new_data, new_column_info, new_columns)
