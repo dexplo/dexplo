@@ -6,6 +6,8 @@ from dexplo._libs import validate_arrays as va
 
 _DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str', 'M': 'datetime64[ns]', 'm': 'timedelta64[ns]'}
 _DT_GENERIC = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str', 'M': 'date', 'm': 'date'}
+_DT_FUNC_NAME = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str',
+                 'M': 'datetime', 'm': 'timedelta'}
 _KIND = {'int': 'i', 'float': 'f', 'bool': 'b', 'str': 'O'}
 _KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'], 'str': ['O'], 'number': ['i', 'f'],
               'datetime': 'M', 'timedelta': 'm'}
@@ -341,6 +343,10 @@ def convert_numpy_to_kind(dtype: str) -> str:
 
 def convert_dtype_to_kind(dtype: str) -> str:
     return _KIND[dtype]
+
+
+def convert_dtype_to_func_name(dtype: str) -> str:
+    return _DT_FUNC_NAME[dtype]
 
 
 def get_kind_from_scalar(s: Any) -> str:

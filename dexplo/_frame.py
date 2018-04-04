@@ -14,7 +14,8 @@ from dexplo._libs import (string_funcs as _sf,
                           validate_arrays as _va,
                           math as _math,
                           sort_rank as _sr,
-                          unique as _uq)
+                          unique as _uq,
+                          replace as _repl)
 from dexplo import _stat_funcs as stat
 from dexplo._strings import StringClass
 from dexplo._date import DateTimeClass
@@ -4413,3 +4414,190 @@ class DataFrame(object):
                 new_columns = np.array(new_columns, dtype='O')
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def replace(self, replace_dict):
+        if not isinstance(replace_dict, dict):
+            raise TypeError('`replace_dict` must be a dictionary')
+
+        # boolean, number, str, datetime, timedelta, missing
+        is_all = False
+        is_one = False
+
+        specific_replacement = defaultdict(list)
+        dtype_conversion = {}
+
+        def get_replacement(key, val, col=None):
+            if isinstance(key, np.timedelta64):
+                if not isinstance(val, np.timedelta64):
+                    raise TypeError(f'Cannot replace a timedelta64 with {type(val)}')
+                dtype = 'm'
+                dtype_conversion['m'] = 'm'
+            elif isinstance(key, (bool, np.bool_)):
+                if isinstance(val, (bool, np.bool_)):
+                    dtype_conversion['b'] = 'b'
+                elif isinstance(val, (int, np.integer)):
+                    if dtype_conversion.get('b', None) != 'f':
+                        dtype_conversion['b'] = 'i'
+                elif isinstance(val, (float, np.floating)):
+                    dtype_conversion['b'] = 'f'
+                else:
+                    raise TypeError(f'Cannot replace a boolean with {type(val)}')
+                dtype = 'b'
+
+            elif isinstance(key, (int, np.integer)):
+                if isinstance(val, (bool, np.bool_, int, np.integer)):
+                    dtype_conversion['i'] = 'i'
+                elif isinstance(val, (float, np.floating)):
+                    dtype_conversion['i'] = 'f'
+                else:
+                    raise TypeError(f'Cannot replace an integer with {type(val)}')
+                dtype = 'i'
+                # need to do replacement for floats as well as ints
+                dtype_conversion['f'] = 'f'
+
+            elif isinstance(key, (float, np.floating)):
+                if not isinstance(val, (bool, np.bool_, int, np.integer, float, np.floating)):
+                    raise TypeError(f'Cannot replace a float with {type(val)}')
+                dtype = 'f'
+                dtype_conversion['f'] = 'f'
+            elif isinstance(key, str) or key is None:
+                if not isinstance(val, str) and val is not None:
+                    raise TypeError(f'Cannot replace a str with {type(val)}')
+                dtype = 'O'
+                dtype_conversion['O'] = 'O'
+            elif isinstance(key, np.datetime64):
+                if not isinstance(val, np.datetime64):
+                    raise TypeError(f'Cannot replace a datetime64 with {type(val)}')
+                dtype = 'M'
+                dtype_conversion['M'] = 'M'
+            else:
+                raise TypeError(f'Unknown replacement type: {type(key)}')
+
+            if col is None:
+                specific_replacement[dtype].append((key, val))
+                if dtype == 'i':
+                    specific_replacement['f'].append((key, val))
+            else:
+                specific_replacement[col].append((key, val))
+
+        def check_key_type(key, col_dtype):
+            keys = key
+            if not isinstance(tuple):
+                keys = (keys,)
+
+            for key in keys:
+                if col_dtype == 'b' and not isinstance(key, (bool, np.bool_)):
+                    raise ValueError(f'Column "{col}" is boolean and you are trying to '
+                                     f'replace {key}, which is of type {type(key)}')
+                elif col_dtype == 'i' and not isinstance(key, (bool, np.bool_, int, np.integer)):
+                    raise ValueError(f'Column "{col}" is an int and you are trying to '
+                                     f'replace {key}, which is of type {type(key)}')
+                elif col_dtype == 'f' and not isinstance(key, (bool, np.bool_, int, np.integer,
+                                                               float, np.floating)):
+                    raise ValueError(f'Column "{col}" is a float and you are trying to '
+                                     f'replace {key}, which is of type {type(key)}')
+                elif col_dtype == 'O' and not isinstance(key, str):
+                    raise ValueError(f'Column "{col}" is a str and you are trying to '
+                                     f'replace {key}, which is of type {type(key)}')
+                elif col_dtype == 'M' and not isinstance(key, np.datetime64):
+                    raise ValueError(f'Column "{col}" is a datetime64 and you are trying to '
+                                     f'replace {key}, which is of type {type(key)}')
+                elif col_dtype == 'm' and not isinstance(key, np.timedelta64):
+                    raise ValueError(f'Column "{col}" is a timedelta64 and you are trying to '
+                                     f'replace {key}, which is of type {type(key)}')
+
+        for key, val in replace_dict.items():
+            if isinstance(val, dict):
+                if is_all:
+                    raise TypeError('`replace_dict` must either be a dictionary of dictionaries '
+                                    'or a dictionary of scalars (or tuples) mapped to replacement '
+                                    'values. You cannot mix the two.')
+                is_one = True
+            else:
+                if is_one:
+                    raise TypeError('`replace_dict` must either be a dictionary of dictionaries '
+                                    'or a dictionary of scalars (or tuples) mapped to replacement '
+                                    'values. You cannot mix the two.')
+                is_all = True
+
+            if is_all:
+                keys = key
+                if not isinstance(keys, tuple):
+                    keys = (keys,)
+
+                for key in keys:
+                    get_replacement(key, val)
+            else:
+                # this is a column by column replacement with a dict of dicts
+                col_set = set(self._columns)
+                for col, val_dict in replace_dict.items():
+                    if col not in col_set:
+                        raise ValueError(f'Column "{key}" not found in DataFrame')
+                    col_dtype = self._column_info[col].dtype
+                    for key, val in val_dict.items():
+                        check_key_type(key, col_dtype)
+                        get_replacement(key, val, col)
+
+        if is_all:
+            used_dtypes = set()
+            data_dict = defaultdict(list)
+            new_column_info = {}
+            cols, locs, ords = self._get_all_dtype_info()
+
+            used_dtypes = set(dtype_conversion)
+            converted_dtypes = set(dtype_conversion.values())
+            cur_dtype_loc = defaultdict(int)
+
+            for dtype, data in self._data.items():
+                if dtype not in used_dtypes:
+                    if dtype in converted_dtypes:
+                        data_dict[dtype].append(data)
+                    else:
+                        data_dict[dtype].append(data.copy('F'))
+
+                    for col, loc, order in zip(cols[dtype], locs[dtype], ords[dtype]):
+                        new_column_info[col] = utils.Column(dtype, loc, order)
+                    cur_dtype_loc[dtype] = data.shape[1]
+
+            for dtype, new_dtype in dtype_conversion.items():
+                used_dtypes.add(dtype)
+                old_name = utils.convert_dtype_to_func_name(dtype)
+                new_name = utils.convert_dtype_to_func_name(new_dtype)
+                func_name = f'replace_{old_name}_with_{new_name}'
+
+                dtype_word = utils.convert_kind_to_numpy(dtype)
+                new_dtype_word = utils.convert_kind_to_numpy(new_dtype)
+                cur_replacement = specific_replacement[dtype]
+                n = len(cur_replacement)
+                to_replace = np.empty(n, dtype=dtype_word)
+                replacements = np.empty(n, dtype=new_dtype_word)
+
+                for i, (repl, repl_with) in enumerate(cur_replacement):
+                    to_replace[i] = repl
+                    replacements[i] = repl_with
+                func = getattr(_repl, func_name)
+                data = self._data[dtype]
+                if dtype in 'mM':
+                    data_dict[new_dtype].append(func(data.view('int64'), to_replace.view('int64'),
+                                                     replacements.view('int64')))
+                else:
+                    data_dict[new_dtype].append(func(data, to_replace, replacements))
+                loc_add = cur_dtype_loc[new_dtype]
+                for col, loc, order in zip(cols[dtype], locs[dtype], ords[dtype]):
+                    new_column_info[col] = utils.Column(new_dtype, loc + loc_add, order)
+                cur_dtype_loc[new_dtype] += data.shape[1]
+
+            new_data = {}
+            for dtype, data in data_dict.items():
+                new_data[dtype] = np.column_stack(data)
+
+            new_columns = self._columns.copy()
+
+        else:
+            return dtype_conversion, specific_replacement
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
+
+
+
+

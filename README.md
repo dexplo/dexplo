@@ -121,7 +121,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 
 **Other**
 
-- [ ] append
+- [x] append
 - [x] astype
 - [x] factorize
 - [x] groupby
