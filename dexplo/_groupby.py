@@ -455,6 +455,7 @@ class Grouper(object):
                     new_columns[cur_order[i]] = cur_name
 
         new_data = utils.concat_stat_arrays(data_dict)
+        new_columns = np.array(new_columns, dtype='O')
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
     def agg(self, *args):
@@ -474,11 +475,7 @@ class Grouper(object):
                                  'column name. Optionally, it may have a dictionary of kwargs '
                                  'for its fourth element')
             if isinstance(arg[0], str):
-                if arg[0] not in {'size', 'count', 'sum', 'prod', 'mean',
-                                  'max', 'min', 'first', 'last', 'var',
-                                  'cov', 'corr', 'any', 'all', 'median',
-                                  'nunique'}:
-                    raise ValueError(f'{arg[0]} is not a possible aggregation function')
+                utils.validate_agg_func(arg[0], 'O')
             elif not isinstance(arg[0], Callable):
                 raise TypeError('The first item of the tuple must be an aggregating function name '
                                 'as a string or a user-defined function')

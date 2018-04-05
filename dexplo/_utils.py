@@ -470,3 +470,20 @@ def is_agg_func(name: str) -> bool:
 def is_column_stack_func(name: str) -> bool:
     return name in _COLUMN_STACK_FUNCS
 
+
+def validate_agg_func(name, dtype):
+    if dtype in 'ibfm':
+        if name not in {'size', 'count', 'sum', 'prod', 'mean',
+                        'max', 'min', 'first', 'last', 'var',
+                        'cov', 'corr', 'any', 'all', 'median',
+                        'nunique'}:
+            dtype = convert_kind_to_dtype(dtype)
+            raise ValueError(f'Function name {name} does not work for columns of type {dtype}')
+    elif dtype in 'OM':
+        if name not in {'size', 'count', 'max', 'min', 'first',
+                        'last', 'any', 'all', 'nunique'}:
+            dtype = convert_kind_to_dtype(dtype)
+            raise ValueError(f'Function name {name} does not work for columns of type {dtype}')
+
+
+
