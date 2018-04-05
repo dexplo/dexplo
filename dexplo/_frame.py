@@ -15,7 +15,8 @@ from dexplo._libs import (string_funcs as _sf,
                           math as _math,
                           sort_rank as _sr,
                           unique as _uq,
-                          replace as _repl)
+                          replace as _repl,
+                          pivot as _pivot)
 from dexplo import _stat_funcs as stat
 from dexplo._strings import StringClass
 from dexplo._date import DateTimeClass
@@ -4706,4 +4707,188 @@ class DataFrame(object):
                         new_column_info[col] = utils.Column(new_dtype, loc, order)
                         cur_dtype_loc[new_dtype] += 1
 
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def pivot(self, row, column, value, agg_func=None):
+        self._validate_column_name(row)
+        self._validate_column_name(column)
+        self._validate_column_name(value)
+        group = [row, column]
+        temp_col_name = '____TEMP____'
+        col_set = set(group)
+        i = 0
+        while temp_col_name in col_set:
+            temp_col_name = '____TEMP____' + str(i)
+            i += 1
+        if agg_func is None:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                df_group = self.groupby(group).size()
+            size_col = df_group._columns[-1]
+            dtype, loc, _ = df_group._column_info[size_col].values
+            max_size = df_group._data[dtype][:, loc].max()
+            if max_size > 1:
+                raise ValueError('You did not provide an `agg_func` which means that each '
+                                 f'combination of {row} and {column} must have at most one '
+                                 'value')
+            df_group = self[:, [row, column, value]]
+            temp_col_name = value
+        else:
+            df_group = self.groupby(group).agg((agg_func, value, temp_col_name))
+
+        row_idx, row_names = df_group.factorize(row)
+        col_idx, col_names = df_group.factorize(column)
+        dtype, loc, _ = df_group._column_info[temp_col_name].values
+        value_arr = df_group._data[dtype][:, loc]
+
+        new_data = {}
+        if dtype in 'ib':
+            if len(row_idx) != len(row_names) * len(col_names):
+                value_arr = value_arr.astype('float64')
+                dtype = 'f'
+
+        func_name = 'pivot_' + utils.convert_dtype_to_func_name(dtype)
+        row_name_dtype = row_names.dtype.kind
+        pivot_result = getattr(_pivot, func_name)(row_idx, len(row_names),
+                                                     col_idx, len(col_names), value_arr)
+        pivot_result_dtype = pivot_result.dtype.kind
+        loc_add = 0
+        if row_name_dtype == pivot_result_dtype:
+            new_data[dtype] = np.column_stack((row_names, pivot_result))
+            loc_add += 1
+        else:
+            new_data[row_name_dtype] = row_names[:, np.newaxis]
+            new_data[pivot_result_dtype] = pivot_result
+
+        if col_names.dtype.kind != 'O':
+            col_names = col_names.astype('U').astype('O')
+
+        # avoid row names collision
+        new_column_info = {row: utils.Column(row_name_dtype, 0, 0)}
+
+        for i, col in enumerate(col_names):
+            new_column_info[col] = utils.Column(dtype, i + loc_add, i + 1)
+
+        new_columns = np.concatenate(([row], col_names))
+
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def melt(self, id_vars=None, value_vars=None, var_name='variable', value_name='value'):
+
+        def check_string_or_list(vals, name, none_possible=True):
+            if isinstance(vals, str):
+                return [vals]
+            elif isinstance(vals, list):
+                return vals
+            elif isinstance(vals, np.ndarray):
+                return vals.tolist()
+            elif vals is None and none_possible:
+                return []
+            else:
+                raise TypeError('`{name}` must be a string or list of strings')
+
+        # much easier to handle parameters when they are all lists
+        id_vars = check_string_or_list(id_vars, 'id_vars')
+        value_vars = check_string_or_list(value_vars, 'value_vars')
+        var_name = check_string_or_list(var_name, 'var_name', False)
+        value_name = check_string_or_list(value_name, 'value_name', False)
+
+        if not isinstance(value_vars[0], list):
+            value_vars = [value_vars]
+
+        n_groups = len(value_vars)
+
+        if id_vars:
+            self._validate_column_name_list(id_vars)
+
+        # When a list of lists is passed, assume multiple melt groups
+        if n_groups != len(var_name):
+            if len(var_name) != 1:
+                raise ValueError('Number of inner lists of value_vars must '
+                                 'equal length of var_name '
+                                 f'{len(value_vars)} != {len(var_name)}')
+            else:
+                var_name = [var_name[0] + '_' + str(i) for i in range(n_groups)]
+
+        for vn in var_name:
+            if not isinstance(vn, str):
+                raise TypeError('`var_name` must be a string or list of strings')
+
+        if n_groups != len(value_name):
+            if len(value_name) != 1:
+                raise ValueError('Number of inner lists of value_vars must '
+                                 'equal length of value_name '
+                                 f'{n_groups} != {len(value_name)}')
+            else:
+                value_name = [value_name[0] + '_' + str(i) for i in range(n_groups)]
+
+        for vv in value_name:
+            if not isinstance(vv, str):
+                raise TypeError('`value_name` must be a string or list of strings')
+
+        # get the total number of columns in each melt group
+        # This is not just the length of the list because this function
+        # handles columns with the same names, which is commong when
+        # using multiindex frames
+        value_vars_length = [len(vv) for vv in value_vars]
+
+        # Need the max number of columns for all the melt groups to
+        # correctly append NaNs to end of unbalanced melt groups
+        max_group_len = max(value_vars_length)
+        data_dict = defaultdict(list)
+        new_column_info = {}
+
+        # validate all columns in value_vars and ensure they don't appear as id_vars
+        col_set = set(self._columns)
+        id_vars_set = set(id_vars)
+        if len(id_vars_set) != len(id_vars):
+            raise ValueError('`id_vars` cannot contain duplicate column names')
+        all_value_vars_set = set()
+        for vv in value_vars:
+            for col in vv:
+                if col in id_vars_set:
+                    raise ValueError(f'Column "{col}" cannot be both an id_var and a value_var')
+                if col in all_value_vars_set:
+                    raise ValueError(f'column "{col}" is already a value_var')
+                self._validate_column_name(col)
+                all_value_vars_set.add(col)
+
+        cur_order = 0
+        new_columns = []
+        for i, col in enumerate(id_vars):
+            dtype, loc, _ = self._column_info[col].values
+            arr = self._data[dtype][:, loc]
+            arr = np.tile(arr, max_group_len)[:, np.newaxis]
+            new_loc = len(data_dict[dtype])
+            data_dict[dtype].append(arr)
+            new_column_info[col] = utils.Column(dtype, new_loc, i)
+            cur_order += 1
+            new_columns.append(col)
+
+        # individually melt each group
+        vars_zipped = zip(value_vars, var_name, value_name, value_vars_length)
+        for i, (val_v, var_n, val_n, vvl) in enumerate(vars_zipped):
+            dtype_loc = defaultdict(list)
+            for col in val_v:
+                dtype, loc, _ = self._column_info[col].values
+                dtype_loc[dtype].append(loc)
+
+            if len(dtype_loc) == 1:
+                cur_loc = len(data_dict['O'])
+                variable_vals = np.repeat(val_v, len(self))[:, np.newaxis]
+                data_dict['O'].append(variable_vals)
+                new_column_info[var_n] = utils.Column('O', cur_loc, cur_order)
+                cur_order += 1
+                new_columns.append(var_n)
+
+                locs = dtype_loc[dtype]
+                data = self._data[dtype][:, locs].flatten('F')[:, np.newaxis]
+                cur_loc = len(data_dict[dtype])
+                data_dict[dtype].append(data)
+                new_column_info[val_n] = utils.Column(dtype, cur_loc, cur_order)
+                cur_order += 1
+                new_columns.append(val_n)
+
+        new_columns = np.array(new_columns, dtype='O')
+        new_data = utils.concat_stat_arrays(data_dict)
         return self._construct_from_new(new_data, new_column_info, new_columns)
