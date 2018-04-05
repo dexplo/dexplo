@@ -129,7 +129,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [ ] join
 - [ ] melt
 - [ ] pivot
-- [ ] replace
+- [x] replace
 - [x] rolling
 - [x] sort_values
 - [ ] to_csv
