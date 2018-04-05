@@ -4793,13 +4793,17 @@ class DataFrame(object):
         var_name = check_string_or_list(var_name, 'var_name', False)
         value_name = check_string_or_list(value_name, 'value_name', False)
 
+        if id_vars:
+            self._validate_column_name_list(id_vars)
+        id_vars_set = set(id_vars)
+
+        if value_vars == []:
+            value_vars = [col for col in self._columns if col not in id_vars_set]
+
         if not isinstance(value_vars[0], list):
             value_vars = [value_vars]
 
         n_groups = len(value_vars)
-
-        if id_vars:
-            self._validate_column_name_list(id_vars)
 
         # When a list of lists is passed, assume multiple melt groups
         if n_groups != len(var_name):
@@ -4840,7 +4844,7 @@ class DataFrame(object):
 
         # validate all columns in value_vars and ensure they don't appear as id_vars
         col_set = set(self._columns)
-        id_vars_set = set(id_vars)
+
         if len(id_vars_set) != len(id_vars):
             raise ValueError('`id_vars` cannot contain duplicate column names')
         all_value_vars_set = set()
@@ -4855,10 +4859,11 @@ class DataFrame(object):
 
         cur_order = 0
         new_columns = []
+        # get the id_vars (non-melted) columns
         for i, col in enumerate(id_vars):
             dtype, loc, _ = self._column_info[col].values
             arr = self._data[dtype][:, loc]
-            arr = np.tile(arr, max_group_len)[:, np.newaxis]
+            arr = np.tile(arr, max_group_len)
             new_loc = len(data_dict[dtype])
             data_dict[dtype].append(arr)
             new_column_info[col] = utils.Column(dtype, new_loc, i)
@@ -4867,28 +4872,83 @@ class DataFrame(object):
 
         # individually melt each group
         vars_zipped = zip(value_vars, var_name, value_name, value_vars_length)
+        fill_empty_arr = {}
         for i, (val_v, var_n, val_n, vvl) in enumerate(vars_zipped):
             dtype_loc = defaultdict(list)
             for col in val_v:
                 dtype, loc, _ = self._column_info[col].values
                 dtype_loc[dtype].append(loc)
 
-            if len(dtype_loc) == 1:
-                cur_loc = len(data_dict['O'])
-                variable_vals = np.repeat(val_v, len(self))[:, np.newaxis]
-                data_dict['O'].append(variable_vals)
-                new_column_info[var_n] = utils.Column('O', cur_loc, cur_order)
-                cur_order += 1
-                new_columns.append(var_n)
+            if len(dtype_loc) > 1:
+                dt_string = ''
+                if 'O' in dtype_loc:
+                    dt_string = 'string'
+                elif 'm' in dtype_loc:
+                    dt_string = 'timedelta'
+                elif 'M' in dtype_loc:
+                    dt_string = 'datetime'
+                elif 'f' in dtype_loc:
+                    new_dtype = 'f'
+                elif 'i' in dtype_loc:
+                    new_dtype = 'i'
+                elif 'b' in dtype_loc:
+                    new_dtype = 'b'
 
+                if dt_string:
+                    raise TypeError(f'You are attempting to melt columns with a mix of {dt_string} '
+                                    f'and non-{dt_string} types. You can only melt string columns if '
+                                    'they are all string columns')
+            else:
+                new_dtype = dtype
+
+            if len(val_v) < max_group_len:
+                if dtype in 'ib':
+                    new_dtype = 'f'
+                fill_empty_arr[new_dtype] = True
+
+            # add the variable column - column names into column values
+            cur_loc = len(data_dict['O'])
+            variable_vals = np.repeat(np.array(val_v, dtype='O'), len(self))
+            data_dict['O'].append(variable_vals)
+            new_column_info[var_n] = utils.Column('O', cur_loc, cur_order)
+            cur_order += 1
+            new_columns.append(var_n)
+
+            if len(dtype_loc) == 1:
                 locs = dtype_loc[dtype]
-                data = self._data[dtype][:, locs].flatten('F')[:, np.newaxis]
-                cur_loc = len(data_dict[dtype])
-                data_dict[dtype].append(data)
-                new_column_info[val_n] = utils.Column(dtype, cur_loc, cur_order)
-                cur_order += 1
-                new_columns.append(val_n)
+                data = self._data[dtype][:, locs].flatten('F')
+            else:
+                all_data = []
+                for dtype, loc in dtype_loc.items():
+                    all_data.append(self._data[dtype][:, loc])
+                data = np.concatenate(all_data)
+
+            cur_loc = len(data_dict[new_dtype])
+            data_dict[new_dtype].append(data)
+            new_column_info[val_n] = utils.Column(new_dtype, cur_loc, cur_order)
+            cur_order += 1
+            new_columns.append(val_n)
 
         new_columns = np.array(new_columns, dtype='O')
-        new_data = utils.concat_stat_arrays(data_dict)
+        N = max_group_len * len(self)
+        new_data = {}
+        for dtype, data_list in data_dict.items():
+            size = (N, len(data_list))
+            if fill_empty_arr.get(dtype, False):
+                # need to make full array with nans
+                if dtype == 'f':
+                    arr = np.full(size, nan, dtype='float64', order='F')
+                elif dtype == 'O':
+                    arr = np.empty(size, dtype='O', order='F')
+                elif dtype == 'm':
+                    arr = np.full(size, NaT, dtype='timedelta64', order='F')
+                elif dtype == 'M':
+                    arr = np.full(size, NaT, dtype='datetime64', order='F')
+            else:
+                dtype_word = utils.convert_kind_to_numpy(dtype)
+                arr = np.empty(size, dtype=dtype_word, order='F')
+
+            for i, data in enumerate(data_list):
+                arr[:len(data), i] = data
+            new_data[dtype] = arr
         return self._construct_from_new(new_data, new_column_info, new_columns)
