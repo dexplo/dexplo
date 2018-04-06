@@ -16,7 +16,8 @@ from dexplo._libs import (string_funcs as _sf,
                           sort_rank as _sr,
                           unique as _uq,
                           replace as _repl,
-                          pivot as _pivot)
+                          pivot as _pivot,
+                          out_files as _of)
 from dexplo import _stat_funcs as stat
 from dexplo._strings import StringClass
 from dexplo._date import DateTimeClass
@@ -4952,3 +4953,27 @@ class DataFrame(object):
                 arr[:len(data), i] = data
             new_data[dtype] = arr
         return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def to_csv(self, fp, sep=','):
+
+        if not isinstance(sep, str) or len(sep) != 1:
+            raise TypeError('`sep` must be a one-character string')
+
+        def get_dtype_arr():
+            arr = np.empty(self.shape[1], dtype='int64')
+
+            for i, (col, col_obj) in enumerate(self._column_info.items()):
+                if col_obj.dtype == 'f':
+                    arr[i] = 0
+                elif col_obj.dtype == 'O':
+                    arr[i] = 1
+                elif col_obj.dtype in 'mM':
+                    arr[i] = 2
+                elif col_obj.dtype in 'ib':
+                    arr[i] = 3
+            return arr
+
+        dtypes_arr = get_dtype_arr()
+        values = self.values
+        columns = self._columns.astype('O')
+        _of.to_csv(values, columns, dtypes_arr, fp, sep)

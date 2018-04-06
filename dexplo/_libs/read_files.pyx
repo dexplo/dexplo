@@ -9,7 +9,7 @@ import cython
 
 from collections import defaultdict
 
-def get_dtypes_first_line(char * chars, int nc, ndarray[np.uint8_t, cast=True] usecols_arr):
+def get_dtypes_first_line(char * chars, int nc, ndarray[np.uint8_t, cast=True] usecols_arr, int sep):
     cdef:
         Py_ssize_t i=0, j=0, n, start=0, k=0
         int x = 0, dec=0, denom = 1, sign = 1
@@ -30,7 +30,7 @@ def get_dtypes_first_line(char * chars, int nc, ndarray[np.uint8_t, cast=True] u
 
     for i in range(n):
         if not usecols_arr[k]:
-            if chars[i] == b',' or chars[i] == b'\n':
+            if chars[i] == sep or chars[i] == b'\n':
                 k += 1
                 start = i + 1
             continue
@@ -45,7 +45,7 @@ def get_dtypes_first_line(char * chars, int nc, ndarray[np.uint8_t, cast=True] u
                 continue
             else:
                 begun = True
-        if chars[i] == b',' or chars[i] == b'\n':
+        if chars[i] == sep or chars[i] == b'\n':
             k += 1
             if i != start:
                 temp = chars[start:i]
@@ -239,7 +239,7 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
     else:
         usecols_arr = np.ones(nc, dtype='bool')
 
-    dtypes, dtype_loc, dtype_summary, vals = get_dtypes_first_line(first_line, nc, usecols_arr)
+    dtypes, dtype_loc, dtype_summary, vals = get_dtypes_first_line(first_line, nc, usecols_arr, sep)
 
     a_bool = np.empty((nr, dtype_summary[1]), dtype='bool', order='F')
     a_int = np.empty((nr, dtype_summary[2]), dtype='int64', order='F')

@@ -127,12 +127,12 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] groupby
 - [x] iterrows
 - [ ] join
-- [ ] melt
+- [x] melt
 - [x] pivot
 - [x] replace
 - [x] rolling
 - [x] sort_values
-- [ ] to_csv
+- [x] to_csv
 
 **Other (after 0.1 release)**
 - [ ] apply

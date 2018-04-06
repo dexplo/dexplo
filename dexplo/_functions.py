@@ -81,8 +81,8 @@ def read_csv(fp, sep=',', header=0, skiprows=None, usecols=None):
             if dtype in loc_order_changed:
                 new_column_info[col].loc = cur_dtype_loc[dtype]
                 cur_dtype_loc[dtype] += 1
-
-    return DataFrame._construct_from_new(new_data, new_column_info, columns)
+    new_columns = np.array(columns, dtype='O')
+    return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
 def _make_gen(reader):
     b = reader(1024 * 1024)
