@@ -1,5 +1,8 @@
 # dexplo
-A data analysis library comparible to pandas
+A data analysis library comparable to pandas
+
+# Installation
+You must have cython installed. Run `python setup.py build_ext --use-cython`
 
 [![Build Status](https://travis-ci.org/dexplo/dexplo.svg?branch=master)](https://travis-ci.org/dexplo/dexplo)
 
