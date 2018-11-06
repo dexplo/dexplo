@@ -7,6 +7,7 @@ from numpy import nan
 from numpy cimport ndarray
 from libc.math cimport isnan
 import warnings
+import datetime
 
 
 # def validate_1D_object_array(ndarray[object] arr, columns):
@@ -31,6 +32,10 @@ def get_kind(obj):
     # np.str_ is subclass of str? same for bytes
     if isinstance(obj, (str, np.str_)):
         return 'str'
+    if isinstance(obj, (datetime.date, datetime.datetime, np.datetime64)):
+        return 'datetime'
+    if isinstance(obj, (datetime.timedelta, np.timedelta64)):
+        return 'timedelta'
     if obj is None:
         return 'missing'
     return 'unknown'
@@ -53,6 +58,10 @@ def maybe_convert_object_array(ndarray[object] arr, column):
         return arr.astype('float64')
     if dtype == 'str':
         return convert_str_array(arr, column)
+    if dtype == 'datetime':
+        return arr.astype('datetime64[ns]')
+    if dtype == 'timedelta':
+        return arr.astype('timedelta64[ns]')
     if dtype == 'unknown':
         raise ValueError(f'Value in column {column} row {i} is {arr[i]} with type {type(arr[i])}. '
                          'All values must be either bool, int, float, str or missing')
@@ -105,6 +114,32 @@ def convert_str_array(ndarray[object] arr, column):
                              f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
         result[i] = arr[i]
     return result
+
+# def convert_datetime_array(ndarray[object] arr, column):
+#     cdef int i
+#     cdef int n = len(arr)
+#     cdef ndarray[np.int64_t] result = np.empty(n, dtype='int64')
+#
+#     for i in range(n):
+#         if not isinstance(arr[i], (datetime.date, datetime.datetime, np.datetime64)):
+#             raise ValueError('The first value of column `{column}` was a datetime. All the other '
+#                              'values in the array must be datetimes. '
+#                              f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
+#         result[i] = int(arr[i])
+#     return result.astype('datetime64[ns]')
+#
+# def convert_timedelta_array(ndarray[object] arr, column):
+#     cdef int i
+#     cdef int n = len(arr)
+#     cdef ndarray[np.int64_t] result = np.empty(n, dtype='int64')
+#
+#     for i in range(n):
+#         if not isinstance(arr[i], (datetime.timedelta, np.timedelta64)):
+#             raise ValueError('The first value of column `{column}` was a datetime. All the other '
+#                              'values in the array must be datetimes. '
+#                              f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
+#         result[i] = arr[i]
+#     return result.astype('timedelta64[ns]')
 
 def validate_strings_in_object_array(ndarray[object] arr, columns=None):
     """

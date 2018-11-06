@@ -1,3 +1,5 @@
+# run from command line with: python setup.py build_ext --use-cython -i
+# -i is option for inplace
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 import sys, glob
@@ -25,6 +27,7 @@ def readme():
 if '--use-cython' in sys.argv:
     USE_CYTHON = True
     sys.argv.remove('--use-cython')
+    print('here')
 
     from Cython.Build import cythonize
     extensions = cythonize(['dexplo/_libs/*.pyx'])

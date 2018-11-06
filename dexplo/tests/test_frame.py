@@ -1,10 +1,350 @@
-import dexplo as de
+import dexplo as dx
 import numpy as np
 from numpy import array, nan
 import pytest
 from dexplo.testing import assert_frame_equal, assert_array_equal, assert_dict_list
 
-df = de.DataFrame({'a': [1, 2, 5, 9, 3, 4, 5, 1],
+
+class TestFrameConstructorOneCol(object):
+
+    def test_single_array_int(self):
+        a = np.array([1, 2, 3])
+        df1 = dx.DataFrame({'a': a})
+        assert_array_equal(a, df1._data['i'][:, 0])
+        assert df1._column_info['a'].values == ('i', 0, 0)
+
+    def test_single_array_float(self):
+        a = np.array([1, 2.5, 3.2])
+        df1 = dx.DataFrame({'a': a})
+        assert_array_equal(a, df1._data['f'][:, 0])
+        assert df1._column_info['a'].values == ('f', 0, 0)
+
+    def test_single_array_bool(self):
+        a = np.array([True, False])
+        df1 = dx.DataFrame({'a': a})
+        assert_array_equal(a, df1._data['b'][:, 0])
+        assert df1._column_info['a'].values == ('b', 0, 0)
+
+    def test_single_array_string(self):
+        a = np.array(['a', 'b'])
+        df1 = dx.DataFrame({'a': a})
+        assert_array_equal(a.astype('O'), df1._data['O'][:, 0])
+        assert df1._column_info['a'].values == ('O', 0, 0)
+
+    def test_single_array_dt(self):
+        a = np.array([10, 20, 30], dtype='datetime64[ns]')
+        df1 = dx.DataFrame({'a': a})
+        assert_array_equal(a, df1._data['M'][:, 0])
+        assert df1._column_info['a'].values == ('M', 0, 0)
+
+    def test_single_array_td(self):
+        a = np.array([10, 20, 30], dtype='timedelta64[Y]')
+        df1 = dx.DataFrame({'a': a})
+        assert_array_equal(a.astype('timedelta64[ns]'), df1._data['m'][:, 0])
+        assert df1._column_info['a'].values == ('m', 0, 0)
+
+    def test_single_list_int(self):
+        a = np.array([1, 2, 3])
+        df1 = dx.DataFrame({'a': a.tolist()})
+        assert_array_equal(a, df1._data['i'][:, 0])
+        assert df1._column_info['a'].values == ('i', 0, 0)
+
+    def test_single_list_float(self):
+        a = np.array([1, 2.5, 3.2])
+        df1 = dx.DataFrame({'a': a.tolist()})
+        assert_array_equal(a, df1._data['f'][:, 0])
+        assert df1._column_info['a'].values == ('f', 0, 0)
+
+    def test_single_list_bool(self):
+        a = np.array([True, False])
+        df1 = dx.DataFrame({'a': a.tolist()})
+        assert_array_equal(a, df1._data['b'][:, 0])
+        assert df1._column_info['a'].values == ('b', 0, 0)
+
+    def test_single_list_string(self):
+        a = np.array(['a', 'b'])
+        df1 = dx.DataFrame({'a': a.tolist()})
+        assert_array_equal(a.astype('O'), df1._data['O'][:, 0])
+        assert df1._column_info['a'].values == ('O', 0, 0)
+
+    def test_single_list_dt(self):
+        a = [np.datetime64(x, 'ns') for x in [10, 20, 30]]
+        df1 = dx.DataFrame({'a': a})
+        assert_array_equal(np.array(a), df1._data['M'][:, 0])
+        assert df1._column_info['a'].values == ('M', 0, 0)
+
+    def test_single_list_td(self):
+        a = [np.timedelta64(x, 'ns') for x in [10, 20, 30]]
+        df1 = dx.DataFrame({'a': a})
+        assert_array_equal(np.array(a), df1._data['m'][:, 0])
+        assert df1._column_info['a'].values == ('m', 0, 0)
+
+
+class TestFrameConstructorOneColArr(object):
+
+    def test_single_array_int(self):
+        a = np.array([1, 2, 3])
+        df1 = dx.DataFrame(a)
+        assert_array_equal(a, df1._data['i'][:, 0])
+        assert df1._column_info['a0'].values == ('i', 0, 0)
+
+    def test_single_array_float(self):
+        a = np.array([1, 2.5, 3.2])
+        df1 = dx.DataFrame(a)
+        assert_array_equal(a, df1._data['f'][:, 0])
+        assert df1._column_info['a0'].values == ('f', 0, 0)
+
+    def test_single_array_bool(self):
+        a = np.array([True, False])
+        df1 = dx.DataFrame(a)
+        assert_array_equal(a, df1._data['b'][:, 0])
+        assert df1._column_info['a0'].values == ('b', 0, 0)
+
+    def test_single_array_string(self):
+        a = np.array(['a', 'b'])
+        df1 = dx.DataFrame(a)
+        assert_array_equal(a.astype('O'), df1._data['O'][:, 0])
+        assert df1._column_info['a0'].values == ('O', 0, 0)
+
+    def test_single_array_dt(self):
+        a = np.array([10, 20, 30], dtype='datetime64[ns]')
+        df1 = dx.DataFrame(a)
+        assert_array_equal(a, df1._data['M'][:, 0])
+        assert df1._column_info['a0'].values == ('M', 0, 0)
+
+    def test_single_array_td(self):
+        a = np.array([10, 20, 30], dtype='timedelta64[Y]')
+        df1 = dx.DataFrame(a)
+        assert_array_equal(a.astype('timedelta64[ns]'), df1._data['m'][:, 0])
+        assert df1._column_info['a0'].values == ('m', 0, 0)
+
+
+class TestFrameConstructorMultipleCol(object):
+
+    def test_array_int(self):
+        a = np.array([1, 2, 3])
+        b = np.array([10, 20, 30])
+        arr = np.column_stack((a, b))
+        df1 = dx.DataFrame({'a': a, 'b': b})
+        assert_array_equal(arr, df1._data['i'])
+        assert df1._column_info['a'].values == ('i', 0, 0)
+        assert df1._column_info['b'].values == ('i', 1, 1)
+
+    def test_array_float(self):
+        a = np.array([1.1, 2, 3])
+        b = np.array([10, 20.2, 30])
+        arr = np.column_stack((a, b))
+        df1 = dx.DataFrame({'a': a, 'b': b})
+        assert_array_equal(arr, df1._data['f'])
+        assert df1._column_info['a'].values == ('f', 0, 0)
+        assert df1._column_info['b'].values == ('f', 1, 1)
+
+    def test_array_bool(self):
+        a = np.array([True, False, True])
+        b = np.array([False, False, False])
+        arr = np.column_stack((a, b))
+        df1 = dx.DataFrame({'a': a, 'b': b})
+        assert_array_equal(arr, df1._data['b'])
+        assert df1._column_info['a'].values == ('b', 0, 0)
+        assert df1._column_info['b'].values == ('b', 1, 1)
+
+    def test_array_string(self):
+        a = np.array(['asdf', 'wer'])
+        b = np.array(['wyw', 'xcvd'])
+        arr = np.column_stack((a, b)).astype('O')
+        df1 = dx.DataFrame({'a': a, 'b': b})
+        assert_array_equal(arr, df1._data['O'])
+        assert df1._column_info['a'].values == ('O', 0, 0)
+        assert df1._column_info['b'].values == ('O', 1, 1)
+
+    def test_array_dt(self):
+        a = np.array([10, 20, 30], dtype='datetime64[ns]')
+        b = np.array([100, 200, 300], dtype='datetime64[ns]')
+        arr = np.column_stack((a, b))
+        df1 = dx.DataFrame({'a': a, 'b': b})
+        assert_array_equal(arr, df1._data['M'])
+        assert df1._column_info['a'].values == ('M', 0, 0)
+        assert df1._column_info['b'].values == ('M', 1, 1)
+
+    def test_array_td(self):
+        a = np.array([10, 20, 30], dtype='timedelta64[Y]')
+        b = np.array([1, 2, 3], dtype='timedelta64[Y]')
+        arr = np.column_stack((a, b)).astype('timedelta64[ns]')
+        df1 = dx.DataFrame({'a': a, 'b': b})
+        assert_array_equal(arr, df1._data['m'])
+        assert df1._column_info['a'].values == ('m', 0, 0)
+        assert df1._column_info['b'].values == ('m', 1, 1)
+
+    def test_array_int(self):
+        a = np.array([1, 2])
+        b = np.array([10, 20, 30])
+        with pytest.raises(ValueError):
+            dx.DataFrame({'a': a, 'b': b})
+
+
+a = [1, 2, 5, 9, 3, 4, 5, 1]
+b = [1.5, 8, 9, 1, 2, 3, 2, 8]
+c = list('abcdefgh')
+d = [True, False, True, False] * 2
+e = [np.datetime64(x, 'D') for x in range(8)]
+f = [np.timedelta64(x, 'D') for x in range(8)]
+df_mix = dx.DataFrame({'a': a,
+                       'b': b,
+                       'c': c,
+                       'd': d,
+                       'e': e,
+                       'f': f},
+                      columns=list('abcdef'))
+
+
+class TestAllDataTypesList:
+
+    def test_all(self):
+        assert_array_equal(np.array(a), df_mix._data['i'][:, 0])
+        assert_array_equal(np.array(b), df_mix._data['f'][:, 0])
+        assert_array_equal(np.array(c, dtype='O'), df_mix._data['O'][:, 0])
+        assert_array_equal(np.array(d), df_mix._data['b'][:, 0])
+        assert_array_equal(np.array(e, dtype='datetime64[ns]'), df_mix._data['M'][:, 0])
+        assert_array_equal(np.array(f, dtype='timedelta64[ns]'), df_mix._data['m'][:, 0])
+
+        assert df_mix._column_info['a'].values == ('i', 0, 0)
+        assert df_mix._column_info['b'].values == ('f', 0, 1)
+        assert df_mix._column_info['c'].values == ('O', 0, 2)
+        assert df_mix._column_info['d'].values == ('b', 0, 3)
+        assert df_mix._column_info['e'].values == ('M', 0, 4)
+        assert df_mix._column_info['f'].values == ('m', 0, 5)
+
+
+a1 = np.array([1, 2, 5, 9, 3, 4, 5, 1])
+b1 = np.array([1.5, 8, 9, 1, 2, 3, 2, 8])
+c1 = np.array(list('abcdefgh'), dtype='O')
+d1 = np.array([True, False, True, False] * 2)
+e1 = np.array(range(8), dtype='datetime64[D]')
+f1 = np.array(range(8), dtype='timedelta64[D]')
+df_mix1 = dx.DataFrame({'a': a,
+                        'b': b,
+                        'c': c,
+                        'd': d,
+                        'e': e,
+                        'f': f},
+                       columns=list('abcdef'))
+
+
+class TestAllDataTypesArray:
+
+    def test_all(self):
+        assert_array_equal(a1, df_mix1._data['i'][:, 0])
+        assert_array_equal(b1, df_mix1._data['f'][:, 0])
+        assert_array_equal(c1, df_mix1._data['O'][:, 0])
+        assert_array_equal(d1, df_mix1._data['b'][:, 0])
+        assert_array_equal(e1, df_mix1._data['M'][:, 0])
+        assert_array_equal(f1, df_mix1._data['m'][:, 0])
+
+        assert df_mix1._column_info['a'].values == ('i', 0, 0)
+        assert df_mix1._column_info['b'].values == ('f', 0, 1)
+        assert df_mix1._column_info['c'].values == ('O', 0, 2)
+        assert df_mix1._column_info['d'].values == ('b', 0, 3)
+        assert df_mix1._column_info['e'].values == ('M', 0, 4)
+        assert df_mix1._column_info['f'].values == ('m', 0, 5)
+
+
+arr = np.column_stack((a1, b1, c1, d1, e1, f1))
+df_mix2 = dx.DataFrame(arr)
+
+
+class TestAllDataTypesObjectArray:
+
+    def test_all(self):
+        assert_array_equal(a1, df_mix2._data['i'][:, 0])
+        assert_array_equal(b1, df_mix2._data['f'][:, 0])
+        assert_array_equal(c1, df_mix2._data['O'][:, 0])
+        assert_array_equal(d1, df_mix2._data['b'][:, 0])
+        assert_array_equal(e1, df_mix2._data['M'][:, 0])
+        assert_array_equal(f1, df_mix2._data['m'][:, 0])
+
+        assert df_mix2._column_info['a0'].values == ('i', 0, 0)
+        assert df_mix2._column_info['a1'].values == ('f', 0, 1)
+        assert df_mix2._column_info['a2'].values == ('O', 0, 2)
+        assert df_mix2._column_info['a3'].values == ('b', 0, 3)
+        assert df_mix2._column_info['a4'].values == ('M', 0, 4)
+        assert df_mix2._column_info['a5'].values == ('m', 0, 5)
+
+
+class TestColumns:
+    df1 = dx.DataFrame({'a': [1, 5, 7, 11],
+                        'b': ['eleni', 'teddy', 'niko', 'penny'],
+                        'c': [nan, 5.4, -1.1, .045],
+                        'd': [True, False, False, True]})
+
+    def test_set_columns_attr(self):
+        df1 = self.df1.copy()
+        df1.columns = ['z', 'y', 'x', 'w']
+        df2 = dx.DataFrame({'z': [1, 5, 7, 11],
+                            'y': ['eleni', 'teddy', 'niko', 'penny'],
+                            'x': [nan, 5.4, -1.1, .045],
+                            'w': [True, False, False, True]},
+                           columns=['z', 'y', 'x', 'w'])
+        assert_frame_equal(df1, df2)
+
+        with pytest.raises(ValueError):
+            self.df1.columns = ['sdf', 'er']
+
+        with pytest.raises(ValueError):
+            self.df1.columns = ['sdf', 'er', 'ewr', 'sdf']
+
+        with pytest.raises(TypeError):
+            self.df1.columns = [1, 2, 3, 4]
+
+    def test_get_columns(self):
+        columns = self.df1.columns
+        assert (columns == ['a', 'b', 'c', 'd'])
+
+
+class TestValues:
+    df1 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': [nan, 5.4, -1.1, .045]})
+
+    def test_get_values(self):
+        values1 = self.df1.values
+        values2 = np.array([[1, 5, 7, 11], [nan, 5.4, -1.1, .045]]).T
+        assert_array_equal(values1, values2)
+
+        a = np.random.rand(100, 5)
+        df = dx.DataFrame(a)
+        assert_array_equal(df.values, a)
+
+    def test_shape(self):
+        shape = self.df1.shape
+        assert shape == (4, 2)
+
+        a = np.random.rand(100, 5)
+        df = dx.DataFrame(a)
+        assert df.shape == (100, 5)
+
+    def test_size(self):
+        assert (self.df1.size == 8)
+
+        a = np.random.rand(100, 5)
+        df = dx.DataFrame(a)
+        assert df.size == 500
+
+    def test_to_dict(self):
+        d1 = self.df1.to_dict('array')
+        d2 = {'a': np.array([1, 5, 7, 11]),
+              'b': np.array([nan, 5.4, -1.1, .045])}
+        for key, arr in d1.items():
+            assert_array_equal(arr, d2[key])
+
+        d1 = self.df1.to_dict('list')
+        d2 = {'a': [1, 5, 7, 11],
+              'b': [nan, 5.4, -1.1, .045]}
+        assert_dict_list(d1, d2)
+
+    def test_copy(self):
+        df2 = self.df1.copy()
+        assert_frame_equal(self.df1, df2)
+
+
+df = dx.DataFrame({'a': [1, 2, 5, 9, 3, 4, 5, 1],
                    'b': [1.5, 8, 9, 1, 2, 3, 2, 8],
                    'c': list('abcdefgh'),
                    'd': [True, False, True, False] * 2,
@@ -13,19 +353,6 @@ df = de.DataFrame({'a': [1, 2, 5, 9, 3, 4, 5, 1],
                    'g': list('xyxxyyxy'),
                    'h': [3, 4, 5, 6, 7, 8, 9, 0]},
                   columns=list('abcdefgh'))
-
-
-class TestFrameConstructor(object):
-
-    def setup_method(self, method):
-        self.df = de.DataFrame({'a': [1, 2, 5, 9, 3, 4, 5, 1],
-                                'b': [1.5, 8, 9, 1, 2, 3, 2, 8],
-                                'c': list('abcdefgh'),
-                                'd': [True, False, True, False] * 2,
-                                'e': [10, 20, 30, 4, 5, 6, 7, 8],
-                                'f': [1., 3, 3, 3, 11, 4, 5, 1],
-                                'g': list('xyxxyyxy'),
-                                'h': [3, 4, 5, 6, 7, 8, 9, 0]})
 
 
 class TestScalarSelection:
@@ -53,13 +380,13 @@ class TestRowOnlySelection:
                 'd': array([False], dtype=bool), 'e': array([6]),
                 'f': array([4.]), 'g': array(['y'], dtype='<U1'),
                 'h': array([8])}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[-1, :]
         data = {'a': [1], 'b': [8.0], 'c': ['h'], 'd': [False],
                 'e': [8], 'f': [1.0], 'g': ['y'], 'h': [0]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
     def test_list_of_row_selection(self):
@@ -72,7 +399,7 @@ class TestRowOnlySelection:
                 'f': [1.0, 11.0, 4.0],
                 'g': ['x', 'y', 'y'],
                 'h': [3, 7, 8]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[[-4], :]
@@ -84,7 +411,7 @@ class TestRowOnlySelection:
                 'f': [11.0],
                 'g': ['y'],
                 'h': [7]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
     def test_slice_of_row_selection(self):
@@ -97,7 +424,7 @@ class TestRowOnlySelection:
                 'f': [3.0, 3.0, 11.0, 4.0],
                 'g': ['x', 'x', 'y', 'y'],
                 'h': [5, 6, 7, 8]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[-3:, :]
@@ -109,7 +436,7 @@ class TestRowOnlySelection:
                 'f': [4.0, 5.0, 1.0],
                 'g': ['y', 'x', 'y'],
                 'h': [8, 9, 0]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[1:6:3, :]
@@ -121,7 +448,7 @@ class TestRowOnlySelection:
                 'f': [3.0, 11.0],
                 'g': ['y', 'y'],
                 'h': [4, 7]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
 
@@ -130,17 +457,17 @@ class TestColumnOnlySelection:
     def test_scalar_col_selection(self):
         df1 = df[:, 4]
         data = {'e': [10, 20, 30, 4, 5, 6, 7, 8]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[:, -2]
         data = {'g': ['x', 'y', 'x', 'x', 'y', 'y', 'x', 'y']}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[:, 'd']
         data = {'d': [True, False, True, False, True, False, True, False]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         with pytest.raises(KeyError):
@@ -151,12 +478,12 @@ class TestColumnOnlySelection:
         data = {'b': [1.5, 8.0, 9.0, 1.0, 2.0, 3.0, 2.0, 8.0],
                 'e': [10, 20, 30, 4, 5, 6, 7, 8],
                 'g': ['x', 'y', 'x', 'x', 'y', 'y', 'x', 'y']}
-        df2 = de.DataFrame(data, columns=['e', 'g', 'b'])
+        df2 = dx.DataFrame(data, columns=['e', 'g', 'b'])
         assert_frame_equal(df1, df2)
 
         df1 = df[:, [3]]
         data = {'d': [True, False, True, False, True, False, True, False]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
     def test_list_of_string_col_selection(self):
@@ -164,19 +491,19 @@ class TestColumnOnlySelection:
         data = {'a': [1, 2, 5, 9, 3, 4, 5, 1],
                 'b': [1.5, 8.0, 9.0, 1.0, 2.0, 3.0, 2.0, 8.0],
                 'd': [True, False, True, False, True, False, True, False]}
-        df2 = de.DataFrame(data, columns=['b', 'd', 'a'])
+        df2 = dx.DataFrame(data, columns=['b', 'd', 'a'])
         assert_frame_equal(df1, df2)
 
         df1 = df[:, ['a']]
         data = {'a': [1, 2, 5, 9, 3, 4, 5, 1]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
     def test_list_of_string_and_integer_col_selection(self):
         df1 = df[:, ['b', 5]]
         data = {'b': [1.5, 8.0, 9.0, 1.0, 2.0, 3.0, 2.0, 8.0],
                 'f': [1.0, 3.0, 3.0, 3.0, 11.0, 4.0, 5.0, 1.0]}
-        df2 = de.DataFrame(data, columns=['b', 'f'])
+        df2 = dx.DataFrame(data, columns=['b', 'f'])
         assert_frame_equal(df1, df2)
 
         df1 = df[:, [-2, 'c', 0, 'd']]
@@ -184,7 +511,7 @@ class TestColumnOnlySelection:
                 'c': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
                 'd': [True, False, True, False, True, False, True, False],
                 'g': ['x', 'y', 'x', 'x', 'y', 'y', 'x', 'y']}
-        df2 = de.DataFrame(data, columns=['g', 'c', 'a', 'd'])
+        df2 = dx.DataFrame(data, columns=['g', 'c', 'a', 'd'])
         assert_frame_equal(df1, df2)
 
         with pytest.raises(ValueError):
@@ -195,13 +522,13 @@ class TestColumnOnlySelection:
         data = {'d': [True, False, True, False, True, False, True, False],
                 'e': [10, 20, 30, 4, 5, 6, 7, 8],
                 'f': [1.0, 3.0, 3.0, 3.0, 11.0, 4.0, 5.0, 1.0]}
-        df2 = de.DataFrame(data, columns=['d', 'e', 'f'])
+        df2 = dx.DataFrame(data, columns=['d', 'e', 'f'])
         assert_frame_equal(df1, df2)
 
         df1 = df[:, -4::2]
         data = {'e': [10, 20, 30, 4, 5, 6, 7, 8],
                 'g': ['x', 'y', 'x', 'x', 'y', 'y', 'x', 'y']}
-        df2 = de.DataFrame(data, columns=['e', 'g'])
+        df2 = dx.DataFrame(data, columns=['e', 'g'])
         assert_frame_equal(df1, df2)
 
     def test_slice_with_labels_col_selection(self):
@@ -210,20 +537,20 @@ class TestColumnOnlySelection:
                 'd': [True, False, True, False, True, False, True, False],
                 'e': [10, 20, 30, 4, 5, 6, 7, 8],
                 'f': [1.0, 3.0, 3.0, 3.0, 11.0, 4.0, 5.0, 1.0]}
-        df2 = de.DataFrame(data, columns=['c', 'd', 'e', 'f'])
+        df2 = dx.DataFrame(data, columns=['c', 'd', 'e', 'f'])
         assert_frame_equal(df1, df2)
 
         df1 = df[:, :'b']
         data = {'a': [1, 2, 5, 9, 3, 4, 5, 1],
                 'b': [1.5, 8.0, 9.0, 1.0, 2.0, 3.0, 2.0, 8.0]}
-        df2 = de.DataFrame(data, columns=['a', 'b'])
+        df2 = dx.DataFrame(data, columns=['a', 'b'])
         assert_frame_equal(df1, df2)
 
         df1 = df[:, 'g':'b':-2]
         data = {'c': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
                 'e': [10, 20, 30, 4, 5, 6, 7, 8],
                 'g': ['x', 'y', 'x', 'x', 'y', 'y', 'x', 'y']}
-        df2 = de.DataFrame(data, columns=['g', 'e', 'c'])
+        df2 = dx.DataFrame(data, columns=['g', 'e', 'c'])
         assert_frame_equal(df1, df2)
 
     def test_slice_labels_and_integer_col_selection(self):
@@ -231,7 +558,7 @@ class TestColumnOnlySelection:
         data = {'c': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
                 'd': [True, False, True, False, True, False, True, False],
                 'e': [10, 20, 30, 4, 5, 6, 7, 8]}
-        df2 = de.DataFrame(data, columns=['c', 'd', 'e'])
+        df2 = dx.DataFrame(data, columns=['c', 'd', 'e'])
         assert_frame_equal(df1, df2)
 
         df1 = df[:, 6:'d':-1]
@@ -239,12 +566,12 @@ class TestColumnOnlySelection:
                 'e': [10, 20, 30, 4, 5, 6, 7, 8],
                 'f': [1.0, 3.0, 3.0, 3.0, 11.0, 4.0, 5.0, 1.0],
                 'g': ['x', 'y', 'x', 'x', 'y', 'y', 'x', 'y']}
-        df2 = de.DataFrame(data, columns=['g', 'f', 'e', 'd'])
+        df2 = dx.DataFrame(data, columns=['g', 'f', 'e', 'd'])
         assert_frame_equal(df1, df2)
 
     def test_head_tail(self):
         df1 = df.head()
-        df2 = de.DataFrame({'a': [1, 2, 5, 9, 3],
+        df2 = dx.DataFrame({'a': [1, 2, 5, 9, 3],
                             'b': [1.5, 8, 9, 1, 2],
                             'c': list('abcde'),
                             'd': [True, False, True, False, True],
@@ -257,7 +584,7 @@ class TestColumnOnlySelection:
         assert_frame_equal(df1, df2)
 
         df1 = df.head(2)
-        df2 = de.DataFrame({'a': [1, 2],
+        df2 = dx.DataFrame({'a': [1, 2],
                             'b': [1.5, 8],
                             'c': list('ab'),
                             'd': [True, False],
@@ -269,7 +596,7 @@ class TestColumnOnlySelection:
         assert_frame_equal(df1, df2)
 
         df1 = df.tail(3)
-        df2 = de.DataFrame({'a': [4, 5, 1],
+        df2 = dx.DataFrame({'a': [4, 5, 1],
                             'b': [3., 2, 8],
                             'c': list('fgh'),
                             'd': [False, True, False],
@@ -286,70 +613,70 @@ class TestSimultaneousRowColumnSelection:
     def test_scalar_row_with_list_slice_column_selection(self):
         df1 = df[3, [4, 5, 6]]
         data = {'e': [4], 'f': [3.0], 'g': ['x']}
-        df2 = de.DataFrame(data, columns=['e', 'f', 'g'])
+        df2 = dx.DataFrame(data, columns=['e', 'f', 'g'])
         assert_frame_equal(df1, df2)
 
         df1 = df[1, [-1]]
         data = {'h': [4]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[0, ['g', 'd']]
         data = {'d': [True], 'g': ['x']}
-        df2 = de.DataFrame(data, columns=['g', 'd'])
+        df2 = dx.DataFrame(data, columns=['g', 'd'])
         assert_frame_equal(df1, df2)
 
         df1 = df[0, ['d']]
         data = {'d': [True]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[-2, 2:6]
         data = {'c': ['g'], 'd': [True], 'e': [7], 'f': [5.0]}
-        df2 = de.DataFrame(data, columns=['c', 'd', 'e', 'f'])
+        df2 = dx.DataFrame(data, columns=['c', 'd', 'e', 'f'])
         assert_frame_equal(df1, df2)
 
         df1 = df[4, 'f':'b':-1]
         data = {'b': [2.0], 'c': ['e'], 'd': [True], 'e': [5], 'f': [11.0]}
-        df2 = de.DataFrame(data, columns=['f', 'e', 'd', 'c', 'b'])
+        df2 = dx.DataFrame(data, columns=['f', 'e', 'd', 'c', 'b'])
         assert_frame_equal(df1, df2)
 
     def test_scalar_column_with_list_slice_row_selection(self):
         df1 = df[[4, 6], 2]
         data = {'c': ['e', 'g']}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[[4], 2]
         data = {'c': ['e']}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[[5, 2], 'f']
         data = {'f': [4.0, 3.0]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[3:, 'f']
         data = {'f': [3.0, 11.0, 4.0, 5.0, 1.0]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
         df1 = df[5::-2, 'b']
         data = {'b': [3.0, 1.0, 8.0]}
-        df2 = de.DataFrame(data)
+        df2 = dx.DataFrame(data)
         assert_frame_equal(df1, df2)
 
     def test_list_slice_row_with_list_slice_column_selection(self):
         df1 = df[[3, 4], [0, 6]]
         data = {'a': [9, 3], 'g': ['x', 'y']}
-        df2 = de.DataFrame(data, columns=['a', 'g'])
+        df2 = dx.DataFrame(data, columns=['a', 'g'])
         assert_frame_equal(df1, df2)
 
         df1 = df[3::3, [6, 3, 1, 5]]
         data = {'b': [1.0, 2.0], 'd': [False, True],
                 'f': [3.0, 5.0], 'g': ['x', 'x']}
-        df2 = de.DataFrame(data, columns=['g', 'd', 'b', 'f'])
+        df2 = dx.DataFrame(data, columns=['g', 'd', 'b', 'f'])
         assert_frame_equal(df1, df2)
 
         df1 = df[3:, 'c':]
@@ -359,12 +686,12 @@ class TestSimultaneousRowColumnSelection:
                 'f': [3.0, 11.0, 4.0, 5.0, 1.0],
                 'g': ['x', 'y', 'y', 'x', 'y'],
                 'h': [6, 7, 8, 9, 0]}
-        df2 = de.DataFrame(data, columns=['c', 'd', 'e', 'f', 'g', 'h'])
+        df2 = dx.DataFrame(data, columns=['c', 'd', 'e', 'f', 'g', 'h'])
         assert_frame_equal(df1, df2)
 
 
 class TestBooleanSelection:
-    df = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
+    df = dx.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
                        'b': [0, 1.512344353, 8, 9, nan, 3, 2, 8],
                        'c': [''] + list('bgggzgh'),
                        'd': [False, False, True, False] * 2,
@@ -406,7 +733,7 @@ class TestBooleanSelection:
 
         criteria = ~((self.df[:, 'a'] > 2) | (self.df[:, 'i'] < 6))
         df1 = self.df[criteria, ['d', 'b']]
-        df2 = de.DataFrame({'b': [1.512344353, 8],
+        df2 = dx.DataFrame({'b': [1.512344353, 8],
                             'd': [False, False]}, columns=['d', 'b'])
         assert_frame_equal(df1, df2)
 
@@ -438,13 +765,13 @@ class TestBooleanSelection:
             self.df[:, [True, False, True, False]]
 
         df1 = self.df[self.df[:, 'c'] == 'g', ['d', 'j']]
-        df2 = de.DataFrame({'d': [True, False, False, True],
+        df2 = dx.DataFrame({'d': [True, False, False, True],
                             'j': [0, 0, 0, 0]}, columns=['d', 'j'])
         assert_frame_equal(df1, df2)
 
         with np.errstate(invalid='ignore'):
             df1 = self.df[self.df[:, 'b'] < 2, 'b']
-            df2 = de.DataFrame({'b': [0, 1.512344353]})
+            df2 = dx.DataFrame({'b': [0, 1.512344353]})
             assert_frame_equal(df1, df2)
 
     def test_boolean_column_selection(self):
@@ -461,43 +788,43 @@ class TestBooleanSelection:
                 'k': np.ones(8) - 1,
                 'l': [np.nan] * 8}
 
-        df = de.DataFrame(data)
+        df = dx.DataFrame(data)
         df1 = df.select_dtypes('int')
         df_criteria = df1[1, :] == 0
         df1 = df1[:, df_criteria]
-        df2 = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
+        df2 = dx.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
                             'j': np.zeros(8, dtype='int')})
         assert_frame_equal(df1, df2)
 
         criteria = np.array([False, False, False, True, True, False,
                              False, False, False, False, False, False])
         df1 = df[-3:, criteria]
-        df2 = de.DataFrame({'d': [False, True, False],
+        df2 = dx.DataFrame({'d': [False, True, False],
                             'e': [6, 7, 8]})
         assert_frame_equal(df1, df2)
 
 
 class TestSetItem:
-    df = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+    df = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                        'd': [True, False]})
 
-    df1 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+    df1 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
                         'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
 
     def test_setitem_scalar(self):
         df1 = self.df.copy()
         df1[0, 0] = -99
-        df2 = de.DataFrame({'a': [-99, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [-99, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1[0, 'b'] = 'pen'
-        df2 = de.DataFrame({'a': [-99, 5], 'b': ['pen', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [-99, 5], 'b': ['pen', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1[1, 'b'] = None
-        df2 = de.DataFrame({'a': [-99, 5], 'b': ['pen', None], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [-99, 5], 'b': ['pen', None], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
@@ -507,19 +834,19 @@ class TestSetItem:
 
         df1 = self.df.copy()
         df1[0, 'c'] = 4.3
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [4.3, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [4.3, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[0, 'a'] = nan
-        df2 = de.DataFrame({'a': [nan, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [nan, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[1, 'a'] = -9.9
-        df2 = de.DataFrame({'a': [1, -9.9], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, -9.9], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
@@ -529,142 +856,142 @@ class TestSetItem:
     def test_setitem_entire_column_one_value(self):
         df1 = self.df.copy()
         df1[:, 'e'] = 5
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [5, 5]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = nan
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [nan, nan]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = 'grasshopper'
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': ['grasshopper', 'grasshopper']})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = True
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [True, True]})
         assert_frame_equal(df1, df2)
 
     def test_setitem_entire_new_colunm_from_array(self):
         df1 = self.df.copy()
         df1[:, 'e'] = np.array([9, 99])
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [9, 99]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = np.array([9, np.nan])
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [9, np.nan]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = np.array([True, False])
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = np.array(['poop', nan], dtype='O')
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': ['poop', nan]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = np.array(['poop', 'pants'])
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': ['poop', 'pants']})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = np.array([nan, nan])
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [nan, nan]})
         assert_frame_equal(df1, df2)
 
     def test_setitem_entire_new_colunm_from_list(self):
         df1 = self.df.copy()
         df1[:, 'e'] = [9, 99]
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [9, 99]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = [9, np.nan]
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [9, np.nan]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = [True, False]
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = ['poop', nan]
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': ['poop', nan]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = ['poop', 'pants']
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': ['poop', 'pants']})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'e'] = [nan, nan]
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [nan, nan]})
         assert_frame_equal(df1, df2)
 
     def test_setitem_entire_old_column_from_array(self):
         df1 = self.df.copy()
         df1[:, 'd'] = np.array([9, 99])
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [9, 99]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'd'] = np.array([9, np.nan])
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [9, np.nan]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'd'] = np.array([True, False])
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'd'] = np.array(['poop', nan], dtype='O')
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': ['poop', nan]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'a'] = np.array(['poop', 'pants'], dtype='O')
-        df2 = de.DataFrame({'a': ['poop', 'pants'], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': ['poop', 'pants'], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'b'] = np.array([nan, nan])
-        df2 = de.DataFrame({'a': [1, 5], 'b': [nan, nan], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': [nan, nan], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'c'] = np.array([False, False])
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [False, False],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [False, False],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
@@ -681,7 +1008,7 @@ class TestSetItem:
         df1 = self.df1.copy()
         df1[:, 'a_bool'] = df1[:, 'a'] > 3
 
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+        df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
                             'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True],
                             'a_bool': [False, True, True, True]},
                            columns=['a', 'b', 'c', 'd', 'a_bool'])
@@ -690,7 +1017,7 @@ class TestSetItem:
         df1 = self.df1.copy()
         df1[:, 'a2'] = df1[:, 'a'] + 5
 
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+        df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
                             'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True],
                             'a2': [6, 10, 12, 16]},
                            columns=['a', 'b', 'c', 'd', 'a2'])
@@ -699,43 +1026,43 @@ class TestSetItem:
     def test_setitem_entire_old_column_from_list(self):
         df1 = self.df.copy()
         df1[:, 'd'] = [9, 99]
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [9, 99]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'd'] = [9, np.nan]
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [9, np.nan]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'd'] = [True, False]
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'd'] = ['poop', nan]
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': ['poop', nan]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'a'] = ['poop', 'pants']
-        df2 = de.DataFrame({'a': ['poop', 'pants'], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': ['poop', 'pants'], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'b'] = [nan, nan]
-        df2 = de.DataFrame({'a': [1, 5], 'b': [nan, nan], 'c': [nan, 5.4],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': [nan, nan], 'c': [nan, 5.4],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
         df1[:, 'c'] = [False, False]
-        df2 = de.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [False, False],
+        df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [False, False],
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
@@ -751,46 +1078,46 @@ class TestSetItem:
     def test_setitem_simultaneous_row_and_column(self):
         df1 = self.df1.copy()
         df1[[0, 1], 'a'] = [9, 10]
-        df2 = de.DataFrame({'a': [9, 10, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+        df2 = dx.DataFrame({'a': [9, 10, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
                             'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         df1[[0, -1], 'a'] = np.array([9, 10.5])
-        df2 = de.DataFrame({'a': [9, 5, 7, 10.5], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+        df2 = dx.DataFrame({'a': [9, 5, 7, 10.5], 'b': ['eleni', 'teddy', 'niko', 'penny'],
                             'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         df1[2:, 'b'] = np.array(['NIKO', 'PENNY'])
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'NIKO', 'PENNY'],
+        df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'NIKO', 'PENNY'],
                             'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         df1[2, ['b', 'c']] = ['NIKO', 9.3]
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'NIKO', 'penny'],
+        df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'NIKO', 'penny'],
                             'c': [nan, 5.4, 9.3, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         df1[2, ['c', 'b']] = [9.3, None]
 
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', None, 'penny'],
+        df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', None, 'penny'],
                             'c': [nan, 5.4, 9.3, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         df1[[1, -1], 'b':'d'] = [['TEDDY', nan, True], [nan, 5.5, False]]
 
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'TEDDY', 'niko', nan],
+        df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'TEDDY', 'niko', nan],
                             'c': [nan, nan, -1.1, 5.5], 'd': [True, True, False, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         df1[1:-1, 'a':'d':2] = [[nan, 4], [3, 99]]
 
-        df2 = de.DataFrame({'a': [1, nan, 3, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+        df2 = dx.DataFrame({'a': [1, nan, 3, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
                             'c': [nan, 4, 99, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
@@ -798,21 +1125,21 @@ class TestSetItem:
         df1 = self.df1.copy()
         criteria = df1[:, 'a'] > 4
         df1[criteria, 'b'] = 'TEDDY'
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'TEDDY', 'TEDDY', 'TEDDY'],
+        df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'TEDDY', 'TEDDY', 'TEDDY'],
                             'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         criteria = df1[:, 'a'] > 4
         df1[criteria, 'b'] = ['A', 'B', 'C']
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'A', 'B', 'C'],
+        df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'A', 'B', 'C'],
                             'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         criteria = df1[:, 'a'] == 5
         df1[criteria, :] = [nan, 'poop', 2.2, True]
-        df2 = de.DataFrame({'a': [1, nan, 7, 11], 'b': ['eleni', 'poop', 'niko', 'penny'],
+        df2 = dx.DataFrame({'a': [1, nan, 7, 11], 'b': ['eleni', 'poop', 'niko', 'penny'],
                             'c': [nan, 2.2, -1.1, .045], 'd': [True, True, False, True]})
         assert_frame_equal(df1, df2)
 
@@ -823,107 +1150,34 @@ class TestSetItem:
         df1 = self.df1.copy()
         criteria = df1[:, 'a'] > 6
         df1[criteria, 'b'] = np.array(['food', nan], dtype='O')
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'food', nan],
+        df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'food', nan],
                             'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         df1[df1[:, 'a'] < 6, ['d', 'c', 'a']] = [[False, nan, 5.3], [False, 44, 4]]
-        df2 = de.DataFrame({'a': [5.3, 4, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
+        df2 = dx.DataFrame({'a': [5.3, 4, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
                             'c': [nan, 44, -1.1, .045], 'd': [False, False, False, True]})
         assert_frame_equal(df1, df2)
 
     def test_setitem_other_df(self):
-        df_other = de.DataFrame({'z': [1, 10, 9, 50], 'y': ['dont', 'be a', 'silly', 'sausage']})
+        df_other = dx.DataFrame({'z': [1, 10, 9, 50], 'y': ['dont', 'be a', 'silly', 'sausage']})
 
         df1 = self.df1.copy()
         df1[:, ['a', 'b']] = df_other
-        df2 = de.DataFrame({'a': [1, 10, 9, 50], 'b': ['dont', 'be a', 'silly', 'sausage'],
+        df2 = dx.DataFrame({'a': [1, 10, 9, 50], 'b': ['dont', 'be a', 'silly', 'sausage'],
                             'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         df1[[1, 3], ['c', 'b']] = df_other[[0, 2], :]
-        df2 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'dont', 'niko', 'silly'],
+        df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'dont', 'niko', 'silly'],
                             'c': [nan, 1, -1.1, 9], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         with pytest.raises(ValueError):
             df1 = self.df1.copy()
             df1[[1, 3], ['c', 'b']] = df_other[[0], :]
-
-
-class TestColumns:
-    df1 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
-                        'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
-
-    def test_set_columns_attr(self):
-        df1 = self.df1.copy()
-        df1.columns = ['z', 'y', 'x', 'w']
-        df2 = de.DataFrame({'z': [1, 5, 7, 11], 'y': ['eleni', 'teddy', 'niko', 'penny'],
-                            'x': [nan, 5.4, -1.1, .045], 'w': [True, False, False, True]},
-                           columns=['z', 'y', 'x', 'w'])
-        assert_frame_equal(df1, df2)
-
-        with pytest.raises(ValueError):
-            self.df1.columns = ['sdf', 'er']
-
-        with pytest.raises(ValueError):
-            self.df1.columns = ['sdf', 'er', 'ewr', 'sdf']
-
-    def test_get_columns(self):
-        columns = self.df1.columns
-        assert (columns == ['a', 'b', 'c', 'd'])
-
-
-class TestValues:
-    df1 = de.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', 'niko', 'penny'],
-                        'c': [nan, 5.4, -1.1, .045], 'd': [True, False, False, True]})
-
-    def test_get_values(self):
-        values1 = self.df1.values
-        values2 = np.array([[1, 5, 7, 11], ['eleni', 'teddy', 'niko', 'penny'],
-                            [nan, 5.4, -1.1, .045], [True, False, False, True]], dtype='O').T
-        assert_array_equal(values1, values2)
-
-        a = np.random.rand(100, 5)
-        df = de.DataFrame(a)
-        assert_array_equal(df.values, a)
-
-    def test_shape(self):
-        shape = self.df1.shape
-        assert shape == (4, 4)
-
-        a = np.random.rand(100, 5)
-        df = de.DataFrame(a)
-        assert df.shape == (100, 5)
-
-    def test_size(self):
-        assert (self.df1.size == 16)
-
-        a = np.random.rand(100, 5)
-        df = de.DataFrame(a)
-        assert df.size == 500
-
-    def test_to_dict(self):
-        d1 = self.df1.to_dict('array')
-        d2 = {'a': np.array([1, 5, 7, 11]),
-              'b': np.array(['eleni', 'teddy', 'niko', 'penny'], dtype='O'),
-              'c': np.array([nan, 5.4, -1.1, .045]),
-              'd': np.array([True, False, False, True])}
-        for key, arr in d1.items():
-            assert_array_equal(arr, d2[key])
-
-        d1 = self.df1.to_dict('list')
-        d2 = {'a': [1, 5, 7, 11],
-              'b': ['eleni', 'teddy', 'niko', 'penny'],
-              'c': [nan, 5.4, -1.1, .045],
-              'd': [True, False, False, True]}
-        assert_dict_list(d1, d2)
-
-    def test_copy(self):
-        df2 = self.df1.copy()
-        assert_frame_equal(self.df1, df2)
 
 
 class TestSelectDtypes:
@@ -940,11 +1194,11 @@ class TestSelectDtypes:
             'k': np.ones(8) - 1,
             'l': [np.nan] * 8}
 
-    df = de.DataFrame(data, columns=list('abcdefghijkl'))
+    df = dx.DataFrame(data, columns=list('abcdefghijkl'))
 
     def test_selectdtypes_ints(self):
         df1 = self.df.select_dtypes('int')
-        df2 = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
+        df2 = dx.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
                             'e': [0, 20, 30, 4, 5, 6, 7, 8],
                             'h': [0, 4, 5, 6, 7, 8, 9, 0],
                             'i': np.array([0, 7, 6, 5, 4, 3, 2, 11]),
@@ -955,7 +1209,7 @@ class TestSelectDtypes:
 
     def test_selectdtypes_float(self):
         df1 = self.df.select_dtypes('float')
-        df2 = de.DataFrame({'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
+        df2 = dx.DataFrame({'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
                             'f': [0., 3, 3, 3, 11, 4, 5, 1],
                             'k': np.ones(8) - 1,
                             'l': [np.nan] * 8},
@@ -963,19 +1217,19 @@ class TestSelectDtypes:
 
     def test_selectdtypes_bool(self):
         df1 = self.df.select_dtypes('bool')
-        df2 = de.DataFrame({'d': [False, False, True, False] * 2})
+        df2 = dx.DataFrame({'d': [False, False, True, False] * 2})
         assert_frame_equal(df1, df2)
 
     def test_selectdtypes_str(self):
         df1 = self.df.select_dtypes('str')
-        df2 = de.DataFrame({'c': [''] + list('bgggzgh'),
+        df2 = dx.DataFrame({'c': [''] + list('bgggzgh'),
                             'g': ['', None, 'ad', 'effd', 'ef', None, 'ett', 'zzzz']},
                            columns=['c', 'g'])
         assert_frame_equal(df1, df2)
 
     def test_selectdtypes_number(self):
         df1 = self.df.select_dtypes('number')
-        df2 = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
+        df2 = dx.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
                             'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
                             'e': [0, 20, 30, 4, 5, 6, 7, 8],
                             'f': [0., 3, 3, 3, 11, 4, 5, 1],
@@ -989,7 +1243,7 @@ class TestSelectDtypes:
 
     def test_get_dtypes(self):
         df1 = self.df.dtypes
-        df2 = de.DataFrame({'Column Name': list('abcdefghijkl'),
+        df2 = dx.DataFrame({'Column Name': list('abcdefghijkl'),
                             'Data Type': ['int', 'float', 'str', 'bool', 'int', 'float',
                                           'str', 'int', 'int', 'int', 'float', 'float']},
                            columns=['Column Name', 'Data Type'])
@@ -997,7 +1251,7 @@ class TestSelectDtypes:
 
     def test_selectdtypes_multiple(self):
         df1 = self.df.select_dtypes(['bool', 'int'])
-        df2 = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
+        df2 = dx.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
                             'd': [False, False, True, False] * 2,
                             'e': [0, 20, 30, 4, 5, 6, 7, 8],
                             'h': [0, 4, 5, 6, 7, 8, 9, 0],
@@ -1006,7 +1260,7 @@ class TestSelectDtypes:
         assert_frame_equal(df1, df2)
 
         df1 = self.df.select_dtypes(['float', 'str'])
-        df2 = de.DataFrame({'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
+        df2 = dx.DataFrame({'b': [0, 1.512344353, 8, 9, np.nan, 3, 2, 8],
                             'c': [''] + list('bgggzgh'),
                             'f': [0., 3, 3, 3, 11, 4, 5, 1],
                             'g': ['', None, 'ad', 'effd', 'ef', None, 'ett', 'zzzz'],
@@ -1016,7 +1270,7 @@ class TestSelectDtypes:
         assert_frame_equal(df1, df2)
 
         df1 = self.df.select_dtypes(exclude='float')
-        df2 = de.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
+        df2 = dx.DataFrame({'a': [0, 0, 5, 9, 3, 4, 5, 1],
                             'c': [''] + list('bgggzgh'),
                             'd': [False, False, True, False] * 2,
                             'e': [0, 20, 30, 4, 5, 6, 7, 8],
@@ -1028,7 +1282,7 @@ class TestSelectDtypes:
 
 
 class TestArithmeticOperations:
-    df = de.DataFrame({'a': [0, 0, 5],
+    df = dx.DataFrame({'a': [0, 0, 5],
                        'b': [0, 1.5, nan],
                        'c': [''] + list('bg'),
                        'd': [False, False, True],
@@ -1042,7 +1296,7 @@ class TestArithmeticOperations:
             self.df + 5
 
         df1 = self.df.select_dtypes('int') + 5
-        df2 = de.DataFrame({'a': [5, 5, 10],
+        df2 = dx.DataFrame({'a': [5, 5, 10],
                             'f': [5, 9, 10],
                             'g': np.zeros(3, dtype='int') + 5},
                            columns=['a', 'f', 'g'])
@@ -1052,7 +1306,7 @@ class TestArithmeticOperations:
         assert_frame_equal(df1, df2)
 
         df1 = self.df.select_dtypes('number') + 5
-        df2 = de.DataFrame({'a': [5, 5, 10],
+        df2 = dx.DataFrame({'a': [5, 5, 10],
                             'b': [5, 6.5, nan],
                             'f': [5, 9, 10],
                             'g': np.zeros(3, dtype='int') + 5,
@@ -1064,7 +1318,7 @@ class TestArithmeticOperations:
         assert_frame_equal(df1, df2)
 
         df1 = self.df.select_dtypes(['number', 'bool']) + 5
-        df2 = de.DataFrame({'a': [5, 5, 10],
+        df2 = dx.DataFrame({'a': [5, 5, 10],
                             'b': [5, 6.5, nan],
                             'd': [5, 5, 6],
                             'f': [5, 9, 10],
@@ -1078,28 +1332,28 @@ class TestArithmeticOperations:
 
     def test_add_string_frame(self):
         df1 = self.df.select_dtypes('str') + 'aaa'
-        df2 = de.DataFrame({'c': ['aaa', 'baaa', 'gaaa'],
+        df2 = dx.DataFrame({'c': ['aaa', 'baaa', 'gaaa'],
                             'e': ['aaa', None, 'adaaa']})
         assert_frame_equal(df1, df2)
 
         df1 = 'aaa' + self.df.select_dtypes('str')
-        df2 = de.DataFrame({'c': ['aaa', 'aaab', 'aaag'],
+        df2 = dx.DataFrame({'c': ['aaa', 'aaab', 'aaag'],
                             'e': ['aaa', None, 'aaaad']})
         assert_frame_equal(df1, df2)
 
     def test_comparison_string_frame(self):
         df1 = self.df.select_dtypes('str') > 'boo'
-        df2 = de.DataFrame({'c': [False, False, True],
+        df2 = dx.DataFrame({'c': [False, False, True],
                             'e': [False, False, False]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.select_dtypes('str') < 'boo'
-        df2 = de.DataFrame({'c': [True, True, False],
+        df2 = dx.DataFrame({'c': [True, True, False],
                             'e': [True, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.select_dtypes('str') == 'b'
-        df2 = de.DataFrame({'c': [False, True, False],
+        df2 = dx.DataFrame({'c': [False, True, False],
                             'e': [False, False, False]})
         assert_frame_equal(df1, df2)
 
@@ -1111,21 +1365,21 @@ class TestArithmeticOperations:
             self.df.select_dtypes('str') - 10
 
         df1 = self.df.select_dtypes('int') - 5
-        df2 = de.DataFrame({'a': [-5, -5, 0],
+        df2 = dx.DataFrame({'a': [-5, -5, 0],
                             'f': [-5, -1, 0],
                             'g': np.zeros(3, dtype='int') - 5},
                            columns=['a', 'f', 'g'])
         assert_frame_equal(df1, df2)
 
         df1 = 5 - self.df.select_dtypes('int')
-        df2 = de.DataFrame({'a': [5, 5, 0],
+        df2 = dx.DataFrame({'a': [5, 5, 0],
                             'f': [5, 1, 0],
                             'g': 5 - np.zeros(3, dtype='int')},
                            columns=['a', 'f', 'g'])
         assert_frame_equal(df1, df2)
 
         df1 = self.df.select_dtypes(['number', 'bool']) - 5
-        df2 = de.DataFrame({'a': [-5, -5, 0],
+        df2 = dx.DataFrame({'a': [-5, -5, 0],
                             'b': [-5, -3.5, nan],
                             'd': [-5, -5, -4],
                             'f': [-5, -1, 0],
@@ -1135,7 +1389,7 @@ class TestArithmeticOperations:
         assert_frame_equal(df1, df2)
 
         df1 = 5 - self.df.select_dtypes(['number', 'bool'])
-        df2 = de.DataFrame({'a': [5, 5, 0],
+        df2 = dx.DataFrame({'a': [5, 5, 0],
                             'b': [5, 3.5, nan],
                             'd': [5, 5, 4],
                             'f': [5, 1, 0],
@@ -1146,7 +1400,7 @@ class TestArithmeticOperations:
 
     def test_mult_frame(self):
         df1 = self.df * 2
-        df2 = de.DataFrame({'a': [0, 0, 10],
+        df2 = dx.DataFrame({'a': [0, 0, 10],
                             'b': [0, 3, nan],
                             'c': ['', 'bb', 'gg'],
                             'd': [0, 0, 2],
@@ -1157,7 +1411,7 @@ class TestArithmeticOperations:
         assert_frame_equal(df1, df2)
 
         df1 = 2 * self.df
-        df2 = de.DataFrame({'a': [0, 0, 10],
+        df2 = dx.DataFrame({'a': [0, 0, 10],
                             'b': [0, 3, nan],
                             'c': ['', 'bb', 'gg'],
                             'd': [0, 0, 2],
@@ -1178,7 +1432,7 @@ class TestArithmeticOperations:
             self.df / 'asdf'
 
         df1 = self.df.select_dtypes('number') / 2
-        df2 = de.DataFrame({'a': [0, 0, 2.5],
+        df2 = dx.DataFrame({'a': [0, 0, 2.5],
                             'b': [0, .75, nan],
                             'f': [0, 2, 2.5],
                             'g': np.zeros(3),
@@ -1187,7 +1441,7 @@ class TestArithmeticOperations:
         assert_frame_equal(df1, df2)
 
         df1 = 10 / self.df.select_dtypes('number')
-        df2 = de.DataFrame({'a': [np.inf, np.inf, 2],
+        df2 = dx.DataFrame({'a': [np.inf, np.inf, 2],
                             'b': [np.inf, 10 / 1.5, nan],
                             'f': [np.inf, 2.5, 2],
                             'g': [np.inf] * 3,
@@ -1205,7 +1459,7 @@ class TestArithmeticOperations:
         with pytest.raises(TypeError):
             self.df // 'asdf'
 
-        df = de.DataFrame({'a': [0, 0, 10],
+        df = dx.DataFrame({'a': [0, 0, 10],
                            'b': [0, 20, nan],
                            'f': [0, 100, 10],
                            'g': np.zeros(3, dtype='int'),
@@ -1213,7 +1467,7 @@ class TestArithmeticOperations:
                           columns=list('abfgh'))
 
         df1 = df // 3
-        df2 = de.DataFrame({'a': [0, 0, 3],
+        df2 = dx.DataFrame({'a': [0, 0, 3],
                             'b': [0, 6, nan],
                             'f': [0, 33, 3],
                             'g': np.zeros(3, dtype='int'),
@@ -1231,14 +1485,14 @@ class TestArithmeticOperations:
         with pytest.raises(TypeError):
             self.df ** 'asdf'
 
-        df = de.DataFrame({'a': [0, 0, 10],
+        df = dx.DataFrame({'a': [0, 0, 10],
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
                            'h': [np.nan] * 3},
                           columns=list('abfgh'))
         df1 = df ** 2
-        df2 = de.DataFrame({'a': [0, 0, 100],
+        df2 = dx.DataFrame({'a': [0, 0, 100],
                             'b': [0, 4, nan],
                             'f': [0, 100, 9],
                             'g': np.zeros(3, dtype='int'),
@@ -1248,7 +1502,7 @@ class TestArithmeticOperations:
         assert_frame_equal(df1, df2)
 
         df1 = 2 ** df
-        df2 = de.DataFrame({'a': [1, 1, 1024],
+        df2 = dx.DataFrame({'a': [1, 1, 1024],
                             'b': [1, 4, nan],
                             'f': [1, 1024, 8],
                             'g': np.ones(3, dtype='int'),
@@ -1266,7 +1520,7 @@ class TestArithmeticOperations:
         with pytest.raises(TypeError):
             self.df % 'asdf'
 
-        df = de.DataFrame({'a': [6, 7, 10],
+        df = dx.DataFrame({'a': [6, 7, 10],
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
@@ -1274,7 +1528,7 @@ class TestArithmeticOperations:
                           columns=list('abfgh'))
 
         df1 = df % 3
-        df2 = de.DataFrame({'a': [0, 1, 1],
+        df2 = dx.DataFrame({'a': [0, 1, 1],
                             'b': [0, 2, nan],
                             'f': [0, 1, 0],
                             'g': np.zeros(3, dtype='int'),
@@ -1292,7 +1546,7 @@ class TestArithmeticOperations:
         with pytest.raises(TypeError):
             self.df > 'asdf'
 
-        df = de.DataFrame({'a': [6, 7, 10],
+        df = dx.DataFrame({'a': [6, 7, 10],
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
@@ -1300,7 +1554,7 @@ class TestArithmeticOperations:
                           columns=list('abfgh'))
 
         df1 = df > 3
-        df2 = de.DataFrame({'a': [True, True, True],
+        df2 = dx.DataFrame({'a': [True, True, True],
                             'b': [False, False, False],
                             'f': [False, True, False],
                             'g': np.zeros(3, dtype='bool'),
@@ -1318,7 +1572,7 @@ class TestArithmeticOperations:
         with pytest.raises(TypeError):
             self.df >= 'asdf'
 
-        df = de.DataFrame({'a': [6, 7, 10],
+        df = dx.DataFrame({'a': [6, 7, 10],
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
@@ -1326,7 +1580,7 @@ class TestArithmeticOperations:
                           columns=list('abfgh'))
 
         df1 = df >= 3
-        df2 = de.DataFrame({'a': [True, True, True],
+        df2 = dx.DataFrame({'a': [True, True, True],
                             'b': [False, False, False],
                             'f': [False, True, True],
                             'g': np.zeros(3, dtype='bool'),
@@ -1344,7 +1598,7 @@ class TestArithmeticOperations:
         with pytest.raises(TypeError):
             self.df < 'asdf'
 
-        df = de.DataFrame({'a': [6, 7, 10],
+        df = dx.DataFrame({'a': [6, 7, 10],
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
@@ -1352,7 +1606,7 @@ class TestArithmeticOperations:
                           columns=list('abfgh'))
 
         df1 = df < 3
-        df2 = de.DataFrame({'a': [False, False, False],
+        df2 = dx.DataFrame({'a': [False, False, False],
                             'b': [True, True, False],
                             'f': [True, False, False],
                             'g': np.ones(3, dtype='bool'),
@@ -1370,14 +1624,14 @@ class TestArithmeticOperations:
         with pytest.raises(TypeError):
             self.df <= 'asdf'
 
-        df = de.DataFrame({'a': [6, 7, 10],
+        df = dx.DataFrame({'a': [6, 7, 10],
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
                            'h': [np.nan] * 3})
         df1 = df <= 3
 
-        df2 = de.DataFrame({'a': [False, False, False],
+        df2 = dx.DataFrame({'a': [False, False, False],
                             'b': [True, True, False],
                             'f': [True, False, True],
                             'g': np.ones(3, dtype='bool'),
@@ -1392,14 +1646,14 @@ class TestArithmeticOperations:
         with pytest.raises(TypeError):
             -self.df.select_dtypes('str')
 
-        df = de.DataFrame({'a': [6, 7, 10],
+        df = dx.DataFrame({'a': [6, 7, 10],
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
                            'h': [np.nan] * 3})
         df1 = -df
 
-        df2 = de.DataFrame({'a': [-6, -7, -10],
+        df2 = dx.DataFrame({'a': [-6, -7, -10],
                             'b': [0, -2, nan],
                             'f': [0, -10, -3],
                             'g': np.zeros(3, dtype='int'),
@@ -1429,35 +1683,77 @@ class TestArithmeticOperations:
             self.df %= 5
 
 
+class TestArithmeticOperatorsDF:
+    a = [1, 2]
+    b = [1.5, 8]
+    c = [2.3, np.nan]
+    d = list('ab')
+    e = [True, False]
+    f = [np.timedelta64(x, 'D') for x in range(2)]
+    df = dx.DataFrame({'a': a,
+                       'b': b,
+                       'c': c,
+                       'd': d,
+                       'e': e,
+                       'f': f},
+                      columns=list('abcdef'))
+
+    a = [5]
+    b = [2.1]
+    c = [np.nan]
+    d = ['twoplustwo']
+    e = [True]
+    f = [np.timedelta64(1000, 'D')]
+    df_one_row = dx.DataFrame({'a': a,
+                               'b': b,
+                               'c': c,
+                               'd': d,
+                               'e': e,
+                               'f': f},
+                              columns=list('abcdef'))
+
+    df_one_col = dx.DataFrame({'COL': [5, 2.1]})
+    df_number = df_mix.select_dtypes('number')
+
+    def test_add_df(self):
+        df_answer = dx.DataFrame({'a': np.array([2, 4]),
+                                  'b': np.array([ 3., 16.]),
+                                  'c': np.array([4.6, nan]),
+                                  'd': np.array(['aa', 'bb'], dtype=object),
+                                  'e': np.array([True, False]),
+                                  'f': np.array([0, 172800000000000], dtype='timedelta64[ns]')})
+        assert_frame_equal(self.df + self.df, df_answer)
+
+
 class TestMultipleBooleanConditions:
-    df = de.DataFrame({'a': [1, 4, 10, 20],
+    df = dx.DataFrame({'a': [1, 4, 10, 20],
                        'b': ['a', 'a', 'c', 'c'],
                        'c': [5, 1, 14, 3]})
 
     def test_and(self):
         df1 = (self.df[:, 'a'] > 5) & (self.df[:, 'a'] < 15)
-        df2 = de.DataFrame({'a': [False, False, True, False]})
+        df2 = dx.DataFrame({'a': [False, False, True, False]})
         assert_frame_equal(df1, df2)
 
     def test_or(self):
         df1 = (self.df[:, 'a'] > 5) | (self.df[:, 'c'] < 2)
-        df2 = de.DataFrame({'a': [False, True, True, True]})
+        df2 = dx.DataFrame({'a': [False, True, True, True]})
         assert_frame_equal(df1, df2)
 
     def test_invert(self):
         df1 = ~((self.df[:, 'a'] > 5) | (self.df[:, 'c'] < 2))
-        df2 = de.DataFrame({'a': [True, False, False, False]})
+        df2 = dx.DataFrame({'a': [True, False, False, False]})
         assert_frame_equal(df1, df2)
 
 
 class TestAsType:
-    df = de.DataFrame({'a': [1, 4, 10, 20],
+    df = dx.DataFrame({'a': [1, 4, 10, 20],
                        'b': ['a', 'a', 'c', 'c'],
                        'c': [5, 1, 14, 3]})
 
     def test_to_float(self):
         df1 = self.df.astype({'a': 'float'})
-        df2 = de.DataFrame({'a': [1., 4, 10, 20],
+        df2 = dx.DataFrame({'a': [1., 4, 10, 20],
                             'b': ['a', 'a', 'c', 'c'],
                             'c': [5, 1, 14, 3]})
         assert_frame_equal(df1, df2)
@@ -1466,34 +1762,34 @@ class TestAsType:
             self.df.astype('float')
 
         df1 = self.df[:, ['a', 'c']].astype('float')
-        df2 = de.DataFrame({'a': [1., 4, 10, 20],
+        df2 = dx.DataFrame({'a': [1., 4, 10, 20],
                             'c': [5., 1, 14, 3]})
         assert_frame_equal(df1, df2)
 
     def test_to_str(self):
         df1 = self.df.astype({'a': 'str'})
-        df2 = de.DataFrame({'a': ['1', '4', '10', '20'],
+        df2 = dx.DataFrame({'a': ['1', '4', '10', '20'],
                             'b': ['a', 'a', 'c', 'c'],
                             'c': [5, 1, 14, 3]})
         assert_frame_equal(df1, df2)
 
     def test_to_bool(self):
-        df = de.DataFrame({'a': [1, 0, 10, 20],
+        df = dx.DataFrame({'a': [1, 0, 10, 20],
                            'b': ['a', '', 'c', 'c'],
                            'c': [5, 1, 14, nan]})
         df1 = df.astype('bool')
-        df2 = de.DataFrame({'a': [True, False, True, True],
+        df2 = dx.DataFrame({'a': [True, False, True, True],
                             'b': [True, False, True, True],
                             'c': [True, True, True, True]})
         assert_frame_equal(df1, df2)
 
     def test_hasnans(self):
-        df = de.DataFrame({'a': [1, 0, 10, 20],
+        df = dx.DataFrame({'a': [1, 0, 10, 20],
                            'b': ['a', nan, 'c', 'c'],
                            'c': [5, 1, 14, nan],
                            'd': [False, True, False, False]})
         df1 = df.hasnans
-        df2 = de.DataFrame({'Column Name': list('abcd'),
+        df2 = dx.DataFrame({'Column Name': list('abcd'),
                             'Has NaN': [False, True, True, False]},
                            columns=['Column Name', 'Has NaN'])
         assert_frame_equal(df1, df2)

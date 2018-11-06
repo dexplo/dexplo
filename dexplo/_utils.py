@@ -4,13 +4,14 @@ import numpy as np
 from numpy import ndarray
 from dexplo._libs import validate_arrays as va
 
-_DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str', 'M': 'datetime64[ns]', 'm': 'timedelta64[ns]'}
+_DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str',
+       'M': 'datetime64[ns]', 'm': 'timedelta64[ns]'}
 _DT_GENERIC = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str', 'M': 'date', 'm': 'date'}
 _DT_FUNC_NAME = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str',
                  'M': 'datetime', 'm': 'timedelta'}
 _KIND = {'int': 'i', 'float': 'f', 'bool': 'b', 'str': 'O'}
 _KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'], 'str': ['O'], 'number': ['i', 'f'],
-              'datetime': 'M', 'timedelta': 'm'}
+              'datetime': ['M'], 'timedelta': ['m']}
 _DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'O',
            'datetime64[ns]': 'datetime64[ns]', 'datetime64[us]': 'datetime64[us]',
            'datetime64[ms]': 'datetime64[ms]', 'datetime64[s]': 'datetime64[s]',
@@ -58,6 +59,7 @@ class Column:
             if v1 != v2:
                 return False
         return True
+
 
 def get_num_cols(arrs: List[ndarray]) -> int:
     col_length: int = 0
@@ -149,7 +151,7 @@ def is_compatible_values(v1: Any, v2: Any) -> str:
 def convert_list_to_single_arr(values: List) -> ndarray:
     arr: ndarray = np.array(values)
     kind: str = arr.dtype.kind
-    if kind in 'ifbO':
+    if kind in 'ifbOmM':
         return arr
     elif kind in 'US':
         return np.array(values, dtype='O')
@@ -421,8 +423,17 @@ def convert_axis_string(axis: str) -> int:
         raise KeyError('axis must be either "rows" or "columns')
 
 
-def convert_clude(clude: Union[str, List[str]], arg_name: str) -> Union[str, List[str]]:
-    all_clude: Union[str, List[str]]
+def try_to_convert_dtype(dtype: str) -> List[str]:
+    try:
+        return _KIND_LIST[dtype]
+    except KeyError:
+        raise KeyError(f"{dtype} must be one/list of "
+                       "either ('float', 'integer', 'bool',"
+                       "'str', 'number', 'datetime', 'timedelta')")
+
+
+def convert_clude(clude: Union[str, List[str]]) -> List[str]:
+    all_clude: List[str]
     if isinstance(clude, str):
         all_clude = try_to_convert_dtype(clude)
     elif isinstance(clude, list):
@@ -432,16 +443,7 @@ def convert_clude(clude: Union[str, List[str]], arg_name: str) -> Union[str, Lis
     else:
         raise ValueError(f'Must pass a string or list of strings '
                          'to {arg_name}')
-    return all_clude
-
-
-def try_to_convert_dtype(dtype: str) -> List[str]:
-    try:
-        return _KIND_LIST[dtype]
-    except KeyError:
-        raise KeyError(f"{dtype} must be one/list of "
-                       "either ('float', 'integer', 'bool',"
-                       "'str', 'number', 'datetime', 'timedelta')")
+    return set(all_clude)
 
 
 def swap_axis_name(axis: str) -> str:

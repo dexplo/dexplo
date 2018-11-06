@@ -105,3 +105,10 @@ ENV/
 
 # pycharm
 .idea
+
+# temporarily
+*.c
+*.txt
+*.csv
+*.npy
+notebooks/

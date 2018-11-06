@@ -1,5 +1,5 @@
 import numpy as np
-import dexplo._libs.math as _math
+from ._libs import math as _math
 
 
 def max_date(arr, axis, **kwargs):

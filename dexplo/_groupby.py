@@ -9,6 +9,7 @@ import warnings
 
 ColInfoT = Dict[str, utils.Column]
 
+
 def get_func_kwargs(name):
     if name in {'sum', 'prod', 'mean', 'median', 'size'}:
         return {}
@@ -22,6 +23,7 @@ def get_func_kwargs(name):
         return dict(ignore_str=False, ignore_date=False, keep_date_type=False)
     elif name in {'var'}:
         return dict(add_positions=True)
+
 
 class Grouper(object):
 
@@ -475,7 +477,9 @@ class Grouper(object):
                                  'column name. Optionally, it may have a dictionary of kwargs '
                                  'for its fourth element')
             if isinstance(arg[0], str):
-                utils.validate_agg_func(arg[0], 'O')
+                # TODO - the second argument below needs to be gotten from aggregating column.
+                # Its simply defaulted now
+                utils.validate_agg_func(arg[0], 'i')
             elif not isinstance(arg[0], Callable):
                 raise TypeError('The first item of the tuple must be an aggregating function name '
                                 'as a string or a user-defined function')

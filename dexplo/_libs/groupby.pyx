@@ -6,6 +6,7 @@ from numpy cimport ndarray
 import cython
 from cpython cimport set, list, tuple
 from libc.math cimport isnan, sqrt
+
 from numpy import nan
 from .math import min_max_int, min_max_int2, get_first_non_nan, quick_select_int2, quick_select_float2
 from libc.stdlib cimport malloc, free
