@@ -190,7 +190,7 @@ def concat_arrays(data_dict: DictListArr) -> Dict[str, ndarray]:
     for dtype, arrs in data_dict.items():
         if arrs:
             if len(arrs) == 1:
-                new_data[dtype] = arrs[0][:, np.newaxis]
+                new_data[dtype] = arrs[0].reshape(-1, 1)
             else:
                 arrs = np.column_stack(arrs)
                 new_data[dtype] = np.asfortranarray(arrs)

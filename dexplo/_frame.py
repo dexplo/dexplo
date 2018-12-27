@@ -628,7 +628,7 @@ class DataFrame(object):
     def _select_entire_single_column(self, col_selection):
         self._validate_column_name(col_selection)
         dtype, loc, _ = self._column_info[col_selection].values
-        new_data = {dtype: self._data[dtype][:, [loc]]}
+        new_data = {dtype: self._data[dtype][:, loc].reshape(-1, 1)}
         new_columns = np.array([col_selection], dtype='O')
         new_column_info = {col_selection: utils.Column(dtype, 0, 0)}
         return self._construct_from_new(new_data, new_column_info, new_columns)
@@ -692,9 +692,7 @@ class DataFrame(object):
         A new DataFrame
 
         """
-        if not isinstance(value, tuple):
-            value = (slice(None), value)
-        # utils.validate_selection_size(value)
+        utils.validate_selection_size(value)
         row_selection, col_selection = value  # type: RowSelection, ColSelection
         if isinstance(row_selection, int) and isinstance(col_selection, (int, str)):
             return self._getitem_scalar(row_selection, col_selection)
@@ -979,6 +977,17 @@ class DataFrame(object):
             for col, loc, order in info:  # type: str, int, int
                 new_column_info[col] = utils.Column(new_dtype, loc + cur_len, order)
 
+        def calculate_column_wise(col1, col2, col3):
+            arr1 = self._get_column_values(col1)
+            arr2 = other._get_column_values(col2)
+            arr_new = calculate_arrays(arr1, arr2)
+            if arr_new.ndim == 1:
+                arr_new = arr_new[:, np.newaxis]
+            new_kind = arr_new.dtype.kind
+            cur_len = len(data_dict[new_kind])
+            data_dict[new_kind].append(arr_new)
+            new_column_info[col3] = utils.Column(new_kind, cur_len, i)
+
         data_dict: DictListArr = defaultdict(list)
         new_column_info: ColInfoT = {}
 
@@ -1005,13 +1014,7 @@ class DataFrame(object):
                     set_data_and_info(kinds1[0], kinds2[0], locs1, locs2)
                 else:
                     for i, (col1, col2) in enumerate(zip(self._columns, other._columns)):
-                        arr1 = self._get_column_values(col1)
-                        arr2 = other._get_column_values(col2)
-                        arr_new = calculate_arrays(arr1, arr2)
-                        new_kind = arr_new.dtype.kind
-                        cur_len = len(data_dict[new_kind])
-                        data_dict[new_kind].append(arr_new)
-                        new_column_info[col1] = utils.Column(new_kind, cur_len, i)
+                        calculate_column_wise(col1, col2, col1)
             else:
                 # Incompatible - a detailed error message is produced
                 for i, (kind1, kind2) in enumerate(zip(kinds1, kinds2)):
@@ -1030,14 +1033,7 @@ class DataFrame(object):
                 new_columns = other._columns.copy()
             zipper = zip_longest(self._columns, other._columns, new_columns, fillvalue=last_col)
             for i, (col1, col2, col3) in enumerate(zipper):
-                # col3 is the column name used
-                arr1 = self._get_column_values(col1)
-                arr2 = other._get_column_values(col2)
-                arr_new = calculate_arrays(arr1, arr2)
-                new_kind = arr_new.dtype.kind
-                cur_len = len(data_dict[new_kind])
-                data_dict[new_kind].append(arr_new)
-                new_column_info[col3] = utils.Column(new_kind, cur_len, i)
+                calculate_column_wise(col1, col2, col3)
         else:
             if rows_equal:
                 raise ValueError('Both DataFrames have the same number of rows but a '
@@ -1080,7 +1076,7 @@ class DataFrame(object):
                                enumerate(new_columns)}
             other = self._construct_from_new(new_data, new_column_info,
                                              np.asarray(new_columns, dtype='O'))
-        return eval(f"{'self'} .{op_string}({'other'})")
+        return getattr(self, op_string)(other)
 
     def _op(self, other: Any, op_string: str) -> 'DataFrame':
         if utils.is_scalar(other):
@@ -2141,7 +2137,7 @@ class DataFrame(object):
                 new_column_info[name] = utils.Column(dtype, loc, order)
                 new_columns.append(name)
 
-            new_data: Dict[str, ndarray] = df._concat_arrays(data_dict)
+            new_data: Dict[str, ndarray] = init.concat_arrays(data_dict)
 
         else:
             raise NotImplementedError('non-numeric summary not available yet')
@@ -2454,10 +2450,10 @@ class DataFrame(object):
 
             if only_subset:
                 new_data = {kind: arr[np.ix_(arr_keep)][:, np.newaxis]}
-                new_columns = [col]
+                new_columns = np.array([col], dtype='object')
                 new_column_info = {col: utils.Column(kind, 0, 0)}
+                return self._construct_from_new(new_data, new_column_info, new_columns)
             else:
-
                 return keep_all(arr_keep)
         else:
             # returns columns in order from df regardless of subset order
@@ -2494,8 +2490,10 @@ class DataFrame(object):
                     # a min of 2 columns here
                     new_data = {dtype: arr[np.ix_(arr_keep)]}
                     new_columns = dtype_col[dtype]
+                    new_columns = np.array(new_columns, dtype='object')
                     for col, loc in zip(new_columns, locs):
                         new_column_info[col] = utils.Column(dtype, loc, new_col_order[col])
+                    return self._construct_from_new(new_data, new_column_info, new_columns)
                 else:
                     return keep_all(arr_keep)
             else:
@@ -2548,8 +2546,6 @@ class DataFrame(object):
                     return keep_subset(arr_keep, dtype_col, dtype_loc, new_columns, new_col_order)
                 else:
                     return keep_all(arr_keep)
-
-        return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def nunique(self, axis: str = 'rows', count_na: bool = False) -> 'DataFrame':
         """
@@ -3201,7 +3197,7 @@ class DataFrame(object):
 
         """
         if isinstance(columns, (list, ndarray)):
-            new_columns = self._check_column_validity(columns)
+            new_columns = init.check_column_validity(columns)
 
         elif isinstance(columns, dict):
             for col in columns:
@@ -3209,11 +3205,11 @@ class DataFrame(object):
                     raise ValueError(f'Column {col} is not a column')
 
             new_columns = [columns.get(col, col) for col in self._columns]
-            new_columns = self._check_column_validity(new_columns)
+            new_columns = init.check_column_validity(new_columns)
 
         elif callable(columns):
             new_columns = [columns(col) for col in self._columns]
-            new_columns = self._check_column_validity(new_columns)
+            new_columns = init.check_column_validity(new_columns)
         else:
             raise ValueError('You must pass either a dictionary, list/array, '
                              'or function to `columns`')
@@ -3296,10 +3292,21 @@ class DataFrame(object):
             pass
         else:
             raise TypeError('Rows must either be an int, list/array of ints or None')
+        new_data = {}
+        for dtype, arr in self._data.items():
+            with warnings.catch_warnings():
+                warnings.filterwarnings('error')
+                try:
+                    new_data[dtype] = np.delete(arr, rows, axis=0)
+                except (DeprecationWarning, FutureWarning):
+                    raise IndexError('one of the rows is out of bounds')
+        new_column_info = self._copy_column_info()
+        new_columns = self._columns.copy()
+        return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def drop(self,
              rows: Union[int, List[int], ndarray, None] = None,
-             columns: Union[int, List[IntStr], ndarray, None] = None):
+             columns: Union[str, int, List[IntStr], ndarray, None] = None):
         if rows is None:
             return self._drop_just_cols(columns)
 

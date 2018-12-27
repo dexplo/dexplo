@@ -1137,7 +1137,7 @@ def min_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     if axis == 0:
         amin = np.empty(nc, dtype='int64')
         for i in range(nc):
-            amin[i] = a[0]
+            amin[i] = a[0, i]
             for j in range(nr):
                 if arr[i * nr + j] < amin[i]:
                     amin[i] = arr[i * nr + j]
