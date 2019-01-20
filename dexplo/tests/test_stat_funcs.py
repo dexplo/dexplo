@@ -1,6 +1,6 @@
 import dexplo as dx
 import numpy as np
-from numpy import nan
+from numpy import nan, array
 import pytest
 from dexplo.testing import assert_frame_equal
 
@@ -130,6 +130,27 @@ class TestSimpleAggs(object):
 
         with pytest.raises(TypeError):
             df.select_dtypes('str').median('columns')
+
+    def test_mode_low(self):
+        df = dx.DataFrame({'a': [3, 3, 5, 5],
+                           'b': [.012, 1.5, nan, nan],
+                           'c': ['b', 'g', 'b', 'b'],
+                           'd': [True, False, True, False],
+                           'e': [90, 20, 20, 90],
+                           'f': [nan, 10, 4, nan],
+                           'g': ['', None, 'ad', None],
+                           'h': [nan] * 4})
+        df1 = df.mode()
+        df2 = dx.DataFrame({'a': array([5]),
+                            'b': array([1.5]),
+                            'c': array(['b'], dtype=object),
+                            'd': array([ True]),
+                            'e': array([90]),
+                            'f': array([4.]),
+                            'g': array(['ad'], dtype=object),
+                            'h': array([nan])})
+        assert_frame_equal(df1, df2)
+
 
     def test_std(self):
         df = dx.DataFrame({'a': [0, 5, 16],
@@ -548,6 +569,41 @@ class TestCum(object):
         df1 = df.select_dtypes('str').cumsum('columns')
         df2 = dx.DataFrame({'c': ['', 'g', 'b'],
                             'g': ['', 'g', 'bad']})
+        assert_frame_equal(df1, df2)
+
+    def test_cumprod(self):
+        df = dx.DataFrame({'a': [0, 0, 5],
+                           'b': [0, 1.5, nan],
+                           'c': ['', 'g', 'b'],
+                           'd': [False, False, True],
+                           'e': [90, 20, 30],
+                           'f': [nan, 10, 4],
+                           'g': ['', None, 'ad'],
+                           'h': [nan] * 3})
+        df1 = df.cumprod()
+        df2 = dx.DataFrame({'a': array([0, 0, 0]),
+                             'b': array([0., 0., 0.]),
+                             'd': array([0, 0, 0]),
+                             'e': array([   90,  1800, 54000]),
+                             'f': array([ 1., 10., 40.]),
+                             'h': array([1., 1., 1.])})
+        assert_frame_equal(df1, df2)
+
+        df = dx.DataFrame({'a': [3, 0, 5],
+                           'b': [.012, 1.5, nan],
+                           'c': ['', 'g', 'b'],
+                           'd': [True, False, True],
+                           'e': [90, 20, 30],
+                           'f': [nan, 10, 4],
+                           'g': ['', None, 'ad'],
+                           'h': [nan] * 3})
+        df1 = df.cumprod(axis='columns')
+        df2 = dx.DataFrame({'a': array([3., 0., 5.]),
+                            'b': array([0.036, 0.   , 5.   ]),
+                            'd': array([0.036, 0.   , 5.   ]),
+                            'e': array([  3.24,   0.  , 150.  ]),
+                            'f': array([  3.24,   0.  , 600.  ]),
+                            'h': array([  3.24,   0.  , 600.  ])})
         assert_frame_equal(df1, df2)
 
 

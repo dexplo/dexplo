@@ -440,6 +440,9 @@ class DataFrame(object):
 
     @property
     def shape(self) -> Tuple[int, int]:
+        """
+        Returns the number of rows and columns as a two-item tuple
+        """
         return len(self), len(self._columns)
 
     @property
@@ -640,7 +643,6 @@ class DataFrame(object):
         new_column_info: ColInfoT = {}
         new_columns: ColumnT = cs
 
-        col: str
         for i, col in enumerate(cs):
             dtype, loc, _ = self._column_info[col].values
             cur_loc: int = len(dt_positions[dtype])
@@ -1343,9 +1345,7 @@ class DataFrame(object):
         utils.validate_selection_size(key)
 
         # row selection and column selection
-        rs: RowSelection
-        cs: ColSelection
-        rs, cs = key
+        rs, cs = key  # type: RowSelection, ColSelection
         if isinstance(rs, int) and isinstance(cs, (int, str)):
             return self._setitem_scalar(rs, cs, value)
 
@@ -3887,6 +3887,29 @@ class DataFrame(object):
         return TimeDeltaClass(self)
 
     def append(self, objs, axis: str = 'rows', *args, **kwargs):
+        """
+        Append new rows or columns to the DataFrame.
+
+        Parameters
+        ----------
+        objs: Dictionary, DataFrame, or list of DataFrames
+            Only columns may be appended when a dictionary is used. The keys
+            must be the strings of new column names and the values must either be a
+            callable, a scalar, an array, or DataFrame. If the value of the dictionary
+            is a callable, the *args, and **kwargs are passed to it. It must return a scalar,
+            an array of a DataFrame
+
+            If a list of DataFrames is passed
+
+        axis: 'rows' or 'columns'
+
+        args: passed to
+        kwargs
+
+        Returns
+        -------
+
+        """
         axis_int: int = utils.convert_axis_string(axis)
 
         if isinstance(objs, dict):
@@ -3898,10 +3921,8 @@ class DataFrame(object):
                     raise TypeError('The keys of the `objs` dict must be a string')
 
             n = self.shape[0]
-            data_dict = defaultdict(list)
-            names = []
-            new_column_info = self._copy_column_info()
-            order = len(self._columns)
+            appended_data = {}
+            df_new = self.copy()
             for col_name, func in objs.items():
                 if isinstance(func, Callable):
                     result = func(self, *args, **kwargs)
@@ -3953,23 +3974,30 @@ class DataFrame(object):
                 elif len(arr) > n:
                     arr = arr[:n]
 
-                if arr.ndim == 1:
-                    arr = arr[:, np.newaxis]
+                appended_data[col_name] = (dtype, arr)
 
-                names.append(col_name)
-                loc_add = len(data_dict[dtype])
-                loc = self._data[dtype].shape[1]
-                new_column_info[col_name] = utils.Column(dtype, loc + loc_add, order)
-                order += 1
-                data_dict[dtype].append(arr)
-
-            new_columns = np.append(self._columns, names)
-            new_data = {}
-            for dt, data in self._data.items():
-                if dt in data_dict:
-                    new_data[dt] = np.column_stack((data, *data_dict[dt]))
+            new_cols = []
+            new_column_info = df_new._column_info
+            new_data = df_new._data
+            extra_cols = 0
+            for col_name, (dt, arr) in appended_data.items():
+                if col_name in new_column_info:
+                    old_dtype, loc, order = new_column_info[col_name].values
+                    if old_dtype == dt:
+                        new_data[old_dtype][:, loc] = arr
+                    else:
+                        new_data[old_dtype] = np.delete(new_data[old_dtype], loc, 1)
+                        new_loc = new_data[dt].shape[1]
+                        new_data[dt] = np.column_stack((new_data[dt], arr))
+                        new_column_info[col_name] = utils.Column(dt, new_loc, order)
                 else:
-                    new_data[dt] = data.copy('F')
+                    loc = new_data[dt].shape[1]
+                    new_column_info[col_name] = utils.Column(dt, loc, self.shape[1] + extra_cols)
+                    extra_cols += 1
+                    new_data[dt] = np.column_stack((new_data[dt], arr))
+                    new_cols.append(col_name)
+
+            new_columns = np.append(self._columns, new_cols)
 
         elif isinstance(objs, (DataFrame, list)):
             if isinstance(objs, DataFrame):
@@ -3997,6 +4025,8 @@ class DataFrame(object):
                                         f'number {i}. When appending datetime64[ns], all '
                                         f'columns must have that type.')
                     elif 'O' in col_dtype:
+                        raise TypeError('You are trying to append a string column with a non-'
+                                        'string column. Both columns must be strings.')
                         return 'O'
                     elif 'f' in col_dtype or None in col_dtype:
                         return 'f'
@@ -4006,6 +4036,7 @@ class DataFrame(object):
                         raise ValueError('This error should never happen.')
 
             if axis_int == 0:
+                # append new rows
                 ncs = []
                 nrs = []
                 total = 0
@@ -4091,6 +4122,7 @@ class DataFrame(object):
 
                 new_columns = np.array(new_columns, dtype='O')
             else:
+                # append new columns
                 ncs = []
                 nrs = []
                 total = 0
@@ -4152,6 +4184,10 @@ class DataFrame(object):
                     for i, arr in enumerate(data):
                         new_data[dtype][:len(arr), i] = arr
                 new_columns = np.array(new_columns, dtype='O')
+        else:
+            raise TypeError('`objs` must be either a dictionary, '
+                            'a DataFrame or a list of DataFrames. '
+                            f'You passed in a {type(objs).__name__}')
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 

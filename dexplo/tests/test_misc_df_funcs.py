@@ -1100,3 +1100,227 @@ class TestWhere:
         df2 = dx.DataFrame({'c': ['er', 'e', 'e', 'er', 'er'], 'f': ['er', None, 'ad', 'er', 'er']})
         assert_frame_equal(df1, df2)
 
+
+class TestAppend:
+
+    data = {'a': [9, 10, 9, 9, 10],
+            'b': [0, nan, nan, 0, 1],
+            'c': [None] + list('eeaz'),
+            'd': [False, False, True, False, True],
+            'e': [0, 20, 30, 4, 4],
+            'f': ['a', nan, 'ad', None, 'ad'],
+            'g': [np.nan] * 5}
+    df = dx.DataFrame(data)
+
+    def test_append_scalar_column(self):
+        df1 = self.df.append({'h': 10}, axis='columns')
+        data2 = {'a': array([ 9, 10,  9,  9, 10]),
+                 'b': array([ 0., nan, nan,  0.,  1.]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([False, False,  True, False,  True]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan]),
+                 'h': array([10, 10, 10, 10, 10])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+    def test_append_multiple_scalar_columns(self):
+        df1 = self.df.append({'h': 10, 'i': 4.2, 'j': 'asdf'}, axis='columns')
+        data2 = {'a': array([ 9, 10,  9,  9, 10]),
+                 'b': array([ 0., nan, nan,  0.,  1.]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([False, False,  True, False,  True]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan]),
+                 'h': array([10, 10, 10, 10, 10]),
+                 'i': array([4.2, 4.2, 4.2, 4.2, 4.2]),
+                 'j': array(['asdf', 'asdf', 'asdf', 'asdf', 'asdf'], dtype=object)}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+    def test_append_multiple_old_scalar_columns(self):
+        df1 = self.df.append({'a': 10, 'b': 4.2, 'c': 'asdf'}, axis='columns')
+        data2 = {'a': array([10, 10, 10, 10, 10]),
+                 'b': array([4.2, 4.2, 4.2, 4.2, 4.2]),
+                 'c': array(['asdf', 'asdf', 'asdf', 'asdf', 'asdf'], dtype=object),
+                 'd': array([False, False,  True, False,  True]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+    def test_append_mix_old_new_scalar(self):
+        df1 = self.df.append({'a': 10, 'b': 4.2, 'h': 'asdf'}, axis='columns')
+        data2 = {'a': array([10, 10, 10, 10, 10]),
+                 'b': array([4.2, 4.2, 4.2, 4.2, 4.2]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([False, False,  True, False,  True]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan]),
+                 'h': array(['asdf', 'asdf', 'asdf', 'asdf', 'asdf'], dtype=object)}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+    def test_append_one_array(self):
+        df1 = self.df.append({'h': np.arange(5)}, axis='columns')
+        data2 = {'a': array([ 9, 10,  9,  9, 10]),
+                 'b': array([ 0., nan, nan,  0.,  1.]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([False, False,  True, False,  True]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan]),
+                 'h': array([0, 1, 2, 3, 4])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+    def test_append_multiple_arrays(self):
+        df1 = self.df.append({'h': np.arange(5), 'i': np.linspace(2.4, 20.9, 5)}, axis='columns')
+        data2 = {'a': array([ 9, 10,  9,  9, 10]),
+                 'b': array([ 0., nan, nan,  0.,  1.]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([False, False,  True, False,  True]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan]),
+                 'h': array([0, 1, 2, 3, 4]),
+                 'i': array([ 2.4  ,  7.025, 11.65 , 16.275, 20.9  ])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+    def append_multiple_new_old_arrays(self):
+        df1 = self.df.append({'a': 10, 'b': np.arange(10, 15),
+                              'h': np.arange(5), 'i': np.linspace(2.4, 20.9, 5)}, axis='columns')
+        data2 = {'a': array([10, 10, 10, 10, 10]),
+                 'b': array([10, 11, 12, 13, 14]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([False, False,  True, False,  True]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([ 2.4  ,  7.025, 11.65 , 16.275, 20.9  ]),
+                 'h': array([0, 1, 2, 3, 4]),
+                 'i': array([ 2.4  ,  7.025, 11.65 , 16.275, 20.9  ])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+    def test_function_scalar(self):
+        df1 = self.df.append({'h': lambda df: df[:, 'e'].max()}, axis='columns')
+        data2 = {'a': array([ 9, 10,  9,  9, 10]),
+                 'b': array([ 0., nan, nan,  0.,  1.]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([False, False,  True, False,  True]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan]),
+                 'h': array([30, 30, 30, 30, 30])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+    def test_function_series(self):
+        df1 = self.df.append({'h': lambda df: df[:, 'e'].cumsum() / 3.2}, axis='columns')
+        data2 = {'a': array([ 9, 10,  9,  9, 10]),
+                 'b': array([ 0., nan, nan,  0.,  1.]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([False, False,  True, False,  True]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan]),
+                 'h': array([ 0.   ,  6.25 , 15.625, 16.875, 18.125])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.append({'d': lambda df: df[:, 'e'].cumsum() / 3.2}, axis='columns')
+        data2 = {'a': array([ 9, 10,  9,  9, 10]),
+                 'b': array([ 0., nan, nan,  0.,  1.]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([ 0.   ,  6.25 , 15.625, 16.875, 18.125]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.append({'d': lambda df: df[:, ['e']].cumsum() / 3.2}, axis='columns')
+        data2 = {'a': array([ 9, 10,  9,  9, 10]),
+                 'b': array([ 0., nan, nan,  0.,  1.]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([ 0.   ,  6.25 , 15.625, 16.875, 18.125]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+    def test_inputs(self):
+        with pytest.raises(TypeError):
+            self.df.append(5, axis='columns')
+
+        with pytest.raises(TypeError):
+            self.df.append({'h': [1, 2]}, axis='columns')
+
+        with pytest.raises(ValueError):
+            self.df.append({'h': lambda x: x.max()}, axis='columns')
+
+    def test_append_one_df(self):
+        data0 = {'asdf': [1, 4.4], 'wer': [5, 10], 'c': ['asf', 'ewr'], 'a': [True, False],
+                 'wers': [False, True]}
+        df0 = dx.DataFrame(data0)
+        df1 = self.df.append(df0)
+        data2 = {'a': array([9., 10., 9., 9., 10., 1., 4.4]),
+                 'b': array([0., nan, nan, 0., 1., 5., 10.]),
+                 'c': array([None, 'e', 'e', 'a', 'z', 'asf', 'ewr'], dtype=object),
+                 'd': array([False, False, True, False, True, True, False]),
+                 'e': array([0, 20, 30, 4, 4, 0, 1]),
+                 'f': array(['a', None, 'ad', None, 'ad', None, None], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan, nan, nan])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+    def test_append_multiple_df_rows(self):
+        data0 = {'asdf': [1, 4.4], 'wer': [5, 10], 'c': ['asf', 'ewr'], 'a': [True, False],
+                 'wers': [False, True]}
+        data1 = {'asdf': [3.1, 4.4], 'wer': [15, 99], 'c': ['TEE', 'ewr']}
+        df0 = dx.DataFrame(data0)
+        df1 = dx.DataFrame(data1)
+        df2 = self.df.append([df0, df1])
+
+        data3 = {'a': array([ 9. , 10. ,  9. ,  9. , 10. ,  1. ,  4.4,  3.1,  4.4]),
+                 'b': array([ 0., nan, nan,  0.,  1.,  5., 10., 15., 99.]),
+                 'c': array([None, 'e', 'e', 'a', 'z', 'asf', 'ewr', 'TEE', 'ewr'], dtype=object),
+                 'd': array([ 0.,  0.,  1.,  0.,  1.,  1.,  0., nan, nan]),
+                 'e': array([ 0., 20., 30.,  4.,  4.,  0.,  1., nan, nan]),
+                 'f': array(['a', None, 'ad', None, 'ad', None, None, None, None], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan, nan, nan, nan, nan])}
+        df3 = dx.DataFrame(data3)
+        assert_frame_equal(df2, df3)
+
+    def test_append_multiple_df_columns(self):
+        data0 = {'asdf': [1, 4.4], 'wer': [5, 10], 'c': ['asf', 'ewr'], 'a': [True, False],
+                 'wers': [False, True]}
+        data1 = {'asdf': [3.1, 4.4], 'wer': [15, 99], 'c': ['TEE', 'ewr']}
+        df0 = dx.DataFrame(data0)
+        df1 = dx.DataFrame(data1)
+        df2 = self.df.append([df0, df1], axis='columns')
+        data3 = {'a': array([ 9, 10,  9,  9, 10]),
+                 'b': array([ 0., nan, nan,  0.,  1.]),
+                 'c': array([None, 'e', 'e', 'a', 'z'], dtype=object),
+                 'd': array([False, False,  True, False,  True]),
+                 'e': array([ 0, 20, 30,  4,  4]),
+                 'f': array(['a', None, 'ad', None, 'ad'], dtype=object),
+                 'g': array([nan, nan, nan, nan, nan]),
+                 'asdf': array([1. , 4.4, nan, nan, nan]),
+                 'wer': array([ 5., 10., nan, nan, nan]),
+                 'c_1': array(['asf', 'ewr', None, None, None], dtype=object),
+                 'a_1': array([ 1.,  0., nan, nan, nan]),
+                 'wers': array([ 0.,  1., nan, nan, nan]),
+                 'asdf_1': array([3.1, 4.4, nan, nan, nan]),
+                 'wer_1': array([15., 99., nan, nan, nan]),
+                 'c_2': array(['TEE', 'ewr', None, None, None], dtype=object)}
+        df3 = dx.DataFrame(data3)
+        assert_frame_equal(df2, df3)
+
+

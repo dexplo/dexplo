@@ -917,7 +917,7 @@ def mode_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans, keep):
     cdef int i, j, order, low, high, last
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef ndarray[np.int64_t] result, col_arr, uniques, counts, groups
+    cdef ndarray[np.int64_t] result, col_arr, uniques, counts, groups, max_groups
 
     if axis == 0:
         result = np.empty(nc, dtype='int64')
@@ -926,12 +926,18 @@ def mode_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans, keep):
             low, high = _math.min_max_int(col_arr)
             if high - low < 10_000_000:
                 uniques, counts = gb.value_counts_int_bounded(col_arr, low, high)
+                uniques = uniques[counts == counts.max()]
             else:
                 groups, counts = gb.value_counts_int(col_arr)
-                uniques = col_arr[groups]
-
-            last = np.argsort(counts)[len(counts) - 1]
-            result[i] = uniques[last]
+                max_groups = groups[counts == counts.max()]
+                uniques = col_arr[max_groups]
+            if len(uniques) == 1:
+                result[i] = uniques[0]
+            else:
+                if keep == 'low':
+                    result[i] = uniques.min()
+                else:
+                    result[i] = uniques.max()
     else:
         result = np.empty(nr, dtype='int64')
         for i in range(nr):
@@ -939,19 +945,26 @@ def mode_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans, keep):
             low, high = _math.min_max_int(col_arr)
             if high - low < 10_000_000:
                 uniques, counts = gb.value_counts_int_bounded(col_arr, low, high)
+                uniques = uniques[counts == counts.max()]
             else:
                 groups, counts = gb.value_counts_int(col_arr)
-                uniques = col_arr[groups]
+                max_groups = groups[counts == counts.max()]
+                uniques = col_arr[max_groups]
+            if len(uniques) == 1:
+                result[i] = uniques[0]
+            else:
+                if keep == 'low':
+                    result[i] = uniques.min()
+                else:
+                    result[i] = uniques.max()
 
-            last = np.argsort(counts)[len(counts) - 1]
-            result[i] = uniques[last]
     return result
 
 def mode_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, keep):
     cdef int i, j, order, low, high, last
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef ndarray[np.int64_t] groups, counts
+    cdef ndarray[np.int64_t] groups, counts, max_groups
     cdef ndarray[np.float64_t] result, col_arr, uniques
 
     if axis == 0:
@@ -959,32 +972,40 @@ def mode_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, keep):
         for i in range(nc):
             col_arr = a[:, i]
             groups, counts = gb.value_counts_float(col_arr, dropna=True)
-            uniques = col_arr[groups]
 
-            if len(uniques) == 0:
+            if len(counts) == 0:
                 result[i] = nan
             else:
-                last = np.argsort(counts)[len(counts) - 1]
-                result[i] = uniques[last]
+                max_groups = groups[counts == counts.max()]
+                uniques = col_arr[max_groups]
+
+                if keep == 'low':
+                    result[i] = uniques.min()
+                else:
+                    result[i] = uniques.max()
     else:
         result = np.empty(nr, dtype='float64')
         for i in range(nr):
             col_arr = a[i, :]
             groups, counts = gb.value_counts_float(col_arr, dropna=True)
-            uniques = col_arr[groups]
 
-            if len(uniques) == 0:
+            if len(counts) == 0:
                 result[i] = nan
             else:
-                last = np.argsort(counts)[len(counts) - 1]
-                result[i] = uniques[last]
+                max_groups = groups[counts == counts.max()]
+                uniques = col_arr[max_groups]
+
+                if keep == 'low':
+                    result[i] = uniques.min()
+                else:
+                    result[i] = uniques.max()
     return result
 
 def mode_str(ndarray[object, ndim=2] a, axis, hasnans, keep):
     cdef int i, j, order, low, high, last
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef ndarray[np.int64_t] groups, counts
+    cdef ndarray[np.int64_t] groups, counts, max_groups
     cdef ndarray[object] result, col_arr, uniques
 
     if axis == 0:
@@ -992,25 +1013,30 @@ def mode_str(ndarray[object, ndim=2] a, axis, hasnans, keep):
         for i in range(nc):
             col_arr = a[:, i]
             groups, counts = gb.value_counts_str(col_arr, dropna=True)
-            uniques = col_arr[groups]
 
-            if len(uniques) == 0:
+            if len(counts) == 0:
                 result[i] = None
             else:
-                last = np.argsort(counts)[len(counts) - 1]
-                result[i] = uniques[last]
+                max_groups = groups[counts == counts.max()]
+                uniques = col_arr[max_groups]
+                if keep == 'low':
+                    result[i] = uniques.min()
+                else:
+                    result[i] = uniques.max()
     else:
         result = np.empty(nr, dtype='O')
         for i in range(nr):
             col_arr = a[i, :]
             groups, counts = gb.value_counts_str(col_arr, dropna=True)
-            uniques = col_arr[groups]
-
-            if len(uniques) == 0:
+            if len(counts) == 0:
                 result[i] = None
             else:
-                last = np.argsort(counts)[len(counts) - 1]
-                result[i] = uniques[last]
+                max_groups = groups[counts == counts.max()]
+                uniques = col_arr[max_groups]
+                if keep == 'low':
+                    result[i] = uniques.min()
+                else:
+                    result[i] = uniques.max()
     return result
 
 
@@ -1026,17 +1052,29 @@ def mode_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, hasnans, keep):
         for i in range(nc):
             col_arr = a[:, i]
             uniques, counts = gb.value_counts_bool(col_arr)
+            uniques = uniques[counts == counts.max()]
 
-            last = np.argsort(counts)[len(counts) - 1]
-            result[i] = uniques[last]
+            if len(uniques) == 1:
+                result[i] = uniques[0]
+            else:
+                if keep == 'low':
+                    result[i] = uniques.min()
+                else:
+                    result[i] = uniques.max()
     else:
         result = np.empty(nr, dtype='bool')
         for i in range(nr):
             col_arr = a[i, :]
             uniques, counts = gb.value_counts_bool(col_arr)
+            uniques = uniques[counts == counts.max()]
 
-            last = np.argsort(counts)[len(counts) - 1]
-            result[i] = uniques[last]
+            if len(uniques) == 1:
+                result[i] = uniques[0]
+            else:
+                if keep == 'low':
+                    result[i] = uniques.min()
+                else:
+                    result[i] = uniques.max()
     return result
 
 def prod_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):

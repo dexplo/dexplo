@@ -303,7 +303,8 @@ def validate_selection_size(key: Any) -> None:
                          'selection separated by a comma')
     if len(key) != 2:
         raise ValueError('You must provide exactly one row selection '
-                         'and one column selection')
+                         'and one column selection separated by a comma. '
+                         f'You provided {len(key)} selections.')
 
 
 def check_set_value_type(dtype: str, good_dtypes: str, name: str) -> None:
