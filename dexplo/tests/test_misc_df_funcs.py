@@ -1324,3 +1324,96 @@ class TestAppend:
         assert_frame_equal(df2, df3)
 
 
+class TestMelt:
+
+    def test_melt_one(self):
+        data = {'state': ['TX', 'CA', 'OK'],
+                'orange': [10, 5, 4],
+                'apple': [32, 15, 9],
+                'watermelons': [18, 4, 12]}
+        df = dx.DataFrame(data)
+        df1 = df.melt(id_vars='state')
+        data1 = {'state': array(['TX', 'CA', 'OK', 'TX', 'CA', 'OK', 'TX', 'CA', 'OK'], dtype=object),
+                 'variable': array(['orange', 'orange', 'orange', 'apple', 'apple', 'apple',
+                                    'watermelons', 'watermelons', 'watermelons'], dtype=object),
+                 'value': array([10,  5,  4, 32, 15,  9, 18,  4, 12])}
+        df2 = dx.DataFrame(data1)
+        assert_frame_equal(df1, df2)
+
+        df1 = df.melt(id_vars='state', value_vars='orange')
+        data1 = {'state': array(['TX', 'CA', 'OK'], dtype=object),
+                 'variable': array(['orange', 'orange', 'orange'], dtype=object),
+                 'value': array([10,  5,  4])}
+        df2 = dx.DataFrame(data1)
+        assert_frame_equal(df1, df2)
+
+        df1 = df.melt(id_vars='state', value_vars=['watermelons', 'orange'])
+        data1 = {'state': array(['TX', 'CA', 'OK', 'TX', 'CA', 'OK'], dtype=object),
+                 'variable': array(['watermelons', 'watermelons', 'watermelons', 'orange', 'orange',
+                                    'orange'], dtype=object),
+                 'value': array([18,  4, 12, 10,  5,  4])}
+        df2 = dx.DataFrame(data1)
+        assert_frame_equal(df1, df2)
+
+        df1 = df.melt(id_vars='state', value_vars=['watermelons', 'orange', 'apple'])
+        data1 = {'state': array(['TX', 'CA', 'OK', 'TX', 'CA', 'OK', 'TX', 'CA', 'OK'], dtype=object),
+                 'variable': array(['watermelons', 'watermelons', 'watermelons', 'orange', 'orange',
+                                    'orange', 'apple', 'apple', 'apple'], dtype=object),
+                 'value': array([18,  4, 12, 10,  5,  4, 32, 15,  9])}
+        df2 = dx.DataFrame(data1)
+        assert_frame_equal(df1, df2)
+
+    def test_melt_two(self):
+        data = {'state': ['TX', 'CA', 'OK'],
+                'orange': [10, 5, 4],
+                'apple': [32, 15, 9],
+                'watermelons': [18, 4, 12],
+                'male': [100, 200, 300],
+                'female': [110, 190, 290]}
+        df = dx.DataFrame(data)
+        df1 = df.melt(id_vars='state', value_vars=[['orange', 'apple'], ['male']])
+        data2 = {'state': array(['TX', 'CA', 'OK', 'TX', 'CA', 'OK'], dtype=object),
+                 'variable_0': array(['orange', 'orange', 'orange', 'apple', 'apple', 'apple'],
+                       dtype=object),
+                 'value_0': array([10,  5,  4, 32, 15,  9]),
+                 'variable_1': array(['male', 'male', 'male', None, None, None], dtype=object),
+                 'value_1': array([100., 200., 300.,  nan,  nan,  nan])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+        df1 = df.melt(id_vars='state', value_vars=[['orange', 'apple'], ['male', 'female']])
+        data2 = {'state': array(['TX', 'CA', 'OK', 'TX', 'CA', 'OK'], dtype=object),
+                 'variable_0': array(['orange', 'orange', 'orange', 'apple', 'apple', 'apple'],
+                                      dtype=object),
+                 'value_0': array([10,  5,  4, 32, 15,  9]),
+                 'variable_1': array(['male', 'male', 'male', 'female', 'female', 'female'], dtype=object),
+                 'value_1': array([100, 200, 300, 110, 190, 290])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+        df1 = df.melt(id_vars='state', value_vars=[['orange', 'apple'], ['male', 'female']],
+                      var_name=['fruit', 'sex'], value_name=['pounds', 'count'])
+        data2 = {'state': array(['TX', 'CA', 'OK', 'TX', 'CA', 'OK'], dtype=object),
+                 'fruit': array(['orange', 'orange', 'orange', 'apple', 'apple', 'apple'],
+                       dtype=object),
+                 'pounds': array([10,  5,  4, 32, 15,  9]),
+                 'sex': array(['male', 'male', 'male', 'female', 'female', 'female'], dtype=object),
+                 'count': array([100, 200, 300, 110, 190, 290])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
+
+
+class TestPivot:
+
+    def test_raw_pivot(self):
+        data = {'state': ['TX', 'TX', 'TX', 'OK', 'OK', 'OK'],
+                'fruit': ['orange', 'apple', 'banana'] * 2,
+                'apple': [32, 15, 9, 4.3, 20, 20]}
+        df = dx.DataFrame(data)
+        df1 = df.pivot('state', 'fruit', 'apple')
+        data2 = {'state': array(['TX', 'OK'], dtype=object),
+                 'orange': array([32. ,  4.3]),
+                 'apple': array([15., 20.]),
+                 'banana': array([ 9., 20.])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)

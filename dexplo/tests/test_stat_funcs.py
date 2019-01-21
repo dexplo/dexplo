@@ -132,25 +132,44 @@ class TestSimpleAggs(object):
             df.select_dtypes('str').median('columns')
 
     def test_mode_low(self):
-        df = dx.DataFrame({'a': [3, 3, 5, 5],
+        df = dx.DataFrame({'a': [5, 3, 5, 3],
                            'b': [.012, 1.5, nan, nan],
-                           'c': ['b', 'g', 'b', 'b'],
+                           'c': ['b', 'g', 'b', 'g'],
                            'd': [True, False, True, False],
                            'e': [90, 20, 20, 90],
                            'f': [nan, 10, 4, nan],
                            'g': ['', None, 'ad', None],
                            'h': [nan] * 4})
-        df1 = df.mode()
-        df2 = dx.DataFrame({'a': array([5]),
-                            'b': array([1.5]),
+        df1 = df.mode(keep='low')
+        df2 = dx.DataFrame({'a': array([3]),
+                            'b': array([0.012]),
                             'c': array(['b'], dtype=object),
-                            'd': array([ True]),
-                            'e': array([90]),
+                            'd': array([False]),
+                            'e': array([20]),
                             'f': array([4.]),
-                            'g': array(['ad'], dtype=object),
+                            'g': array([''], dtype=object),
                             'h': array([nan])})
         assert_frame_equal(df1, df2)
 
+    def test_mode_high(self):
+        df = dx.DataFrame({'a': [5, 3, 5, 3],
+                           'b': [.012, 1.5, nan, nan],
+                           'c': ['b', 'g', 'b', 'g'],
+                           'd': [True, False, True, False],
+                           'e': [90, 20, 20, 90],
+                           'f': [nan, 10, 4, nan],
+                           'g': ['', None, 'ad', None],
+                           'h': [nan] * 4})
+        df1 = df.mode(keep='high')
+        df2 = dx.DataFrame({'a': array([5]),
+                             'b': array([1.5]),
+                             'c': array(['g'], dtype=object),
+                             'd': array([ True]),
+                             'e': array([90]),
+                             'f': array([10.]),
+                             'g': array(['ad'], dtype=object),
+                             'h': array([nan])})
+        assert_frame_equal(df1, df2)
 
     def test_std(self):
         df = dx.DataFrame({'a': [0, 5, 16],
@@ -214,6 +233,23 @@ class TestSimpleAggs(object):
 
         with pytest.raises(TypeError):
             df.select_dtypes('str').var('columns')
+
+    def test_prod(self):
+        data = {'state': ['TX', 'CA', 'OK'],
+                'orange': [10, 5, 4],
+                'apple': [32, 15, 9],
+                'watermelons': [18, nan, 12],
+                'male': [10, 20, 30],
+                'female': [11, 4, 2]}
+        df = dx.DataFrame(data)
+        df1 = df.prod()
+        data2 = {'orange': array([200]),
+                 'apple': array([4320]),
+                 'watermelons': array([216.]),
+                 'male': array([6000]),
+                 'female': array([88])}
+        df2 = dx.DataFrame(data2)
+        assert_frame_equal(df1, df2)
 
     def test_count(self):
         df = dx.DataFrame({'a': [0, 0, 5],

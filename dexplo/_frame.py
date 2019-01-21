@@ -2009,6 +2009,21 @@ class DataFrame(object):
         return self._stat_funcs('cumprod', axis)
 
     def mode(self, axis: str = 'rows', keep='low') -> 'DataFrame':
+        """
+        Returns the mode of each column or row
+
+        Parameters
+        ----------
+        axis: 'rows' or 'columns'
+
+        keep: 'low' or 'high'
+            When there are ties, chose either the lower or higher of the
+            values.
+
+        Returns
+        -------
+        A DataFrame
+        """
         if keep not in ('low', 'high', 'all'):
             raise ValueError('`keep` must be either "low", "high", or "all"')
         return self._stat_funcs('mode', axis, keep=keep)
