@@ -2,7 +2,7 @@ import decimal
 from typing import List, Dict, Set, Any, Optional, Union, Tuple
 import numpy as np
 from numpy import ndarray
-from dexplo._libs import validate_arrays as va
+from ._libs import validate_arrays as va
 
 _DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str',
        'M': 'datetime64[ns]', 'm': 'timedelta64[ns]'}
@@ -63,7 +63,6 @@ class Column:
 
 def get_num_cols(arrs: List[ndarray]) -> int:
     col_length: int = 0
-    arr: ndarray
 
     for arr in arrs:
         col_length += arr.shape[1]
@@ -248,13 +247,11 @@ def is_one_row(num_rows_to_set: int, num_cols_to_set: int) -> bool:
 
 def convert_list_to_arrays(value: List, single_row: bool) -> List[ndarray]:
     # check if one dimensional array
-    arr: ndarray
     if is_scalar(value[0]):
         if single_row:
-            arrs = []
+            arrs: List[ndarray] = []
             for v in value:
-                arr = convert_list_to_single_arr([v])
-                arr = convert_list_to_single_arr(arr)
+                arr: ndarray = convert_list_to_single_arr(convert_list_to_single_arr([v]))
                 arrs.append(arr)
             return arrs
 
@@ -343,9 +340,9 @@ def convert_numpy_to_kind(dtype: str) -> str:
         elif dt == 'timedelta64':
             return 'm'
 
-
-def convert_dtype_to_kind(dtype: str) -> str:
-    return _KIND[dtype]
+#
+# def convert_dtype_to_kind(dtype: str) -> str:
+#     return _KIND[dtype]
 
 
 def convert_dtype_to_func_name(dtype: str) -> str:
@@ -365,8 +362,8 @@ def get_kind_from_scalar(s: Any) -> str:
         return ''
 
 
-def convert_special_method(name):
-    return _SPECIAL_METHODS.get(name, 'unknown')
+# def convert_special_method(name):
+#     return _SPECIAL_METHODS.get(name, 'unknown')
 
 
 def validate_array_size(arr: ndarray, num_rows: int) -> None:
@@ -374,21 +371,21 @@ def validate_array_size(arr: ndarray, num_rows: int) -> None:
         raise ValueError(f'Mismatch number of rows {len(arr)} vs {num_rows}')
 
 
-def validate_multiple_string_cols(arr: ndarray) -> ndarray:
-    if arr.ndim == 1:
-        return va.validate_strings_in_object_array(arr)
-    arrays: List[ndarray] = []
-    for i in range(arr.shape[1]):
-        arrays.append(va.validate_strings_in_object_array(arr[:, i]))
-    return np.column_stack(arrays)
+# def validate_multiple_string_cols(arr: ndarray) -> ndarray:
+#     if arr.ndim == 1:
+#         return va.validate_strings_in_object_array(arr)
+#     arrays: List[ndarray] = []
+#     for i in range(arr.shape[1]):
+#         arrays.append(va.validate_strings_in_object_array(arr[:, i]))
+#     return np.column_stack(arrays)
 
 
-def get_selection_object(rs: RowSelection, cs: ColumnSelection) -> Any:
-    is_row_list = isinstance(rs, (list, np.ndarray))
-    is_col_list = isinstance(cs, (list, np.ndarray))
-    if is_row_list and is_col_list:
-        return np.ix_(rs, cs)
-    return rs, cs
+# def get_selection_object(rs: RowSelection, cs: ColumnSelection) -> Any:
+#     is_row_list = isinstance(rs, (list, np.ndarray))
+#     is_col_list = isinstance(cs, (list, np.ndarray))
+#     if is_row_list and is_col_list:
+#         return np.ix_(rs, cs)
+#     return rs, cs
 
 
 def check_compatible_kinds(kinds1: List[str], kinds2: List[str], all_nans: List[bool]) -> bool:
