@@ -733,18 +733,18 @@ class DataFrame(object):
     def _is_numeric_or_bool(self) -> bool:
         return set(self._data.keys()) <= set('bif')
 
-    def _is_numeric_strict(self) -> bool:
-        return set(self._data.keys()) <= {'i', 'f'}
+    # def _is_numeric_strict(self) -> bool:
+    #     return set(self._data.keys()) <= {'i', 'f'}
 
     def _is_string(self) -> bool:
         return set(self._data.keys()) == {'O'}
 
     def _is_date(self) -> bool:
         return set(self._data.keys()) <= {'m', 'M'}
-
-    def _is_only_numeric_or_string(self) -> bool:
-        dtypes: Set[str] = set(self._data.keys())
-        return dtypes <= {'i', 'f'} or dtypes == {'O'}
+    #
+    # def _is_only_numeric_or_string(self) -> bool:
+    #     dtypes: Set[str] = set(self._data.keys())
+    #     return dtypes <= {'i', 'f'} or dtypes == {'O'}
 
     def _has_numeric_or_bool(self) -> bool:
         """
@@ -901,10 +901,10 @@ class DataFrame(object):
             cols2[dtype2].append(col2)
         return kinds1, kinds2, locs1, locs2, ords1, ords2, cols1, cols2
 
-    def _get_single_column_values(self, iloc: int) -> ndarray:
-        col = self._columns[iloc]
-        dtype, loc, order = self._column_info[col].values  # type: str, int, int
-        return self._data[dtype][:, loc]
+    # def _get_single_column_values(self, iloc: int) -> ndarray:
+    #     col = self._columns[iloc]
+    #     dtype, loc, order = self._column_info[col].values  # type: str, int, int
+    #     return self._data[dtype][:, loc]
 
     def _op_scalar(self, other: Any, op_string: str) -> 'DataFrame':
         if isinstance(other, (int, float, bool, np.integer, np.floating)):
@@ -2805,7 +2805,7 @@ class DataFrame(object):
                     na_arr: ndarray = _math.isna_str_1d(col_arr)
                     arr_final: ndarray = np.where(na_arr, nan_value, col_arr)
                 else:
-                    hasnans = np.array([True] * col_arr.shape[1])
+                    hasnans = np.array([True] * col_arr.shape[1]) # TODO: use np.fill
                     na_arr = _math.isna_str(col_arr, hasnans)
                     arr_final = np.where(na_arr, nan_value, col_arr)
         elif dtype == 'f':
@@ -4042,7 +4042,6 @@ class DataFrame(object):
                     elif 'O' in col_dtype:
                         raise TypeError('You are trying to append a string column with a non-'
                                         'string column. Both columns must be strings.')
-                        return 'O'
                     elif 'f' in col_dtype or None in col_dtype:
                         return 'f'
                     elif 'i' in col_dtype:
@@ -4500,10 +4499,18 @@ class DataFrame(object):
 
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
-    def pivot(self, row, column, value, agg_func=None):
+    def pivot(self, row, column, value=None, aggfunc=None, normalize=None):
         self._validate_column_name(row)
         self._validate_column_name(column)
-        self._validate_column_name(value)
+        if value is None:
+            if aggfunc is not None:
+                if aggfunc != 'size':
+                    raise ValueError('You provided a value for `aggfunc` but did not provide a '
+                                     '`value` column to aggregate.')
+            else:
+                raise ValueError('`value` and `aggfunc` cannot both be `None`')
+        else:
+            self._validate_column_name(value)
         group = [row, column]
         temp_col_name = '____TEMP____'
         col_set = set(group)
@@ -4511,7 +4518,7 @@ class DataFrame(object):
         while temp_col_name in col_set:
             temp_col_name = '____TEMP____' + str(i)
             i += 1
-        if agg_func is None:
+        if aggfunc is None:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 df_group = self.groupby(group).size()
@@ -4519,22 +4526,27 @@ class DataFrame(object):
             dtype, loc, _ = df_group._column_info[size_col].values
             max_size = df_group._data[dtype][:, loc].max()
             if max_size > 1:
-                raise ValueError('You did not provide an `agg_func` which means that each '
+                raise ValueError('You did not provide an `aggfunc` which means that each '
                                  f'combination of {row} and {column} must have at most one '
                                  'value')
             df_group = self[:, [row, column, value]]
             temp_col_name = value
+        elif aggfunc == 'size':
+            df_group = self.groupby(group).size()
+            temp_col_name = df_group.columns[-1]
         else:
-            df_group = self.groupby(group).agg((agg_func, value, temp_col_name))
+            df_group = self.groupby(group).agg((aggfunc, value, temp_col_name))
 
         row_idx, row_names = df_group.factorize(row)
+        print(row_names)
         col_idx, col_names = df_group.factorize(column)
+
         dtype, loc, _ = df_group._column_info[temp_col_name].values
         value_arr = df_group._data[dtype][:, loc]
 
         new_data = {}
         if dtype in 'ib':
-            if len(row_idx) != len(row_names) * len(col_names):
+            if aggfunc != 'size' and len(row_idx) != len(row_names) * len(col_names):
                 value_arr = value_arr.astype('float64')
                 dtype = 'f'
 
@@ -4562,7 +4574,11 @@ class DataFrame(object):
 
         new_columns = np.concatenate(([row], col_names))
 
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        # TODO: Optimize this
+        df_unsorted = self._construct_from_new(new_data, new_column_info, new_columns)
+        df_unsorted = df_unsorted.sort_values(row)
+        sorted_cols = np.concatenate(([new_columns[0]], np.sort(new_columns[1:])))
+        return df_unsorted[:, sorted_cols]
 
     def melt(self, id_vars=None, value_vars=None, var_name='variable', value_name='value'):
 
