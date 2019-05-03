@@ -96,6 +96,7 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] prod
 - [x] quantile
 - [x] rank
+- [x] round
 - [x] std
 - [x] streak
 - [x] sum
