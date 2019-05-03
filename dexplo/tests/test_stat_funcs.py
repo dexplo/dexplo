@@ -393,7 +393,7 @@ class TestAbsClip(object):
                            'g': np.zeros(3, dtype='int64'),
                            'h': [np.nan] * 3})
 
-        df1 = df.abs(True)
+        df1 = df.abs()
         df2 = dx.DataFrame({'a': [0, 5, 16],
                             'b': [4.5, 1.5, np.nan],
                             'c': [''] + list('bg'),
@@ -404,20 +404,13 @@ class TestAbsClip(object):
                             'h': [np.nan] * 3})
         assert_frame_equal(df1, df2)
 
-        df1 = df.abs()
-        df2 = dx.DataFrame({'a': [0, 5, 16],
-                            'b': [4.5, 1.5, np.nan],
-                            'd': [False, False, True],
-                            'e': [0, 20, 40],
-                            'g': np.zeros(3, dtype='int64'),
-                            'h': [np.nan] * 3})
-        assert_frame_equal(df1, df2)
-
         df1 = abs(df)
         df2 = dx.DataFrame({'a': [0, 5, 16],
                             'b': [4.5, 1.5, np.nan],
+                            'c': [''] + list('bg'),
                             'd': [False, False, True],
                             'e': [0, 20, 40],
+                            'f': ['', None, 'ad'],
                             'g': np.zeros(3, dtype='int64'),
                             'h': [np.nan] * 3})
         assert_frame_equal(df1, df2)
