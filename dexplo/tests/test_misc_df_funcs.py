@@ -1374,7 +1374,7 @@ class TestMelt:
         df1 = df.melt(id_vars='state', value_vars=[['orange', 'apple'], ['male']])
         data2 = {'state': array(['TX', 'CA', 'OK', 'TX', 'CA', 'OK'], dtype=object),
                  'variable_0': array(['orange', 'orange', 'orange', 'apple', 'apple', 'apple'],
-                       dtype=object),
+                                     dtype=object),
                  'value_0': array([10,  5,  4, 32, 15,  9]),
                  'variable_1': array(['male', 'male', 'male', None, None, None], dtype=object),
                  'value_1': array([100., 200., 300.,  nan,  nan,  nan])}
@@ -1384,9 +1384,10 @@ class TestMelt:
         df1 = df.melt(id_vars='state', value_vars=[['orange', 'apple'], ['male', 'female']])
         data2 = {'state': array(['TX', 'CA', 'OK', 'TX', 'CA', 'OK'], dtype=object),
                  'variable_0': array(['orange', 'orange', 'orange', 'apple', 'apple', 'apple'],
-                                      dtype=object),
+                                     dtype=object),
                  'value_0': array([10,  5,  4, 32, 15,  9]),
-                 'variable_1': array(['male', 'male', 'male', 'female', 'female', 'female'], dtype=object),
+                 'variable_1': array(['male', 'male', 'male', 'female', 'female', 'female'],
+                                     dtype=object),
                  'value_1': array([100, 200, 300, 110, 190, 290])}
         df2 = dx.DataFrame(data2)
         assert_frame_equal(df1, df2)
@@ -1395,7 +1396,7 @@ class TestMelt:
                       var_name=['fruit', 'sex'], value_name=['pounds', 'count'])
         data2 = {'state': array(['TX', 'CA', 'OK', 'TX', 'CA', 'OK'], dtype=object),
                  'fruit': array(['orange', 'orange', 'orange', 'apple', 'apple', 'apple'],
-                       dtype=object),
+                                dtype=object),
                  'pounds': array([10,  5,  4, 32, 15,  9]),
                  'sex': array(['male', 'male', 'male', 'female', 'female', 'female'], dtype=object),
                  'count': array([100, 200, 300, 110, 190, 290])}
@@ -1411,9 +1412,9 @@ class TestPivot:
                 'apple': [32, 15, 9, 4.3, 20, 20]}
         df = dx.DataFrame(data)
         df1 = df.pivot('state', 'fruit', 'apple')
-        data2 = {'state': array(['TX', 'OK'], dtype=object),
-                 'orange': array([32. ,  4.3]),
-                 'apple': array([15., 20.]),
-                 'banana': array([ 9., 20.])}
+        data2 = {'state': array(['OK', 'TX'], dtype=object),
+                 'apple': array([20., 15]),
+                 'banana': array([20., 9]),
+                 'orange': array([4.3, 32])}
         df2 = dx.DataFrame(data2)
         assert_frame_equal(df1, df2)
