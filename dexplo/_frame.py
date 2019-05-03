@@ -1737,22 +1737,15 @@ class DataFrame(object):
         change_kind: Dict[str, Tuple[str, int]] = {}
         new_num_cols: int = 0
 
-        kind: str
         new_kind: str
-        col: str
-        loc: int
         add_loc: int
-        order: int
-        arr: ndarray
         hasnans: ndarray
         arr_new: ndarray
         cur_loc: int
         new_columns: ndarray
-        func: Callable
-        new_data: Dict[str, ndarray]
 
         if axis_int == 0:
-            for kind, arr in self._data.items():
+            for kind, arr in self._data.items():  # type: str, ndarray
                 if kind not in good_dtypes:
                     continue
                 func = stat.funcs[kind][name]
@@ -1769,8 +1762,8 @@ class DataFrame(object):
             new_columns = np.empty(new_num_cols, dtype='O')
             i: int = 0
 
-            for col in self._columns:
-                kind, loc, order = self._column_info[col].values
+            for col in self._columns:  # type: str
+                kind, loc, order = self._column_info[col].values  # type: str, int, int
                 if kind not in good_dtypes:
                     continue
                 new_columns[i] = col
@@ -1778,11 +1771,10 @@ class DataFrame(object):
                 new_column_info[col] = utils.Column(new_kind, loc + add_loc, i)
                 i += 1
 
-            new_data = utils.concat_stat_arrays(data_dict)
+            new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
             return self._construct_from_new(new_data, new_column_info, new_columns)
         else:
             arrs: List[ndarray] = []
-            result: ndarray
             if utils.is_column_stack_func(name):
                 arr = self._values_raw(good_dtypes)
                 kind = arr.dtype.kind
@@ -1791,8 +1783,8 @@ class DataFrame(object):
                 else:
                     hasnans = None
                 kwargs.update({'hasnans': hasnans})
-                func = stat.funcs[kind][name]
-                result = self._get_stat_func_result(func, arr, 1, kwargs)
+                func: Callable = stat.funcs[kind][name]
+                result: ndarray = self._get_stat_func_result(func, arr, 1, kwargs)
             else:
                 for kind, arr in self._data.items():
                     if kind not in good_dtypes:
@@ -1847,34 +1839,25 @@ class DataFrame(object):
     def var(self, axis: str = 'rows', ddof: int = 1) -> 'DataFrame':
         return self._stat_funcs('var', axis, ddof=ddof)
 
-    def abs(self, keep: bool = False) -> 'DataFrame':
-        """
-        Take the absolute value of each element.
-        By default it will drop any non-numeric/bool columns
-        Set `keep` to `True` to keep all columns
-
-        Parameters
-        ----------
-        keep : bool - Set to `True` to keep all columns
-
-        """
-        if keep:
-            df: 'DataFrame' = self
-        else:
-            df = self._get_numeric()
-
+    def _non_agg_stat_funcs(self, name: str, **kwargs: Any) -> 'DataFrame':
         new_data: Dict[str, ndarray] = {}
-        dt: str
-        arr: ndarray
-        for dt, arr in df._data.items():
+        for dt, arr in self._data.items():  # type: str, ndarray
             if dt in 'ifbm':
-                new_data[dt] = np.abs(arr)
+                # new_data[dt] = np.abs(arr)
+                new_data[dt] = getattr(np, name)(arr, **kwargs)
             else:
                 new_data[dt] = arr.copy()
-        new_column_info: ColInfoT = df._copy_column_info()
-        return df._construct_from_new(new_data, new_column_info, df._columns.copy())
+        new_column_info: ColInfoT = self._copy_column_info()
+        return self._construct_from_new(new_data, new_column_info, self._columns.copy())
+
+    def abs(self) -> 'DataFrame':
+        return self._non_agg_stat_funcs('abs')
+
+    def round(self, decimals: int) -> 'DataFrame':
+        return self._non_agg_stat_funcs('round', decimals=decimals)
 
     __abs__ = abs
+    __round__ = round
 
     def _get_numeric(self) -> 'DataFrame':
         if ('i' not in self._data and 'f' not in self._data and
@@ -4538,7 +4521,6 @@ class DataFrame(object):
             df_group = self.groupby(group).agg((aggfunc, value, temp_col_name))
 
         row_idx, row_names = df_group.factorize(row)
-        print(row_names)
         col_idx, col_names = df_group.factorize(column)
 
         dtype, loc, _ = df_group._column_info[temp_col_name].values
