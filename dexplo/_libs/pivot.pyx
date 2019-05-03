@@ -24,7 +24,12 @@ def pivot_int(ndarray[np.int64_t] row_idx, Py_ssize_t nr,
               ndarray[np.int64_t] values):
     cdef:
         Py_ssize_t i, n = len(row_idx), cur_i, cur_j
-        ndarray[np.int64_t, ndim=2] result = np.empty((nr, nc), dtype='int64', order='F')
+        ndarray[np.int64_t, ndim=2] result
+
+    if len(row_idx) == nr * nc:
+        result = np.empty((nr, nc), dtype='int64', order='F')
+    else:
+        result = np.zeros((nr, nc), dtype='int64', order='F')
 
     for i in range(n):
         cur_i = row_idx[i]
