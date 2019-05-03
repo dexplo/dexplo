@@ -6,7 +6,6 @@ import numpy as np
 from numpy import nan, ndarray
 from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
                     NoReturn, Set, Iterable, Any, TypeVar, Type, Generator)
-import weakref
 import datetime
 
 NAT = np.datetime64('nat')
