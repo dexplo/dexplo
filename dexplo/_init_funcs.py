@@ -1,12 +1,11 @@
 from collections import defaultdict
-from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
-                    NoReturn, Set, Iterable, Any, TypeVar, Type, Generator)
+from typing import Union, Dict, List, Optional, Tuple, Set
 
 import numpy as np
 from numpy import ndarray
 
 from . import _utils as utils
-from ._libs import validate_arrays as _va
+from ._libs import validate_arrays as va
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
 DictListArr = Dict[str, List[ndarray]]
@@ -52,7 +51,7 @@ def columns_from_array(columns: ColumnT, num_cols: int) -> ndarray:
 
     """
     if columns is None:
-        col_list: List[str] = ['a' + str(i) for i in range(num_cols)]
+        col_list: List[str] = [f'a{str(i)}' for i in range(num_cols)]
         columns: ndarray = np.array(col_list, dtype='O')
     else:
         columns = check_column_validity(columns)
@@ -173,7 +172,7 @@ def data_from_object_array(data: ndarray, columns: ndarray) -> Tuple:
     column_info: ColInfoT = {}
     data_dict: DictListArr = defaultdict(list)
     for i, col in enumerate(columns):
-        arr: ndarray = _va.maybe_convert_object_array(data[:, i], col)
+        arr: ndarray = va.maybe_convert_object_array(data[:, i], col)
         kind: str = arr.dtype.kind
         loc: int = len(data_dict[kind])
         data_dict[kind].append(arr)
