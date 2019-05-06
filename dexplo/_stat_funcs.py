@@ -98,10 +98,15 @@ funcs = {'i': {'min': m.min_int,
                'count': df.count_date,
                'cummax': df.cummax_date,
                'cummin': df.cummin_date,
+               'mode': df.mode_date,
                'nunique': df.nunique_date},
 
          'm': {'min': df.min_date,
                'max': df.max_date,
+               'sum': df.sum_date,
+               'mean': df.mean_date,
+               'median': df.median_date,
+               'prod': df.prod_date,
                'any': df.any_date,
                'all': df.all_date,
                'argmax': df.argmax_date,
@@ -109,12 +114,16 @@ funcs = {'i': {'min': m.min_int,
                'count': df.count_date,
                'cummax': df.cummax_date,
                'cummin': df.cummin_date,
+               'cumsum': df.cumsum_date,
+               'cumprod': df.cumprod_date,
+               'mode': df.mode_date,
                'nunique': df.nunique_date}}
 
 funcs_columns = {'sum': mc.sum_columns,
                  'max': mc.max_columns,
                  'min': mc.min_columns,
                  'mean': mc.mean_columns,
+                 'prod': mc.prod_columns,
                  'any': mc.any_columns,
                  'all': mc.all_columns,
                  'count': mc.count_columns}
@@ -167,3 +176,5 @@ funcs_str2_1row_left = {'__add__': m.add_obj_two_1row_left,
                         '__ge__': m.ge_obj_two_1row_left,
                         '__eq__': m.eq_obj_two_1row_left,
                         '__ne__': m.ne_obj_two_1row_left,}
+
+
