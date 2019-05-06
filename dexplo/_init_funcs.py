@@ -4,8 +4,9 @@ from typing import Union, Dict, List, Optional, Tuple, Set
 import numpy as np
 from numpy import ndarray
 
-from . import _utils as utils
 from ._libs import validate_arrays as va
+from . import _utils as utils
+
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
 DictListArr = Dict[str, List[ndarray]]
