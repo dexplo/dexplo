@@ -125,6 +125,13 @@ def data_from_dict(data: DataC) -> None:
 
 
 def data_from_array(data: ndarray, columns: ndarray) -> Tuple:
+    if data.dtype.kind == 'O':
+        return data_from_object_array(data, columns)
+    else:
+        return data_from_typed_array(data, columns)
+
+
+def data_from_typed_array(data: ndarray, columns: ndarray) -> Tuple:
     """
     Stores entire array, `data` into `self._data` as one kind
 

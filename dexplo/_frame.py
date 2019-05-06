@@ -119,12 +119,7 @@ class DataFrame(object):
         elif isinstance(data, ndarray):
             num_cols: int = utils.validate_array_type_and_dim(data)
             self._columns = init.columns_from_array(columns, num_cols)
-
-            if data.dtype.kind == 'O':
-                self._data, self._column_info = init.data_from_object_array(data, self._columns)
-            else:
-                self._data, self._column_info = init.data_from_array(data, self._columns)
-
+            self._data, self._column_info = init.data_from_array(data, self._columns)
         else:
             raise TypeError('`data` must be either a dict of arrays or an array')
 
