@@ -168,7 +168,7 @@ class DataFrame(object):
         Retrieve a single 2-d array of all the data in the correct column order
         """
         if len(self._data) == 1:
-            kind: str = list(self._data.keys())[0]
+            kind: str = next(iter(self._data))
             order = [self._column_info[col].loc for col in self._columns]
             return self._data[kind][:, order]
 
@@ -781,7 +781,7 @@ class DataFrame(object):
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def select_dtypes(self, include: Optional[Union[str, List[str]]] = None,
-                      exclude: Optional[Union[str, List[str]]] = None) -> 'DataFrame':
+                      exclude: Optional[Union[str, List[str]]] = None, copy=False) -> 'DataFrame':
         """
         Selects columns based on their data type.
         The data types must be passed as strings - 'int', 'float', 'str', 'bool'.
@@ -820,8 +820,11 @@ class DataFrame(object):
         else:
             include_final = self._data.keys() - clude
 
-        new_data: Dict[str, ndarray] = {dtype: self._data[dtype].copy('F')
-                                        for dtype in include_final}
+        if copy:
+            new_data: Dict[str, ndarray] = {dtype: self._data[dtype].copy('F')
+                                            for dtype in include_final}
+        else:
+            new_data: Dict[str, ndarray] = {dtype: self._data[dtype] for dtype in include_final}
 
         new_column_info: ColInfoT = {}
         new_columns: ColumnT = []
@@ -1623,9 +1626,7 @@ class DataFrame(object):
         elif isinstance(dtype, dict):
             df_new: 'DataFrame' = self.copy()
 
-            column: str
-            new_dtype2: str
-            for column, new_dtype2 in dtype.items():
+            for column, new_dtype2 in dtype.items():  # type: str, str
                 df_new._validate_column_name(column)
                 new_dtype_numpy: str = utils.check_valid_dtype_convert(new_dtype2)
                 df_new._astype_internal(column, new_dtype_numpy)
@@ -1661,9 +1662,7 @@ class DataFrame(object):
         and a boolean value in the other alerting whether any missing values exist
         """
         if self._hasnans == {}:
-            kind: str
-            arr: ndarray
-            for kind, arr in self._data.items():
+            for kind, arr in self._data.items():  # type: str, ndarray
                 if kind in 'f':
                     self._hasnans['f'] = np.isnan(arr).any(0)
                 elif kind == 'O':
@@ -1675,9 +1674,7 @@ class DataFrame(object):
 
         bool_array: ndarray = np.empty(len(self), dtype='bool')
 
-        col: str
-        col_obj: utils.Column
-        for col, col_obj in self._column_info.items():
+        for col, col_obj in self._column_info.items():  # type: str, utils.Column
             kind2, loc, order = col_obj.values  # type: str, int, int
             bool_array[order] = self._hasnans[kind2][loc]
 
@@ -1689,28 +1686,39 @@ class DataFrame(object):
                                      'Has NaN': utils.Column('b', 0, 1)}
         return self._construct_from_new(new_data, new_column_info, columns)
 
-    def _get_specific_stat_dtypes(self, name: str, axis: int) -> Set[str]:
-        if self._is_string():
-            if name in ['std', 'var', 'mean', 'median', 'quantile']:
-                raise TypeError('Your DataFrame consists entirely of strings. '
-                                f'The `{name}` method only works with numeric columns.')
-            return {'O'}
-        if axis == 0:
-            if name in ['std', 'var', 'mean', 'median', 'quantile', 'prod', 'cumprod']:
-                return {'i', 'f', 'b'}
-        elif axis == 1:
-            if name in ['std', 'var', 'mean', 'median', 'quantile', 'sum', 'max', 'min', 'mode',
-                        'cumsum', 'cummax', 'cummin', 'argmin', 'argmax', 'prod', 'cumprod']:
-                return {'i', 'f', 'b'}
+    def _get_stat_dtypes_axis0(self, name: str, include_strings: bool = True) -> Set[str]:
+        dtypes = set(self._data)
+        if not include_strings:
+            dtypes -= {'O'}
 
-        if name in ['max', 'min', 'any', 'all', 'argmin', 'argmax', 'count',
-                    'cummax', 'cummin', 'nunique']:
-            return {'i', 'f', 'b', 'O', 'm', 'M'}
-        else:
-            return {'i', 'f', 'b', 'O'}
+        if name in ['mean', 'median', 'quantile']:
+            dtypes -= {'M', 'O'}
+        elif name in ['sum', 'cumsum']:
+            dtypes -= {'M'}
+        elif name in ['std', 'var', 'prod', 'cumprod']:
+            dtypes -= {'m', 'M', 'O'}
 
-    def _get_stat_func_result(self, func: Callable, arr: ndarray,
+        if not dtypes:
+            raise ValueError('There are no columns in this DataFrame that '
+                             f'operate with the `{name}` method')
+        return dtypes
+
+    def _check_stat_dtypes_axis1(self, name: str) -> None:
+        for dtype in self._data:
+            if name not in stat.funcs[dtype]:
+                raise TypeError(f'Cannot compute {name} method on DataFrame with data type '
+                                f'{utils._DT[dtype]} when axis="columns"')
+            if len(self._data) > 1 and dtype in 'OMm' and name not in {'count', 'nunique'}:
+                dt_name = utils._DT[dtype]
+                raise TypeError(f'The `{name}` method cannot work with axis="columns" '
+                                'when the the DataFrame contains a mix of '
+                                f'{dt_name} and non-{dt_name} values')
+
+    def _get_stat_func_result(self, kind: str, name: str, arr: ndarray,
                               axis: int, kwargs: Dict) -> ndarray:
+        func: Callable = stat.funcs[kind][name]
+        hasnans = self._hasnans_dtype(kind)
+        kwargs.update({'hasnans': hasnans})
         result: Union[Scalar, ndarray] = func(arr, axis=axis, **kwargs)
 
         if isinstance(result, ndarray):
@@ -1728,95 +1736,83 @@ class DataFrame(object):
                 arr = arr[:, np.newaxis]
         return arr
 
-    def _stat_funcs(self, name: str, axis: str, **kwargs: Any) -> 'DataFrame':
-        axis_int: int = utils.convert_axis_string(axis)
+    def _stat_funcs_axis0(self, name: str, include_strings: bool, **kwargs: Any) -> 'DataFrame':
         data_dict: DictListArr = defaultdict(list)
-
-        good_dtypes: Set[str] = self._get_specific_stat_dtypes(name, axis_int)
         new_column_info: ColInfoT = {}
         change_kind: Dict[str, Tuple[str, int]] = {}
         new_num_cols: int = 0
+        dtypes: Set[str] = self._get_stat_dtypes_axis0(name, include_strings)
+        keep = name in ['cumsum', 'cummin', 'cummax', 'cumprod']
 
-        new_kind: str
-        add_loc: int
-        hasnans: ndarray
-        arr_new: ndarray
-        cur_loc: int
-        new_columns: ndarray
+        for kind, arr in self._data.items():  # type: str, ndarray
+            if kind in dtypes:
+                arr = self._get_stat_func_result(kind, name, arr, 0, kwargs)
+            elif not keep:
+                continue
 
-        if axis_int == 0:
-            for kind, arr in self._data.items():  # type: str, ndarray
-                if kind not in good_dtypes:
-                    continue
-                func = stat.funcs[kind][name]
-                hasnans = self._hasnans_dtype(kind)
-                kwargs.update({'hasnans': hasnans})
-                arr_new = self._get_stat_func_result(func, arr, 0, kwargs)
+            new_kind: str = arr.dtype.kind
+            cur_loc: int = utils.get_num_cols(data_dict.get(new_kind, []))
+            change_kind[kind] = (new_kind, cur_loc)
+            data_dict[new_kind].append(arr)
+            new_num_cols += arr.shape[1]
 
-                new_kind = arr_new.dtype.kind
-                cur_loc = utils.get_num_cols(data_dict.get(new_kind, []))
-                change_kind[kind] = (new_kind, cur_loc)
-                data_dict[new_kind].append(arr_new)
-                new_num_cols += arr_new.shape[1]
+        new_columns: ndarray = np.empty(new_num_cols, dtype='O')
+        i: int = 0
 
-            new_columns = np.empty(new_num_cols, dtype='O')
-            i: int = 0
-
-            for col in self._columns:  # type: str
-                kind, loc, order = self._column_info[col].values  # type: str, int, int
-                if kind not in good_dtypes:
-                    continue
+        for col in self._columns:  # type: str
+            kind, loc, order = self._column_info[col].values  # type: str, int, int
+            if kind in dtypes or keep:
                 new_columns[i] = col
-                new_kind, add_loc = change_kind[kind]
+                new_kind, add_loc = change_kind[kind]  # type: str, int
                 new_column_info[col] = utils.Column(new_kind, loc + add_loc, i)
                 i += 1
 
-            new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
-            return self._construct_from_new(new_data, new_column_info, new_columns)
+        new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
+        return self._construct_from_new(new_data, new_column_info, new_columns)
+
+    def _stat_funcs_axis1(self, name, **kwargs: Any) -> 'DataFrame':
+        self._check_stat_dtypes_axis1(name)
+        arrs: List[ndarray] = []
+        new_column_info: ColInfoT = {}
+
+        if utils.is_column_stack_func(name):
+            # TODO: Optimize this and divide function into those where order matters and
+            # where it does not mean vs cumsum. Right now, self.values preserves order
+            arr = self.values
+            kind = arr.dtype.kind
+            result: ndarray = self._get_stat_func_result(kind, name, arr, 1, kwargs)
         else:
-            arrs: List[ndarray] = []
-            if utils.is_column_stack_func(name):
-                arr = self._values_raw(good_dtypes)
-                kind = arr.dtype.kind
-                if kind in 'fO':
-                    hasnans = self._hasnans_dtype(kind)
-                else:
-                    hasnans = None
-                kwargs.update({'hasnans': hasnans})
-                func: Callable = stat.funcs[kind][name]
-                result: ndarray = self._get_stat_func_result(func, arr, 1, kwargs)
+            for kind, arr in self._data.items():
+                arrs.append(self._get_stat_func_result(kind, name, arr, 1, kwargs))
+
+            if len(arrs) == 1:
+                result = arrs[0]
             else:
-                for kind, arr in self._data.items():
-                    if kind not in good_dtypes:
-                        continue
-                    func = stat.funcs[kind][name]
-                    hasnans = self._hasnans_dtype(kind)
-                    kwargs.update({'hasnans': hasnans})
-                    arr_new = self._get_stat_func_result(func, arr, 1, kwargs)
-                    arrs.append(arr_new)
+                func_across: Callable = stat.funcs_columns[name]
+                result = func_across(arrs)
 
-                if len(arrs) == 1:
-                    result = arrs[0]
-                else:
-                    func_across: Callable = stat.funcs_columns[name]
-                    result = func_across(arrs)
+        if utils.is_agg_func(name):
+            new_columns = np.array([name], dtype='O')
+        else:
+            new_columns = self._columns.copy()
 
-            if utils.is_agg_func(name):
-                new_columns = np.array([name], dtype='O')
-            else:
-                new_columns = [col for col in self._columns
-                               if self._column_info[col].dtype in good_dtypes]
+        new_kind = result.dtype.kind
+        new_data = {new_kind: result}
 
-            new_kind = result.dtype.kind
-            new_data = {new_kind: result}
+        for i, col in enumerate(new_columns):
+            new_column_info[col] = utils.Column(new_kind, i, i)
+        return self._construct_from_new(new_data, new_column_info, new_columns)
 
-            for i, col in enumerate(new_columns):
-                new_column_info[col] = utils.Column(new_kind, i, i)
-            return self._construct_from_new(new_data, new_column_info,
-                                            np.asarray(new_columns, dtype='O'))
+    def _stat_funcs(self, name: str, axis: str, include_strings: bool = True,
+                    **kwargs: Any) -> 'DataFrame':
+        axis_int: int = utils.convert_axis_string(axis)
+        if axis_int == 0:
+            return self._stat_funcs_axis0(name, include_strings, **kwargs)
+        else:
+            return self._stat_funcs_axis1(name, **kwargs)
 
-    def sum(self, axis: str = 'rows') -> 'DataFrame':
-        return self._stat_funcs('sum', axis)
+    def sum(self, axis: str = 'rows', include_strings: bool = False) -> 'DataFrame':
+        return self._stat_funcs('sum', axis, include_strings)
 
     def prod(self, axis: str = 'rows') -> 'DataFrame':
         return self._stat_funcs('prod', axis)
@@ -1839,31 +1835,20 @@ class DataFrame(object):
     def var(self, axis: str = 'rows', ddof: int = 1) -> 'DataFrame':
         return self._stat_funcs('var', axis, ddof=ddof)
 
-    def _non_agg_stat_funcs(self, name: str, **kwargs: Any) -> 'DataFrame':
-        new_data: Dict[str, ndarray] = {}
-        for dt, arr in self._data.items():  # type: str, ndarray
-            if dt in 'ifbm':
-                # new_data[dt] = np.abs(arr)
-                new_data[dt] = getattr(np, name)(arr, **kwargs)
-            else:
-                new_data[dt] = arr.copy()
-        new_column_info: ColInfoT = self._copy_column_info()
-        return self._construct_from_new(new_data, new_column_info, self._columns.copy())
+    def count(self, axis: str = 'rows') -> 'DataFrame':
+        return self._stat_funcs('count', axis)
 
-    def abs(self) -> 'DataFrame':
-        return self._non_agg_stat_funcs('abs')
+    def cummax(self, axis: str = 'rows') -> 'DataFrame':
+        return self._stat_funcs('cummax', axis)
 
-    def round(self, decimals: int) -> 'DataFrame':
-        return self._non_agg_stat_funcs('round', decimals=decimals)
+    def cummin(self, axis: str = 'rows') -> 'DataFrame':
+        return self._stat_funcs('cummin', axis)
 
-    __abs__ = abs
-    __round__ = round
+    def cumsum(self, axis: str = 'rows') -> 'DataFrame':
+        return self._stat_funcs('cumsum', axis)
 
-    def _get_numeric(self) -> 'DataFrame':
-        if ('i' not in self._data and 'f' not in self._data and
-                'b' in self._data and 'm' not in self._data):
-            raise TypeError('All columns must be either integer, float, or boolean')
-        return self.select_dtypes(['number', 'bool', 'timedelta'])
+    def cumprod(self, axis: str = 'rows') -> 'DataFrame':
+        return self._stat_funcs('cumprod', axis)
 
     def any(self, axis: str = 'rows') -> 'DataFrame':  # todo add for ft
         return self._stat_funcs('any', axis)
@@ -1893,104 +1878,6 @@ class DataFrame(object):
         """
         return self._stat_funcs('argmin', axis)
 
-    def count(self, axis: str = 'rows') -> 'DataFrame':
-        return self._stat_funcs('count', axis)
-
-    def _get_clip_df(self, value: Any, name: str, keep: bool) -> Tuple['DataFrame', str]:
-        if value is None:
-            raise ValueError('You must provide a value for either lower or upper')
-        if utils.is_number(value):
-            if self._has_numeric_or_bool():
-                if keep:
-                    df: 'DataFrame' = self
-                else:
-                    df = self.select_dtypes(['number', 'bool'])
-                return df, 'number'
-            else:
-                raise TypeError(f'You provided a numeric value for {name} '
-                                'but do not have any numeric columns')
-        elif isinstance(value, str):
-            if self._has_string():
-                if keep:
-                    df = self
-                else:
-                    df = self.select_dtypes('str')
-                return df, 'str'
-            else:
-                raise TypeError(f'You provided a string value for {name} '
-                                'but do not have any string columns')
-        else:
-            raise NotImplementedError('Data type incompatible')
-
-    def clip(self, lower: Optional[ScalarT] = None, upper: Optional[ScalarT] = None,
-             keep: bool = False) -> 'DataFrame':
-        df: 'DataFrame'
-        overall_dtype: 'str'
-        if lower is None:
-            df, overall_dtype = self._get_clip_df(upper, 'upper', keep)
-        elif upper is None:
-            df, overall_dtype = self._get_clip_df(lower, 'lower', keep)
-        else:
-            overall_dtype = utils.is_compatible_values(lower, upper)
-            if lower > upper:
-                raise ValueError('The upper value must be less than lower')
-
-            if overall_dtype == 'number' and not keep:
-                df = self.select_dtypes(['number', 'bool'])
-            elif overall_dtype == 'str' and not keep:
-                df = self.select_dtypes('str')
-            else:
-                df = self
-
-        if overall_dtype == 'str':
-            new_data: Dict[str, ndarray] = {}
-            if lower is None:
-                new_data['O'] = _math.clip_str_upper(df._data['O'], upper)
-            elif upper is None:
-                new_data['O'] = _math.clip_str_lower(df._data['O'], lower)
-            else:
-                new_data['O'] = _math.clip_str_both(df._data['O'], lower, upper)
-
-            for kind, arr in self._data.items():
-                if kind != 'O':
-                    new_data[kind] = arr
-        else:
-            if utils.is_integer(lower) or utils.is_integer(upper):
-                if 'b' in df._data:
-                    as_type_dict = {col: 'int' for col, col_obj in df._column_info.items()
-                                    if col_obj.dtype == 'b'}
-                    df = df.astype(as_type_dict)
-            if utils.is_float(lower) or utils.is_float(upper):
-                if 'i' in df._data:
-                    as_type_dict = {col: 'float' for col, col_obj in df._column_info.items()
-                                    if col_obj.dtype == 'i'}
-                    df = df.astype(as_type_dict)
-                if 'b' in df._data:
-                    as_type_dict = {col: 'float' for col, col_obj in df._column_info.items()
-                                    if col_obj.dtype == 'f'}
-                    df = df.astype(as_type_dict)
-            new_data = {}
-            for dtype, arr in df._data.items():
-                if dtype in 'if':
-                    new_data[dtype] = arr.clip(lower, upper)
-                else:
-                    new_data[dtype] = arr.copy(order='F')
-
-        new_column_info: ColInfoT = df._copy_column_info()
-        return df._construct_from_new(new_data, new_column_info, df._columns.copy())
-
-    def cummax(self, axis: str = 'rows') -> 'DataFrame':
-        return self._stat_funcs('cummax', axis)
-
-    def cummin(self, axis: str = 'rows') -> 'DataFrame':
-        return self._stat_funcs('cummin', axis)
-
-    def cumsum(self, axis: str = 'rows') -> 'DataFrame':
-        return self._stat_funcs('cumsum', axis)
-
-    def cumprod(self, axis: str = 'rows') -> 'DataFrame':
-        return self._stat_funcs('cumprod', axis)
-
     def mode(self, axis: str = 'rows', keep='low') -> 'DataFrame':
         """
         Returns the mode of each column or row
@@ -2011,6 +1898,83 @@ class DataFrame(object):
             raise ValueError('`keep` must be either "low", "high", or "all"')
         return self._stat_funcs('mode', axis, keep=keep)
 
+    def _non_agg_stat_funcs(self, name: str, **kwargs: Any) -> 'DataFrame':
+        new_data: Dict[str, ndarray] = {}
+        for dt, arr in self._data.items():  # type: str, ndarray
+            # abs value possible for timedelta but not round
+            if dt in 'if' or (dt == 'm' and name == 'abs'):
+                new_data[dt] = getattr(np, name)(arr, **kwargs)
+            else:
+                new_data[dt] = arr.copy()
+        new_column_info: ColInfoT = self._copy_column_info()
+        return self._construct_from_new(new_data, new_column_info, self._columns.copy())
+
+    def abs(self) -> 'DataFrame':
+        return self._non_agg_stat_funcs('abs')
+
+    def round(self, decimals: int = 0) -> 'DataFrame':
+        if not utils.is_integer(decimals):
+            raise TypeError('`decimals` must be an integer')
+        return self._non_agg_stat_funcs('round', decimals=decimals)
+
+    __abs__ = abs
+    __round__ = round
+
+    def _get_clip_dtype(self, value: Any, name: str) -> str:
+        if value is None:
+            raise ValueError('You must provide a value for either lower or upper')
+        if utils.is_number(value):
+            if self._has_numeric_or_bool():
+                return 'number'
+            else:
+                raise TypeError(f'You provided a numeric value for {name} '
+                                'but do not have any numeric columns')
+        elif isinstance(value, str):
+            if self._has_string():
+                return 'str'
+            else:
+                raise TypeError(f'You provided a string value for {name} '
+                                'but do not have any string columns')
+        else:
+            raise NotImplementedError('Data type incompatible')
+
+    def clip(self, lower: Optional[ScalarT] = None, upper: Optional[ScalarT] = None) -> 'DataFrame':
+        if lower is None:
+            overall_dtype = self._get_clip_dtype(upper, 'upper')  # type: 'DataFrame', str
+        elif upper is None:
+            overall_dtype = self._get_clip_dtype(lower, 'lower')
+        else:
+            overall_dtype = utils.is_compatible_values(lower, upper)
+            if lower > upper:
+                raise ValueError('The upper value must be less than lower')
+
+        new_data: Dict[str, ndarray] = {}
+        df = self
+        if overall_dtype == 'str':
+            if lower is None:
+                new_data['O'] = _math.clip_str_upper(self._data['O'], upper)
+            elif upper is None:
+                new_data['O'] = _math.clip_str_lower(self._data['O'], lower)
+            else:
+                new_data['O'] = _math.clip_str_both(self._data['O'], lower, upper)
+
+            for kind, arr in self._data.items():
+                if kind != 'O':
+                    new_data[kind] = arr
+        else:
+            if utils.is_float(lower) or utils.is_float(upper):
+                as_type_dict = {col: 'float' for col, col_obj in self._column_info.items()
+                                if col_obj.dtype == 'i'}
+                df = df.astype(as_type_dict)
+            for dtype, arr in df._data.items():
+                if dtype in 'if':
+                    new_data[dtype] = arr.clip(lower, upper)
+                else:
+                    new_data[dtype] = arr.copy(order='F')
+
+        new_column_info: ColInfoT = df._copy_column_info()
+        return df._construct_from_new(new_data, new_column_info, df._columns.copy())
+
     def _hasnans_dtype(self, kind: str) -> ndarray:
         try:
             return self._hasnans[kind]
@@ -2026,10 +1990,8 @@ class DataFrame(object):
         kind_shape: Dict[str, int] = OrderedDict()
         total_shape: int = 0
 
-        kind: str
-        arr: ndarray
         new_arr: ndarray
-        for kind, arr in self._data.items():
+        for kind, arr in self._data.items():  # type: str, ndarray
             kind_shape[kind] = total_shape
             total_shape += arr.shape[1]
             if kind in 'bi':
