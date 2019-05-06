@@ -31,7 +31,7 @@ _NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'O': 'O', 'U': 'U'}
 _AXIS = {'rows': 0, 'columns': 1}
 _NON_AGG_FUNCS = {'cumsum', 'cummin', 'cummax', 'cumprod'}
 _COLUMN_STACK_FUNCS = {'cumsum', 'cummin', 'cummax', 'mean', 'median', 'var', 'std',
-                       'argmax', 'argmin', 'quantile', 'nunique', 'prod', 'cumprod', 'mode'}
+                       'argmax', 'argmin', 'quantile', 'nunique', 'cumprod', 'mode'}
 
 _SPECIAL_METHODS = {'__sub__': 'subtraction', '__mul__': 'multiplication',
                     '__pow__': 'exponentiation', '__rsub__': '(right) subtraction'}
