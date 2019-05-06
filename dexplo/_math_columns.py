@@ -33,3 +33,6 @@ def all_columns(arrs: List[ndarray]) -> ndarray:
 
 def count_columns(arrs: List[ndarray]) -> ndarray:
     return np.sum(arrs, 0)
+
+def prod_columns(arrs: List[ndarray]) -> ndarray:
+    return np.prod(arrs, 0)
