@@ -12,8 +12,7 @@ from . import _init_funcs as init
 from . import _utils as utils
 from . import options
 from ._date import DateTimeClass, TimeDeltaClass
-from ._libs import (string_funcs as _sf,
-                    groupby as _gb,
+from ._libs import (groupby as _gb,
                     validate_arrays as _va,
                     math as _math,
                     sort_rank as _sr,
@@ -114,12 +113,12 @@ class DataFrame(object):
 
         if isinstance(data, dict):
             self._columns: ColumnT = init.columns_from_dict(columns, data)
-            self._data, self._column_info = init.data_from_dict(data)
+            self._data, self._column_info, self._str_map, self._str_reverse_map = init.data_from_dict(data)
 
         elif isinstance(data, ndarray):
             num_cols: int = utils.validate_array_type_and_dim(data)
             self._columns = init.columns_from_array(columns, num_cols)
-            self._data, self._column_info = init.data_from_array(data, self._columns)
+            self._data, self._column_info, self._str_map, self._str_reverse_map = init.data_from_array(data, self._columns)
         else:
             raise TypeError('`data` must be either a dict of arrays or an array')
 
@@ -143,7 +142,6 @@ class DataFrame(object):
             number of columns
         """
         new_columns = init.check_column_validity(new_columns)
-
         len_new: int = len(new_columns)
         len_old: int = len(self._columns)
         if len_new != len_old:
@@ -303,6 +301,10 @@ class DataFrame(object):
                     vals = vals.astype(f'timedelta64[{unit}]')
                     data = [column] + [str(val).replace('T', ' ') if not np.isnat(val)
                                        else str(val) for val in vals]
+                elif dtype == 'S':
+                    loc = self._column_info[column].loc
+                    rev_map = self._str_reverse_map[loc]
+                    data = [column] + [rev_map[val] for val in vals]
                 else:
                     data = [column] + vals.tolist()
             else:
@@ -835,13 +837,15 @@ class DataFrame(object):
     @classmethod
     def _construct_from_new(cls: Type[object], data: Dict[str, ndarray],
                             column_info: ColInfoT, columns: ColumnT,
-                            string_mapping: Dict[int, Dict]) -> 'DataFrame':
+                            str_map: Dict[int, Dict],
+                            str_reverse_map: List[str]) -> 'DataFrame':
         df_new: 'DataFrame' = object.__new__(cls)
         df_new._column_info = column_info
         df_new._data = data
         df_new._columns = columns
         df_new._hasnans = {}
-        df_new._string_mapping = string_mapping
+        df_new._str_map = str_map
+        df_new._str_reverse_map = str_reverse_map
         return df_new
 
     def _do_eval(self, op_string: str, other: Any) -> Tuple[DictListArr, ColInfoT]:
