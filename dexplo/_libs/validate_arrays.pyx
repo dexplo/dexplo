@@ -115,6 +115,32 @@ def convert_str_array(ndarray[object] arr, column):
         result[i] = arr[i]
     return result
 
+
+def convert_str_to_cat(ndarray arr):
+    cdef Py_ssize_t i, n = len(arr)
+    cdef ndarray[np.uint32_t] arr_map = np.empty(len(arr), 'uint32', 'F')
+    cdef dict d = {}
+
+    for i in range(n):
+        arr_map[i] = d.setdefault(arr[i], len(d))
+
+    return arr_map, d
+
+
+def convert_str_to_cat_2d(ndarray arr):
+    cdef Py_ssize_t i, j, n = len(arr), m = arr.shape[1]
+    cdef ndarray[np.uint32_t, ndim=2] arr_map = np.empty((n, m), 'uint32', 'F')
+    cdef dict d, str_map = {}
+
+    for j in range(m):
+        d = {}
+        str_map = d
+        for i in range(n):
+            arr_map[i, j] = d.setdefault(arr[i, j], len(d))
+
+    return arr_map, str_map
+
+
 # def convert_datetime_array(ndarray[object] arr, column):
 #     cdef int i
 #     cdef int n = len(arr)
