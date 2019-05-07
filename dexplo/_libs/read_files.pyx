@@ -127,6 +127,23 @@ cdef double get_float(char * string):
 
     return sign * (x + <double> dec / denom)
 
+def add_new_string_column(dict string_mapping, ndarray[np.uint32_t, ndim=2] orig_str_cat,
+                          ndarray a_tmp_str, int col_num):
+    # n is current row number
+    cdef Py_ssize_t i
+    cdef int val, n = len(a_tmp_str)
+    cdef ndarray[np.uint32_t] new_arr = np.empty(len(orig_str_cat), np.uint32, 'F')
+    cdef dict cur_str_map = {}
+
+    string_mapping[col_num] = cur_str_map
+
+    for i in range(n):
+        val = cur_str_map.setdefault(a_tmp_str[i], len(cur_str_map))
+        new_arr[i] = val
+
+    return string_mapping, np.column_stack((orig_str_cat, new_arr))
+
+
 def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_set, list usecols):
     cdef:
         bytes buf, first_buf
@@ -138,7 +155,7 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
         ndarray[np.uint8_t, ndim=2, cast=True] a_bool
         ndarray[np.int64_t, ndim=2] a_int
         ndarray[np.float64_t, ndim=2] a_float
-        ndarray[object, ndim=2] a_str
+        ndarray[np.uint32_t, ndim=2] a_str_cat
 
         bint is_int = True
         bint is_float = False
@@ -155,6 +172,10 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
         ndarray[np.int64_t] dtype_summary
         ndarray[object] vals
         ndarray[np.uint8_t, cast=True] usecols_arr
+
+        unicode unicode_str
+        dict string_mapping = {}
+        dict cur_str_map
 
     py_sep = bytes(chr(sep), 'utf-8')
 
@@ -244,7 +265,7 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
     a_bool = np.empty((nr, dtype_summary[1]), dtype='bool', order='F')
     a_int = np.empty((nr, dtype_summary[2]), dtype='int64', order='F')
     a_float = np.empty((nr, dtype_summary[3]), dtype='float64', order='F')
-    a_str = np.full((nr, dtype_summary[4]), '', dtype='O', order='F')
+    a_str_cat = np.empty((nr, dtype_summary[4]), dtype='uint32', order='F')
 
     for i in range(nc):
         if dtypes[i] == 1:
@@ -254,7 +275,8 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
         elif dtypes[i] == 3:
             a_float[0, dtype_loc[i]] = vals[i]
         elif dtypes[i] == 4:
-            a_str[0, dtype_loc[i]] = vals[i]
+            a_str_cat[0, dtype_loc[i]] = 0
+            string_mapping[dtype_loc[i]] = {vals[i]: 0}
 
     i = 0
     k = 1
@@ -286,18 +308,18 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
 
         if dtypes[j] == 4:
             start = i
-            temp_list = []
             while chars[i] == b' ':
                 i += 1
 
             while chars[i] != sep and chars[i] != b'\n':
-                temp_list.append(chr(chars[i]))
                 i += 1
 
             # only assign when a non-empty string is present - otherwise its already None
             if i != start:
-                # a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
-                a_str[k, dtype_loc[j]] = PyUnicode_InternFromString(chars[start:i])
+                # can intern with PyUnicode_InternFromString(chars[start:i])
+                unicode_str = chars[start:i].decode('utf-8')
+                cur_str_map = string_mapping[dtype_loc[j]]
+                a_str_cat[k, dtype_loc[j]] = cur_str_map.setdefault(unicode_str, len(cur_str_map))
 
         elif dtypes[j] == 2:
             ct_dec = 0
@@ -333,14 +355,16 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
                 a_int[k, dtype_loc[j]] = sign * x
             elif is_str or ct_dec > 1:
                 dtypes_changed[2].append(j)
-                a_str = np.column_stack((a_str, np.empty(nr, dtype = 'O')))
-                a_str[:k, dtype_summary[4]] = a_int[:k, dtype_loc[j]].astype('str')
+                a_tmp_str = a_int[:k, dtype_loc[j]].astype('str')
                 dtype_loc[j] = dtype_summary[4]
+                string_mapping, a_str_cat = add_new_string_column(string_mapping, a_str_cat,
+                                                                  a_tmp_str, dtype_loc[j])
                 dtypes[j] = 4
                 dtype_summary[4] += 1
                 if start != i:
-                    # a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
-                    a_str[k, dtype_loc[j]] = PyUnicode_InternFromString(chars[start:i])
+                    unicode_str = chars[start:i].decode('utf-8')
+                    cur_str_map = string_mapping[dtype_loc[j]]
+                    a_str_cat[k, dtype_loc[j]] = cur_str_map.setdefault(unicode_str, len(cur_str_map))
             else: # ct_dec == 1 or start == i or not has_int:
                 dtypes_changed[2].append(j)
                 a_float = np.column_stack((a_float, a_int[:, dtype_loc[j]]))
@@ -394,12 +418,15 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
                 a_float[k, dtype_loc[j]] = nan
             else: # is_str or ct_dec > 1:
                 dtypes_changed[3].append(j)
-                a_str = np.column_stack((a_str, np.empty(nr, dtype = 'O')))
-                a_str[:k, dtype_summary[4]] = a_float[:k, dtype_loc[j]].astype('str')
+                a_tmp_str = a_float[:k, dtype_loc[j]].astype('str')
                 dtype_loc[j] = dtype_summary[4]
+                string_mapping, a_str_cat = add_new_string_column(string_mapping, a_str_cat,
+                                                                  a_tmp_str, dtype_loc[j])
                 dtype_summary[4] += 1
                 dtypes[j] = 4
-                a_str[k, dtype_loc[j]] = PyUnicode_InternFromString(chars[start:i])
+                unicode_str = chars[start:i].decode('utf-8')
+                cur_str_map = string_mapping[dtype_loc[j]]
+                a_str_cat[k, dtype_loc[j]] = cur_str_map.setdefault(unicode_str, len(cur_str_map))
 
         elif dtypes[j] == 1:
             while chars[i] == b' ':
@@ -417,14 +444,16 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
             else:
                 # change dtype to str
                 dtypes_changed[1].append(j)
-                a_str = np.column_stack((a_str, np.empty(nr, dtype = 'O')))
-                a_str[:k, dtype_summary[4]] = a_bool[:k, dtype_loc[j]].astype('str')
+                a_tmp_str = a_bool[:k, dtype_loc[j]].astype('str')
                 dtype_loc[j] = dtype_summary[4]
+                string_mapping, a_str_cat = add_new_string_column(string_mapping, a_str_cat,
+                                                                  a_tmp_str, dtype_loc[j])
                 dtype_summary[4] += 1
                 dtypes[j] = 4
                 if start == i:
-                    # a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
-                    a_str[k, dtype_loc[j]] = PyUnicode_InternFromString(chars[start:i])
+                    unicode_str = chars[start:i].decode('utf-8')
+                    cur_str_map = string_mapping[dtype_loc[j]]
+                    a_str_cat[k, dtype_loc[j]] = cur_str_map.setdefault(unicode_str, len(cur_str_map))
 
         # unknown data types - must either be str or float but default to str
         # can change to float if
@@ -474,13 +503,15 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
             elif start != i:
                 # its really a string now
                 dtypes_changed[0].append(j)
-                a_str = np.column_stack((a_str, np.empty(nr, dtype='O')))
                 dtype_loc[j] = dtype_summary[4]
+                string_mapping, a_str_cat = add_new_string_column(string_mapping, a_str_cat,
+                                                                  a_tmp_str, dtype_loc[j])
                 dtype_summary[4] += 1
                 dtypes[j] = 4
-                a_str[k, dtype_loc[j]] = PyUnicode_InternFromString(chars[start:i])
+                unicode_str = chars[start:i].decode('utf-8')
+                cur_str_map = string_mapping[dtype_loc[j]]
+                a_str_cat[k, dtype_loc[j]] = cur_str_map.setdefault(unicode_str, len(cur_str_map))
                 count_py += 1
-                # a_str[k, dtype_loc[j]] = chars[start:i].decode('utf-8')
 
         i += 1
         j += 1
@@ -505,10 +536,12 @@ def read_csv(fn, long nr, int sep, int header, int skiprows_int, set skiprows_se
     is_unk = dtypes == 0
     unk_total = is_unk.sum()
     if unk_total > 0:
-        # make unknown data types str
-        a_unk = np.empty((nr, unk_total), dtype='O')
-        a_str = np.column_stack((a_str, a_unk))
-        dtypes[is_unk] = 4
-        dtype_loc[is_unk] = np.arange(unk_total) + dtype_summary[4]
+        raise NotImplementedError('Unknown data types: Fix later')
+    # if unk_total > 0:
+    #     # make unknown data types str
+    #     a_unk = np.empty((nr, unk_total), dtype='uint32')
+    #     a_str = np.column_stack((a_str, a_unk))
+    #     dtypes[is_unk] = 4
+    #     dtype_loc[is_unk] = np.arange(unk_total) + dtype_summary[4]
 
-    return a_bool, a_int, a_float, a_str, columns, dtypes, dtype_loc
+    return a_bool, a_int, a_float, a_str_cat, string_mapping, columns, dtypes, dtype_loc
