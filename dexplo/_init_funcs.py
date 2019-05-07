@@ -103,6 +103,7 @@ def data_from_dict(data: DataC) -> None:
     """
     column_info: ColInfoT = {}
     data_dict: DictListArr = defaultdict(list)
+    str_map = {}
     for i, (col, values) in enumerate(data.items()):
         if isinstance(values, list):
             arr: ndarray = utils.convert_list_to_single_arr(values)
@@ -110,10 +111,15 @@ def data_from_dict(data: DataC) -> None:
             arr = values
         else:
             raise TypeError('Values of dictionary must be an array or a list')
-        arr = utils.maybe_convert_1d_array(arr, col)
+        arr = utils.maybe_convert_1d_array(arr)
         kind: str = arr.dtype.kind
+        if kind == 'U':
+            kind = 'S'
+            arr, col_str_map = va.convert_str_to_cat(arr)
         loc: int = len(data_dict.get(kind, []))
         data_dict[kind].append(arr)
+        if kind == 'S':
+            str_map[loc] = col_str_map
         column_info[col] = utils.Column(kind, loc, i)
 
         if i == 0:
@@ -121,7 +127,9 @@ def data_from_dict(data: DataC) -> None:
         elif len(arr) != first_len:
             raise ValueError('All columns must be the same length')
 
-    return concat_arrays(data_dict), column_info
+    str_reverse_map = {k: list(v.keys()) for k, v in str_map.items()}
+
+    return concat_arrays(data_dict), column_info, str_map, str_reverse_map
 
 
 def data_from_array(data: ndarray, columns: ndarray) -> Tuple:
@@ -145,8 +153,9 @@ def data_from_typed_array(data: ndarray, columns: ndarray) -> Tuple:
     None
     """
     kind: str = data.dtype.kind
-    if kind == 'U':
-        data = data.astype('O')
+    str_map: Dict[int, Dict[str, int]] = {}
+    if kind in 'OS':
+        data = data.astype('str')
     elif kind == 'M':
         data = data.astype('datetime64[ns]')
     elif kind == 'm':
@@ -156,10 +165,14 @@ def data_from_typed_array(data: ndarray, columns: ndarray) -> Tuple:
         data = data[:, np.newaxis]
 
     kind = data.dtype.kind
+    if kind == 'U':
+        kind = 'S'
+        data, str_map = va.convert_str_to_cat_2d(data)
     # Force array to be fortran ordered
     new_data = {kind: np.asfortranarray(data)}
     column_info: ColInfoT = {col: utils.Column(kind, i, i) for i, col in enumerate(columns)}
-    return new_data, column_info
+    str_reverse_map = {k: list(v.keys()) for k, v in str_map.items()}
+    return new_data, column_info, str_map, str_reverse_map
 
 
 def data_from_object_array(data: ndarray, columns: ndarray) -> Tuple:
