@@ -150,25 +150,24 @@ def is_compatible_values(v1: Any, v2: Any) -> str:
 def convert_list_to_single_arr(values: List) -> ndarray:
     arr: ndarray = np.array(values)
     kind: str = arr.dtype.kind
-    if kind in 'ifbOmM':
+    if kind in 'ifbmMU':
         return arr
-    elif kind in 'US':
-        return np.array(values, dtype='O')
+    elif kind in 'OS':
+        # this will return an array of kind 'U'
+        return values.astype('str')
+    else:
+        raise NotImplementedError(f'Unknown numpy data type {arr.dtype}')
 
 
-def maybe_convert_1d_array(arr: ndarray, column: Optional[str]=None) -> ndarray:
+def maybe_convert_1d_array(arr: ndarray) -> ndarray:
     arr = try_to_squeeze_array(arr)
     kind: str = arr.dtype.kind
-    if kind in 'ifb':
+    if kind in 'ifbU':
         return arr
     elif kind == 'M':
         return arr.astype('datetime64[ns]')
     elif kind == 'm':
         return arr.astype('timedelta64[ns]')
-    elif kind == 'U':
-        return arr.astype('O')
-    elif kind == 'S':
-        return va.validate_strings_in_object_array(arr, column)
     else:
         raise NotImplementedError(f'Data type {kind} unknown')
 
@@ -231,7 +230,7 @@ def validate_array_type_and_dim(data: ndarray) -> int:
     -------
     The number of columns as an integer
     """
-    if data.dtype.kind not in 'bifUOMm':
+    if data.dtype.kind not in 'bifUSOMm':
         raise TypeError('Array must be of type boolean, integer, float, string, or unicode')
     if data.ndim == 1:
         return 1
