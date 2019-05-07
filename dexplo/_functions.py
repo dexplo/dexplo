@@ -50,7 +50,7 @@ def read_csv(fp, sep=',', header=0, skiprows=None, usecols=None):
 
     tuple_return = _rf.read_csv(fp, nrows, ord(sep), header, skiprows_int, skiprows_set, usecols)
 
-    a_bool, a_int, a_float, a_str_cat, string_mapping, columns, dtypes, dtype_loc = tuple_return
+    a_bool, a_int, a_float, a_str_cat, str_map, columns, dtypes, dtype_loc = tuple_return
 
     new_column_info = {}
     dtype_map = {1: 'b', 2: 'i', 3: 'f', 4: 'S'}
@@ -79,8 +79,9 @@ def read_csv(fp, sep=',', header=0, skiprows=None, usecols=None):
                 new_column_info[col].loc = cur_dtype_loc[dtype]
                 cur_dtype_loc[dtype] += 1
     new_columns = np.array(columns, dtype='O')
-    return DataFrame._construct_from_new(new_data, new_column_info, new_columns, string_mapping)
-
+    str_reverse_map = {k: list(v.keys()) for k, v in str_map.items()}
+    return DataFrame._construct_from_new(new_data, new_column_info, new_columns,
+                                         str_map, str_reverse_map)
 
 def _make_gen(reader):
     b = reader(1024 * 1024)
