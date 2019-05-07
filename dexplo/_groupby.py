@@ -53,7 +53,7 @@ class Grouper(object):
             dtype = final_arr.dtype.kind
             func_name = 'get_group_assignment_' + utils.convert_kind_to_dtype(dtype) + '_1d'
             return getattr(_gb, func_name)(final_arr)
-        elif len(self._group_dtype_loc) == 1 or 'O' not in self._group_dtype_loc:
+        elif len(self._group_dtype_loc) == 1 or 'S' not in self._group_dtype_loc:
             arrs = []
             for dtype, locs in self._group_dtype_loc.items():
                 arr = self._df._data[dtype][:, locs]
@@ -72,8 +72,8 @@ class Grouper(object):
         else:
             arrs = []
             for dtype, locs in self._group_dtype_loc.items():
-                if dtype == 'O':
-                    arr_str = self._df._data['O'][:, locs]
+                if dtype == 'S':
+                    arr_str = self._df._data['S'][:, locs]
                 else:
                     arr = self._df._data[dtype][:, locs]
                     if dtype in 'mM':
@@ -161,7 +161,7 @@ class Grouper(object):
             new_columns = []
 
         for dtype, data in self._df._data.items():
-            if ignore_str and dtype == 'O':
+            if ignore_str and dtype == 'S':
                 continue
             if ignore_date and dtype in 'mM':
                 continue
@@ -305,11 +305,11 @@ class Grouper(object):
         num_group_cols = len(self._group_columns)
         new_columns = self._group_columns.copy()
 
-        cur_obj_loc = utils.get_num_cols(data_dict_final.get('O', []))
+        cur_obj_loc = utils.get_num_cols(data_dict_final.get('S', []))
         column_name_array = np.tile(calc_columns, len(self))[:, np.newaxis]
-        data_dict_final['O'].append(column_name_array)
+        data_dict_final['S'].append(column_name_array)
         new_columns.append('Column Name')
-        new_column_info['Column Name'] = utils.Column('O', cur_obj_loc, num_group_cols)
+        new_column_info['Column Name'] = utils.Column('S', cur_obj_loc, num_group_cols)
 
         cur_loc = utils.get_num_cols(data_dict_final.get('f', []))
 
@@ -408,7 +408,7 @@ class Grouper(object):
             for dtype, data in self._df._data.items():
                 if dtype not in agg_dtype_locs:
                     continue
-                if ignore_str and dtype == 'O':
+                if ignore_str and dtype == 'S':
                     continue
                 if ignore_date and dtype in 'mM':
                     continue

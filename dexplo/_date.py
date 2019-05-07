@@ -31,7 +31,7 @@ class AccessorMixin(object):
                 except KeyError:
                     raise KeyError(f'Column {col} does not exist in the DataFrame')
 
-                if dtype != 'O':
+                if dtype != 'S':
                     raise ValueError(f'Column name "{col}" is not a '
                                      f'{utils.convert_kind_to_dtype(self._dtype_acc)} column')
                 locs.append(self._df._column_info[col].loc)

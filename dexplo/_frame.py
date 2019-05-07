@@ -167,8 +167,8 @@ class DataFrame(object):
             order = [self._column_info[col].loc for col in self._columns]
             return self._data[kind][:, order]
 
-        if {'b', 'O', 'm', 'M'} & self._data.keys():
-            arr_dtype: str = 'O'
+        if {'b', 'S', 'm', 'M'} & self._data.keys():
+            arr_dtype: str = 'S'
         else:
             arr_dtype = 'float64'
 
@@ -234,8 +234,8 @@ class DataFrame(object):
         Retrieve all the DataFrame values into an array.
         Booleans will be coerced to ints
         """
-        if 'O' in self._data and 'O' in kinds:
-            arr_dtype: str = 'O'
+        if 'S' in self._data and 'S' in kinds:
+            arr_dtype: str = 'S'
         elif 'f' in self._data and 'f' in kinds:
             arr_dtype = 'float64'
         else:
@@ -318,7 +318,7 @@ class DataFrame(object):
                 decimal_len.append(0)
                 continue
 
-            if self._column_info[column].dtype == 'O':
+            if self._column_info[column].dtype == 'S':
                 cur_len = max([len(str(x)) for x in data])
                 cur_len = min(cur_len, options.max_colwidth)
                 long_len.append(cur_len)
@@ -398,8 +398,7 @@ class DataFrame(object):
             elif i == 1:
                 return_string += '<tbody>'
             return_string += '<tr>'
-            for j, (d, fl, dl) in enumerate(zip(data_list, long_len,
-                                                decimal_len)):
+            for j, (d, fl, dl) in enumerate(zip(data_list, long_len, decimal_len)):
                 if str(d[i]) == 'nan':
                     d[i] = 'NaN'
                 if d[i] is None:
@@ -732,14 +731,14 @@ class DataFrame(object):
     #     return set(self._data.keys()) <= {'i', 'f'}
 
     def _is_string(self) -> bool:
-        return set(self._data.keys()) == {'O'}
+        return set(self._data.keys()) == {'S'}
 
     def _is_date(self) -> bool:
         return set(self._data.keys()) <= {'m', 'M'}
     #
     # def _is_only_numeric_or_string(self) -> bool:
     #     dtypes: Set[str] = set(self._data.keys())
-    #     return dtypes <= {'i', 'f'} or dtypes == {'O'}
+    #     return dtypes <= {'i', 'f'} or dtypes == {'S'}
 
     def _has_numeric_or_bool(self) -> bool:
         """
@@ -755,7 +754,7 @@ class DataFrame(object):
         return bool({'i', 'f'} & self._data.keys())
 
     def _has_string(self) -> bool:
-        return 'O' in self._data
+        return 'S' in self._data
 
     def _copy_column_info(self) -> ColInfoT:
         return {col: utils.Column(*col_obj.values)
@@ -835,12 +834,14 @@ class DataFrame(object):
 
     @classmethod
     def _construct_from_new(cls: Type[object], data: Dict[str, ndarray],
-                            column_info: ColInfoT, columns: ColumnT) -> 'DataFrame':
+                            column_info: ColInfoT, columns: ColumnT,
+                            string_mapping: Dict[int, Dict]) -> 'DataFrame':
         df_new: 'DataFrame' = object.__new__(cls)
         df_new._column_info = column_info
         df_new._data = data
         df_new._columns = columns
         df_new._hasnans = {}
+        df_new._string_mapping = string_mapping
         return df_new
 
     def _do_eval(self, op_string: str, other: Any) -> Tuple[DictListArr, ColInfoT]:
@@ -851,7 +852,7 @@ class DataFrame(object):
         for old_kind, arr in self._data.items():
             # TODO: will have to do custom cython function here for add,
             # radd, gt, ge, lt, le for object array
-            if old_kind == 'O' and op_string in stat.funcs_str:
+            if old_kind == 'S' and op_string in stat.funcs_str:
                 func = stat.funcs_str[op_string]
                 arr_res = func(arr, other)
             else:
@@ -952,7 +953,7 @@ class DataFrame(object):
 
         def calculate_arrays(data1, data2):
             # TODO: multiply string by number dataframe. very rare occurrence
-            if data1.dtype.kind == 'O':
+            if data1.dtype.kind == 'S':
                 if data1.shape == data2.shape:
                     if data1.ndim == 1:
                         func: Callable = stat.funcs_str1[op_string]
@@ -1018,7 +1019,7 @@ class DataFrame(object):
             else:
                 # Incompatible - a detailed error message is produced
                 for i, (kind1, kind2) in enumerate(zip(kinds1, kinds2)):
-                    if kind1 == 'O' and kind1 != 'O':
+                    if kind1 == 'S' and kind1 != 'S':
                         break
                     if kind1 in 'ifb' and kind2 not in 'ifb':
                         break
@@ -1061,14 +1062,14 @@ class DataFrame(object):
         new_data = {}
         dtype = other.dtype.kind
         if dtype == 'U':
-            dtype = 'O'
-            new_data['O'] = other
-        elif dtype in 'Oifb':
+            dtype = 'S'
+            new_data['S'] = other
+        elif dtype in 'Sifb':
             new_data[dtype] = other
         else:
             raise ValueError('Unknown array data type')
 
-        if dtype == 'O':
+        if dtype == 'S':
             other = DataFrame(other)
         else:
             new_columns = ['a' + str(i) for i in range(other.shape[1])]
@@ -1200,9 +1201,9 @@ class DataFrame(object):
         columns: List[str] = ['Column Name', 'Data Type']
         cn: ndarray = self._columns.astype('O')
         data: ndarray = np.column_stack((cn, arr))
-        new_data: Dict[str, ndarray] = {'O': data}
-        new_column_info: ColInfoT = {'Column Name': utils.Column('O', 0, 0),
-                                     'Data Type': utils.Column('O', 1, 1)}
+        new_data: Dict[str, ndarray] = {'S': data}
+        new_column_info: ColInfoT = {'Column Name': utils.Column('S', 0, 0),
+                                     'Data Type': utils.Column('S', 1, 1)}
         return self._construct_from_new(new_data, new_column_info, np.array(columns, dtype='O'))
 
     def __and__(self, other: Any) -> 'DataFrame':
@@ -1267,7 +1268,7 @@ class DataFrame(object):
         if dtype == new_kind:
             return None
         col_data: ndarray = self._data[dtype][:, loc]
-        if numpy_dtype == 'O':
+        if numpy_dtype == 'S':
             if dtype in 'mM':
                 nulls: ndarray = np.isnat(col_data)
             else:
@@ -1382,7 +1383,7 @@ class DataFrame(object):
                     self._astype_internal(col_name, 'float64')
                     dtype = 'f'
                     loc = -1
-                elif dtype == 'O':
+                elif dtype == 'S':
                     raise ValueError("Can't set nan to a str column. Use `None` instead.")
             else:
                 utils.check_set_value_type(dtype, 'if', 'float')
@@ -1391,9 +1392,9 @@ class DataFrame(object):
                     dtype = 'f'
                     loc = -1
         elif isinstance(value, str):
-            utils.check_set_value_type(dtype, 'O', 'str')
+            utils.check_set_value_type(dtype, 'S', 'str')
         elif value is None:
-            utils.check_set_value_type(dtype, 'O', 'None')
+            utils.check_set_value_type(dtype, 'S', 'None')
         else:
             raise TypeError(f'Type {type(value).__name__} not able to be assigned')
         self._data[dtype][rs, loc] = value
@@ -1589,14 +1590,14 @@ class DataFrame(object):
                     if old_kind == 'f':
                         nanable = True
                         na_arr = np.isnan(arr)
-                    elif old_kind == 'O':
+                    elif old_kind == 'S':
                         nanable = True
                         na_arr = _math.isna_str(arr, np.zeros(len(arr), dtype='bool'))
                     elif old_kind in 'mM':
                         nanable = True
                         na_arr = np.isnat(arr)
 
-                    if new_dtype == 'O':
+                    if new_dtype == 'S':
                         arr = arr.astype('U').astype('O')
                         if nanable:
                             arr[na_arr] = None
@@ -1660,8 +1661,8 @@ class DataFrame(object):
             for kind, arr in self._data.items():  # type: str, ndarray
                 if kind in 'f':
                     self._hasnans['f'] = np.isnan(arr).any(0)
-                elif kind == 'O':
-                    self._hasnans['O'] = _va.isnan_object(arr)
+                elif kind == 'S':
+                    self._hasnans['S'] = _va.isnan_object(arr)
                 elif kind in 'mM':
                     self._hasnans[kind] = np.isnat(arr).any(0)
                 else:
@@ -1674,24 +1675,24 @@ class DataFrame(object):
             bool_array[order] = self._hasnans[kind2][loc]
 
         columns: ndarray = np.array(['Column Name', 'Has NaN'])
-        new_data: Dict[str, ndarray] = {'O': self._columns[:, np.newaxis],
+        new_data: Dict[str, ndarray] = {'S': self._columns[:, np.newaxis],
                                         'b': bool_array[:, np.newaxis]}
 
-        new_column_info: ColInfoT = {'Column Name': utils.Column('O', 0, 0),
+        new_column_info: ColInfoT = {'Column Name': utils.Column('S', 0, 0),
                                      'Has NaN': utils.Column('b', 0, 1)}
         return self._construct_from_new(new_data, new_column_info, columns)
 
     def _get_stat_dtypes_axis0(self, name: str, include_strings: bool = True) -> Set[str]:
         dtypes = set(self._data)
         if not include_strings:
-            dtypes -= {'O'}
+            dtypes -= {'S'}
 
         if name in ['mean', 'median', 'quantile']:
-            dtypes -= {'M', 'O'}
+            dtypes -= {'M', 'S'}
         elif name in ['sum', 'cumsum']:
             dtypes -= {'M'}
         elif name in ['std', 'var', 'prod', 'cumprod']:
-            dtypes -= {'m', 'M', 'O'}
+            dtypes -= {'m', 'M', 'S'}
 
         if not dtypes:
             raise ValueError('There are no columns in this DataFrame that '
@@ -1947,14 +1948,14 @@ class DataFrame(object):
         df = self
         if overall_dtype == 'str':
             if lower is None:
-                new_data['O'] = _math.clip_str_upper(self._data['O'], upper)
+                new_data['S'] = _math.clip_str_upper(self._data['S'], upper)
             elif upper is None:
-                new_data['O'] = _math.clip_str_lower(self._data['O'], lower)
+                new_data['S'] = _math.clip_str_lower(self._data['S'], lower)
             else:
-                new_data['O'] = _math.clip_str_both(self._data['O'], lower, upper)
+                new_data['S'] = _math.clip_str_both(self._data['S'], lower, upper)
 
             for kind, arr in self._data.items():
-                if kind != 'O':
+                if kind != 'S':
                     new_data[kind] = arr
         else:
             if utils.is_float(lower) or utils.is_float(upper):
@@ -1993,8 +1994,8 @@ class DataFrame(object):
                 new_arr = np.empty_like(arr, dtype='bool')
                 new_arr.fill(False)
                 data_dict['b'].append(new_arr)
-            elif kind == 'O':
-                hasnans = self._hasnans_dtype('O')
+            elif kind == 'S':
+                hasnans = self._hasnans_dtype('S')
                 data_dict['b'].append(_math.isna_str(arr, hasnans))
             elif kind == 'f':
                 hasnans = self._hasnans_dtype('f')
@@ -2059,13 +2060,13 @@ class DataFrame(object):
 
         if summary_type == 'numeric':
 
-            data_dict['O'].append(df._columns.copy('F'))
-            new_column_info['Column Name'] = utils.Column('O', 0, 0)
+            data_dict['S'].append(df._columns.copy('F'))
+            new_column_info['Column Name'] = utils.Column('S', 0, 0)
             new_columns.append('Column Name')
 
             dtypes = df._get_dtype_list()
-            data_dict['O'].append(dtypes)
-            new_column_info['Data Type'] = utils.Column('O', 1, 1)
+            data_dict['S'].append(dtypes)
+            new_column_info['Data Type'] = utils.Column('S', 1, 1)
             new_columns.append('Data Type')
 
             funcs: List[Tuple[str, Tuple[str, Dict]]] = [('count', ('i', {})),
@@ -2183,7 +2184,7 @@ class DataFrame(object):
             cov: ndarray = (Exy - ExEy / counts) / (counts - 1)
 
         new_data: Dict[str, ndarray] = {'f': np.asfortranarray(cov)}
-        new_column_info: ColInfoT = {'Column Name': utils.Column('O', 0, 0)}
+        new_column_info: ColInfoT = {'Column Name': utils.Column('S', 0, 0)}
         new_columns: ndarray = np.empty(x.shape[1] + 1, dtype='O')
         new_columns[0] = 'Column Name'
 
@@ -2196,7 +2197,7 @@ class DataFrame(object):
             new_column_info[col] = utils.Column('f', i, i + 1)
             new_columns[i + 1] = col
             i += 1
-        new_data['O'] = np.asfortranarray(new_columns[1:])[:, np.newaxis]
+        new_data['S'] = np.asfortranarray(new_columns[1:])[:, np.newaxis]
         return self._construct_from_new(new_data, new_column_info,
                                         np.asarray(new_columns, dtype='O'))
 
@@ -2242,7 +2243,7 @@ class DataFrame(object):
             corr: ndarray = cov / np.sqrt(stdxy)
 
         new_data: Dict[str, ndarray] = {'f': np.asfortranarray(corr)}
-        new_column_info: ColInfoT = {'Column Name': utils.Column('O', 0, 0)}
+        new_column_info: ColInfoT = {'Column Name': utils.Column('S', 0, 0)}
         new_columns: ndarray = np.empty(x.shape[1] + 1, dtype='O')
         new_columns[0] = 'Column Name'
 
@@ -2255,7 +2256,7 @@ class DataFrame(object):
             new_column_info[col] = utils.Column('f', i, i + 1)
             new_columns[i + 1] = col
             i += 1
-        new_data['O'] = np.asfortranarray(new_columns[1:])[:, np.newaxis]
+        new_data['S'] = np.asfortranarray(new_columns[1:])[:, np.newaxis]
         return self._construct_from_new(new_data, new_column_info,
                                         np.asarray(new_columns, dtype='O'))
 
@@ -2335,7 +2336,7 @@ class DataFrame(object):
                 arr: ndarray = self._data[dtype]
                 if keep == 'last':
                     arr = arr[::-1]
-                if dtype == 'O':
+                if dtype == 'S':
                     has_obj = True
                     if len(locs) != arr.shape[1]:
                         arr_obj: ndarray = arr[:, locs]
@@ -2461,7 +2462,7 @@ class DataFrame(object):
 
                     if keep == 'last':
                         arr = arr[::-1]
-                    if dtype == 'O':
+                    if dtype == 'S':
                         has_obj = True
                         if len(locs) != arr.shape[1]:
                             arr_obj = arr[:, locs]
@@ -2575,22 +2576,22 @@ class DataFrame(object):
                 else:
                     new_data[dtype] = arr
         elif isinstance(values, str):
-            if 'O' not in self._data:
+            if 'S' not in self._data:
                 raise TypeError("You passed a `str` value to the `values` parameter. "
                                 "You're DataFrame contains no str columns.")
             new_data = {}
             for dtype, arr in self._data.items():
                 arr = arr.copy('F')
-                if dtype == 'O':
+                if dtype == 'S':
                     for col in self._columns:
                         dtype2, loc, _ = self._column_info[col].values
-                        if dtype2 == 'O':
+                        if dtype2 == 'S':
                             col_arr = arr[:, loc]
                             na_arr: ndarray = _math.isna_str_1d(col_arr)
                             idx = np.where(na_arr)[0][:limit]
                             col_arr[idx] = values
 
-                    new_data['O'] = arr
+                    new_data['S'] = arr
                 else:
                     new_data[dtype] = arr
         elif isinstance(values, np.datetime64):
@@ -2642,12 +2643,12 @@ class DataFrame(object):
             for col, loc, new_val in dtype_locs['f']:
                 if not isinstance(new_val, (int, float, np.number)):
                     raise TypeError(f'Column {col} has dtype float. Must set with a number')
-            for col, loc, new_val in dtype_locs['O']:
+            for col, loc, new_val in dtype_locs['S']:
                 if not isinstance(new_val, str):
                     raise TypeError(f'Column {col} has dtype {dtype}. Must set with a str')
 
             arr_float: ndarray = self._data.get('f', []).copy('F')
-            arr_str: ndarray = self._data.get('O', []).copy('F')
+            arr_str: ndarray = self._data.get('S', []).copy('F')
             for col, loc, new_val in dtype_locs['f']:
                 if limit >= len(self):
                     arr_float[:, loc] = np.where(np.isnan(arr_float[:, loc]), new_val,
@@ -2656,7 +2657,7 @@ class DataFrame(object):
                     idx = np.where(np.isnan(arr_float[:, loc]))[0][:limit]
                     arr_float[idx, loc] = new_val
 
-            for col, loc, new_val in dtype_locs['O']:
+            for col, loc, new_val in dtype_locs['S']:
                 na_arr = _math.isna_str_1d(arr_str[:, loc])
                 if limit >= len(self):
                     arr_str[:, loc] = np.where(na_arr, new_val, arr_str[:, loc])
@@ -2668,7 +2669,7 @@ class DataFrame(object):
             for dtype, arr in self._data.items():
                 if dtype == 'f':
                     new_data[dtype] = arr_float
-                elif dtype == 'O':
+                elif dtype == 'S':
                     new_data[dtype] = arr_str
                 else:
                     new_data[dtype] = arr.copy("F")
@@ -2686,8 +2687,8 @@ class DataFrame(object):
                         arr = arr.copy('F')
                         if dtype == 'f':
                             new_data['f'] = _math.ffill_float(arr, limit)
-                        elif dtype == 'O':
-                            new_data['O'] = _math.ffill_str(arr, limit)
+                        elif dtype == 'S':
+                            new_data['S'] = _math.ffill_str(arr, limit)
                         elif dtype in 'mM':
                             nans = np.isnat(arr)
                             dtype_name = 'datetime64[ns]' if dtype == 'M' else 'timedelta64[ns]'
@@ -2701,8 +2702,8 @@ class DataFrame(object):
                         arr = arr.copy('F')
                         if dtype == 'f':
                             new_data['f'] = _math.bfill_float(arr, limit)
-                        elif dtype == 'O':
-                            new_data['O'] = _math.bfill_str(arr, limit)
+                        elif dtype == 'S':
+                            new_data['S'] = _math.bfill_str(arr, limit)
                         elif dtype in 'mM':
                             nans = np.isnat(arr)
                             dtype_name = 'datetime64[ns]' if dtype == 'M' else 'timedelta64[ns]'
@@ -2735,7 +2736,7 @@ class DataFrame(object):
 
     def _replace_nans(self, dtype: str, col_arr: ndarray, asc: bool, hasnans: ndarray,
                       return_na_arr: bool = False):
-        if dtype == 'O':
+        if dtype == 'S':
             if hasnans or hasnans is None:
                 if asc:
                     nan_value = chr(10 ** 6)
@@ -2814,7 +2815,7 @@ class DataFrame(object):
             asc = ascending[0]
             col_arr = self._replace_nans(dtype, col_arr, asc, hasnans)
             count_sort: bool = False
-            if dtype == 'O':
+            if dtype == 'S':
                 if len(col_arr) > 1000 and len(set(np.random.choice(col_arr, 100))) <= 70:
                     d: ndarray = _sr.sort_str_map(col_arr, asc)
                     arr: ndarray = _sr.replace_str_int(col_arr, d)
@@ -2858,7 +2859,7 @@ class DataFrame(object):
                 if not asc:
                     if dtype == 'b':
                         col_arr = ~col_arr
-                    elif dtype == 'O':
+                    elif dtype == 'S':
                         # TODO: how to avoid mapping to ints for mostly unique string columns?
                         d = _sr.sort_str_map(col_arr, asc)
                         col_arr = _sr.replace_str_int(col_arr, d)
@@ -2868,7 +2869,7 @@ class DataFrame(object):
                         col_arr = (-(col_arr.view('int64') + 1)).astype('timedelta64[ns]')
                     else:
                         col_arr = -col_arr
-                elif dtype == 'O':
+                elif dtype == 'S':
                     if len(col_arr) > 1000 and len(set(np.random.choice(col_arr, 100))) <= 70:
                         d = _sr.sort_str_map(col_arr, asc)
                         col_arr = _sr.replace_str_int(col_arr, d)
@@ -2966,7 +2967,7 @@ class DataFrame(object):
             func_name: str = 'rank_' + utils.convert_kind_to_dtype_generic(dtype) + '_' + method
 
             if not ascending:
-                if dtype == 'O':
+                if dtype == 'S':
                     arg = np.argsort(arr, 0, kind='mergesort')[::-1]
                 elif dtype == 'b':
                     arg = np.argsort(~arr, 0, kind='mergesort')
@@ -2978,7 +2979,7 @@ class DataFrame(object):
             else:
                 arg = np.argsort(arr, 0, kind='mergesort')
 
-            if method == 'first' and dtype == 'O' and not ascending:
+            if method == 'first' and dtype == 'S' and not ascending:
                 cur_rank = _sr.rank_str_min(arg, arr)
                 cur_rank = _sr.rank_str_min_to_first(cur_rank, arg, arr)
             else:
@@ -3015,7 +3016,7 @@ class DataFrame(object):
         self._validate_column_name(col)
         dtype, loc, _ = self._column_info[col].values
         arr = self._data[dtype][:, loc]
-        if dtype == 'O':
+        if dtype == 'S':
             groups, counts = _gb.value_counts_str(arr, dropna=dropna)
             uniques = arr[groups]
         elif dtype == 'i':
@@ -3113,7 +3114,7 @@ class DataFrame(object):
                         raise TypeError(f'Column {column} has dtype float and `value` is a '
                                         f'{type(value).__name__}.')
                     return _math.streak_value_float(col_arr, value)
-                elif dtype == 'O':
+                elif dtype == 'S':
                     if not isinstance(value, str):
                         raise TypeError(f'Column {column} has dtype str and `value` is a '
                                         f'{type(value).__name__}.')
@@ -3364,7 +3365,7 @@ class DataFrame(object):
             if col_arr.dtype.kind == 'f':
                 not_na = ~np.isnan(col_arr)
                 col_arr_final = col_arr[not_na]
-            elif col_arr.dtype.kind == 'O':
+            elif col_arr.dtype.kind == 'S':
                 not_na = ~_math.isna_str_1d(col_arr)
                 col_arr_final = col_arr[not_na]
             elif col_arr.dtype.kind == 'b':
@@ -3384,7 +3385,7 @@ class DataFrame(object):
                 return self.sort_values(column, ascending=asc)
 
             if name == 'nlargest':
-                if dtype == 'O':
+                if dtype == 'S':
                     nth = _math.quick_select_str(col_arr_final, len(col_arr_final) - n)
                     col_arr_final = _va.fill_str_none(col_arr, False)
                     idx = np.where((col_arr_final >= nth) & not_na)[0]
@@ -3400,7 +3401,7 @@ class DataFrame(object):
                     idx_args = np.argsort(-vals, kind='mergesort')
             else:
                 nth = getattr(_math, func_name)(col_arr_final, n)
-                if dtype == 'O':
+                if dtype == 'S':
                     col_arr_final = _va.fill_str_none(col_arr, False)
                     idx = np.where(col_arr_final >= nth & not_na)[0]
                 else:
@@ -3577,7 +3578,7 @@ class DataFrame(object):
             dtype_add = {}
             for dtype, arr in self._data.items():
                 dtype_add[dtype] = utils.get_num_cols(arrs)
-                if dtype == 'O':
+                if dtype == 'S':
                     arrs.append(np.isin(arr, val_strings))
                 elif dtype == 'M':
                     arrs.append(np.isin(arr, val_datetimes))
@@ -3605,7 +3606,7 @@ class DataFrame(object):
                 dtype, loc, order = self._column_info[col].values
                 col_arr = self._data[dtype][:, loc]
                 val_numbers, val_strings, val_datetimes, val_timedeltas = separate_value_types(vals)
-                if dtype == 'O':
+                if dtype == 'S':
                     arr_final[:, order] = np.isin(col_arr, val_strings)
                 elif dtype == 'M':
                     arr_final[:, order] = np.isin(col_arr, val_datetimes)
@@ -3681,11 +3682,11 @@ class DataFrame(object):
 
         def get_curr_var(var: Optional[ndarray], dtype: str, name: str) -> Optional[ndarray]:
             if var is None:
-                return None if dtype == 'O' else nan
+                return None if dtype == 'S' else nan
 
             types: Any
-            if dtype == 'O':
-                good_dtypes = ['O', 'U']
+            if dtype == 'S':
+                good_dtypes = ['S', 'U']
                 types = str
             elif dtype in 'if':
                 good_dtypes = ['i', 'f']
@@ -3734,7 +3735,7 @@ class DataFrame(object):
                 if x.dtype.kind in 'if' and not isinstance(y, (int, float, np.number)):
                     raise TypeError('`x` and `y` arrays have incompatible dtypes. `x` is numeric '
                                     'and `y` is not')
-                elif x.dtype.kind == 'O' and not isinstance(y, str):
+                elif x.dtype.kind == 'S' and not isinstance(y, str):
                     raise TypeError('`x` and `y` arrays have incompatible dtypes. `x` is str '
                                     'and `y` is not')
                 elif x.dtype.kind == 'b' and not isinstance(y, (bool, np.bool_)):
@@ -3745,7 +3746,7 @@ class DataFrame(object):
                 if y.dtype.kind in 'if' and not isinstance(x, (int, float, np.number)):
                     raise TypeError('`x` and `y` arrays have incompatible dtypes. `y` is numeric '
                                     'and `x` is not')
-                elif y.dtype.kind == 'O' and not isinstance(x, str):
+                elif y.dtype.kind == 'S' and not isinstance(x, str):
                     raise TypeError('`x` and `y` arrays have incompatible dtypes. `y` is str '
                                     'and `x` is not')
                 elif y.dtype.kind == 'b' and not isinstance(x, (bool, np.bool_)):
@@ -3920,7 +3921,7 @@ class DataFrame(object):
                         arr = np.full((n, 1), NaT, dtype='datetime64[ns]')
                     elif dtype == 'm':
                         arr = np.full((n, 1), NaT, dtype='timedelta64[ns]')
-                    elif dtype == 'O':
+                    elif dtype == 'S':
                         arr = np.empty((n, 1), dtype='O')
 
                     if arr_old.ndim == 1:
@@ -3979,7 +3980,7 @@ class DataFrame(object):
                                         f'a datetime64[ns] column and another type in column '
                                         f'number {i}. When appending datetime64[ns], all '
                                         f'columns must have that type.')
-                    elif 'O' in col_dtype:
+                    elif 'S' in col_dtype:
                         raise TypeError('You are trying to append a string column with a non-'
                                         'string column. Both columns must be strings.')
                     elif 'f' in col_dtype or None in col_dtype:
@@ -4047,7 +4048,7 @@ class DataFrame(object):
                             new_data[dtype] = np.empty((nr, ct), dtype='float64', order='F')
                         else:
                             new_data[dtype] = np.full((nr, ct), nan, dtype='float64', order='F')
-                    elif dtype == 'O':
+                    elif dtype == 'S':
                         new_data[dtype] = np.empty((nr, ct), dtype='O', order='F')
                     elif dtype == 'm':
                         if make_fast_empty:
@@ -4126,7 +4127,7 @@ class DataFrame(object):
                         new_data[dtype] = np.empty((nr, len(data)), dtype='int64', order='F')
                     elif dtype == 'f':
                         new_data[dtype] = np.full((nr, len(data)), nan, dtype='float64', order='F')
-                    elif dtype == 'O':
+                    elif dtype == 'S':
                         new_data[dtype] = np.empty((nr, len(data)), dtype='O', order='F')
                     elif dtype == 'm':
                         new_data[dtype] = np.full((nr, len(data)), NaT, dtype='timedelta64[ns]',
@@ -4194,8 +4195,8 @@ class DataFrame(object):
             elif isinstance(key, str) or key is None:
                 if not isinstance(val, str) and val is not None:
                     raise TypeError(f'Cannot replace a str with {type(val)}')
-                dtype = 'O'
-                dtype_conversion['O'] = 'O'
+                dtype = 'S'
+                dtype_conversion['S'] = 'S'
             elif isinstance(key, np.datetime64):
                 if not isinstance(val, np.datetime64):
                     raise TypeError(f'Cannot replace a datetime64 with {type(val)}')
@@ -4236,10 +4237,10 @@ class DataFrame(object):
                                   (bool, np.bool_, int, np.integer, float, np.floating)):
                     raise TypeError(f'Cannot replace a float with {type(replace_val)}')
                 dtype_conversion[col] = 'f'
-            elif col_dtype == 'O':
+            elif col_dtype == 'S':
                 if not isinstance(replace_val, str) and replace_val is not None:
                     raise TypeError(f'Cannot replace a str with {type(replace_val)}')
-                dtype_conversion[col] = 'O'
+                dtype_conversion[col] = 'S'
             elif col_dtype == 'M':
                 if not isinstance(replace_val, np.datetime64):
                     raise TypeError(f'Cannot replace a datetime64 with {type(replace_val)}')
@@ -4263,7 +4264,7 @@ class DataFrame(object):
                                                                float, np.floating)):
                     raise ValueError(f'Column "{col}" is a float and you are trying to '
                                      f'replace {key}, which is of type {type(key)}')
-                elif col_dtype == 'O' and not isinstance(key, str):
+                elif col_dtype == 'S' and not isinstance(key, str):
                     raise ValueError(f'Column "{col}" is a str and you are trying to '
                                      f'replace {key}, which is of type {type(key)}')
                 elif col_dtype == 'M' and not isinstance(key, np.datetime64):
@@ -4502,7 +4503,7 @@ class DataFrame(object):
             new_data[row_name_dtype] = row_names[:, np.newaxis]
             new_data[pivot_result_dtype] = pivot_result
 
-        if col_names.dtype.kind != 'O':
+        if col_names.dtype.kind != 'S':
             col_names = col_names.astype('U').astype('O')
 
         # avoid row names collision
@@ -4627,7 +4628,7 @@ class DataFrame(object):
 
             if len(dtype_loc) > 1:
                 dt_string = ''
-                if 'O' in dtype_loc:
+                if 'S' in dtype_loc:
                     dt_string = 'string'
                 elif 'm' in dtype_loc:
                     dt_string = 'timedelta'
@@ -4654,10 +4655,10 @@ class DataFrame(object):
                 fill_empty_arr[new_dtype] = True
 
             # add the variable column - column names into column values
-            cur_loc = len(data_dict['O'])
+            cur_loc = len(data_dict['S'])
             variable_vals = np.repeat(np.array(val_v, dtype='O'), len(self))
-            data_dict['O'].append(variable_vals)
-            new_column_info[var_n] = utils.Column('O', cur_loc, cur_order)
+            data_dict['S'].append(variable_vals)
+            new_column_info[var_n] = utils.Column('S', cur_loc, cur_order)
             cur_order += 1
             new_columns.append(var_n)
 
@@ -4685,7 +4686,7 @@ class DataFrame(object):
                 # need to make full array with nans
                 if dtype == 'f':
                     arr = np.full(size, nan, dtype='float64', order='F')
-                elif dtype == 'O':
+                elif dtype == 'S':
                     arr = np.empty(size, dtype='O', order='F')
                 elif dtype == 'm':
                     arr = np.full(size, NaT, dtype='timedelta64', order='F')
@@ -4711,7 +4712,7 @@ class DataFrame(object):
             for i, (col, col_obj) in enumerate(self._column_info.items()):
                 if col_obj.dtype == 'f':
                     arr[i] = 0
-                elif col_obj.dtype == 'O':
+                elif col_obj.dtype == 'S':
                     arr[i] = 1
                 elif col_obj.dtype in 'mM':
                     arr[i] = 2
@@ -4796,7 +4797,7 @@ class DataFrame(object):
             left_arr = self._data[left_dtype][:, left_loc]
             right_arr = right._data[right_dtype][:, right_loc]
 
-            if left_dtype == 'O':
+            if left_dtype == 'S':
                 func_name = 'join_str_1d'
             elif left_dtype in 'mM':
                 func_name = 'join_float_1d'
@@ -4859,7 +4860,7 @@ class DataFrame(object):
             if final_num_dtype:
                 ncol_number = 0
                 for dtype, locs in left_dtype_locs.items():
-                    if dtype == 'O':
+                    if dtype == 'S':
                         continue
                     ncol_number += len(locs)
                 dtype_word = utils.convert_kind_to_numpy(final_num_dtype)
@@ -4878,7 +4879,7 @@ class DataFrame(object):
                         right_arr_number[:, i_col] = right._data[dtype][:, loc]
                         i_col += 1
 
-            has_str_join_columns = 'O' in left_dtype_locs
+            has_str_join_columns = 'S' in left_dtype_locs
 
             if has_str_join_columns:
                 if final_num_dtype:
@@ -4941,10 +4942,10 @@ class DataFrame(object):
                 pass
             else:
                 # must have str join columns
-                left_arr = self._data['O']
-                right_arr = right._data['O']
-                left_locs = left_dtype_locs['O']
-                right_locs = right_dtype_locs['O']
+                left_arr = self._data['S']
+                right_arr = right._data['S']
+                left_locs = left_dtype_locs['S']
+                right_locs = right_dtype_locs['S']
                 left_rep, right_idx, n_rows = _join.join_str_2d(left_arr, right_arr, left_locs,
                                                                 right_locs)
         else:

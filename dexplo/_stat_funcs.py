@@ -75,7 +75,7 @@ funcs = {'i': {'min': m.min_int,
                'quantile': m.quantile_float,
                'nunique': m.nunique_float},
 
-         'O': {'min': m.min_str,
+         'S': {'min': m.min_str,
                'max': m.max_str,
                'mode': m.mode_str,
                'sum': m.sum_str,

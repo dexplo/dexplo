@@ -219,7 +219,7 @@ class Roller(object):
             for dtype, data in self._df._data.items():
                 if dtype not in agg_dtype_locs:
                     continue
-                if ignore_str and dtype == 'O':
+                if ignore_str and dtype == 'S':
                     continue
                 if ignore_date and dtype in 'mM':
                     continue

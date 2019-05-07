@@ -1,11 +1,8 @@
 from collections import defaultdict
 import numpy as np
-from numpy import nan, ndarray
-from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
-                    NoReturn, Set, Iterable, Any, TypeVar, Type, Generator)
 
 import dexplo._utils as utils
-from dexplo._libs import (read_files as _rf)
+from dexplo._libs import read_files as _rf
 from dexplo._frame import DataFrame
 
 
@@ -53,10 +50,10 @@ def read_csv(fp, sep=',', header=0, skiprows=None, usecols=None):
 
     tuple_return = _rf.read_csv(fp, nrows, ord(sep), header, skiprows_int, skiprows_set, usecols)
 
-    a_bool, a_int, a_float, a_str, columns, dtypes, dtype_loc = tuple_return
+    a_bool, a_int, a_float, a_str_cat, string_mapping, columns, dtypes, dtype_loc = tuple_return
 
     new_column_info = {}
-    dtype_map = {1: 'b', 2: 'i', 3: 'f', 4: 'O'}
+    dtype_map = {1: 'b', 2: 'i', 3: 'f', 4: 'S'}
     final_dtype_locs = defaultdict(list)
     for i, (col, dtype, loc) in enumerate(zip(columns, dtypes, dtype_loc)):
         new_column_info[col] = utils.Column(dtype_map[dtype], loc, i)
@@ -64,7 +61,7 @@ def read_csv(fp, sep=',', header=0, skiprows=None, usecols=None):
 
     new_data = {}
     loc_order_changed = set()
-    for arr, dtype in zip((a_bool, a_int, a_float, a_str), ('b', 'i', 'f', 'O')):
+    for arr, dtype in zip((a_bool, a_int, a_float, a_str_cat), ('b', 'i', 'f', 'S')):
         num_cols = arr.shape[1]
         if num_cols != 0:
             locs = final_dtype_locs[dtype]
@@ -82,13 +79,15 @@ def read_csv(fp, sep=',', header=0, skiprows=None, usecols=None):
                 new_column_info[col].loc = cur_dtype_loc[dtype]
                 cur_dtype_loc[dtype] += 1
     new_columns = np.array(columns, dtype='O')
-    return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
+    return DataFrame._construct_from_new(new_data, new_column_info, new_columns, string_mapping)
+
 
 def _make_gen(reader):
     b = reader(1024 * 1024)
     while b:
         yield b
         b = reader(1024 * 1024)
+
 
 def _get_file_legnth(filename):
     f = open(filename, 'rb')

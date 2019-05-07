@@ -14,7 +14,7 @@ class StringClass(object):
 
     def __init__(self, df: 'DataFrame') -> None:
         self._df = df
-        self._dtype_acc = 'O'
+        self._dtype_acc = 'S'
         self._2d = '_2d'
 
     def _validate_columns(self, column):
@@ -23,7 +23,7 @@ class StringClass(object):
                 dtype, loc, _ = self._df._column_info[column].values
             except KeyError:
                 raise KeyError(f'Column "{column}" does not exist in the DataFrame')
-            if dtype != 'O':
+            if dtype != 'S':
                 raise ValueError(f'Column name "{column}" is not a str column')
             return [column], [loc]
         elif isinstance(column, list):
@@ -34,7 +34,7 @@ class StringClass(object):
                 except KeyError:
                     raise KeyError(f'Column {col} does not exist in the DataFrame')
 
-                if dtype != 'O':
+                if dtype != 'S':
                     raise ValueError(f'Column name "{col}" is not a str column')
                 locs.append(self._df._column_info[col].loc)
             if len(column) != len(set(column)):
@@ -45,7 +45,7 @@ class StringClass(object):
             columns = []
             for col in self._df._columns:
                 dtype, loc, _ = self._df._column_info[col].values
-                if dtype == 'O':
+                if dtype == 'S':
                     columns.append(col)
                     locs.append(loc)
             return columns, locs
@@ -60,7 +60,7 @@ class StringClass(object):
         str_locs = []
         for col in self._df._columns:
             dtype, loc, _ = self._df._column_info[col].values
-            if dtype == 'O':
+            if dtype == 'S':
                 str_cols.append(col)
                 str_locs.append(loc)
 
@@ -75,7 +75,7 @@ class StringClass(object):
                 except KeyError:
                     raise KeyError(f'Column {col} does not exist in the DataFrame')
 
-                if dtype != 'O':
+                if dtype != 'S':
                     raise ValueError(f'Column name "{col}" is not a str column')
 
                 locs.append(self._df._column_info[col].loc)
@@ -101,10 +101,10 @@ class StringClass(object):
 
     def _create_df_all(self, arr, dtype):
         new_data = {}
-        if dtype == 'O':
+        if dtype == 'S':
             for old_dtype, old_data in self._df._data.items():
-                if old_dtype == 'O':
-                    new_data['O'] = arr
+                if old_dtype == 'S':
+                    new_data['S'] = arr
                 else:
                     new_data[old_dtype] = old_data.copy('F')
         else:
@@ -113,7 +113,7 @@ class StringClass(object):
             if dtype in self._df._data:
                 add_loc = self._df._data[dtype].shape[1]
             for old_dtype, old_data in self._df._data.items():
-                if dtype != 'O':
+                if dtype != 'S':
                     new_data[old_dtype] = old_data.copy('F')
 
             if dtype in new_data:
@@ -124,7 +124,7 @@ class StringClass(object):
             new_column_info = {}
             for col, col_obj in self._df._column_info.items():
                 old_dtype, loc, order = col_obj.values
-                if old_dtype == 'O':
+                if old_dtype == 'S':
                     new_column_info[col] = utils.Column(dtype, loc + add_loc, order)
                 else:
                     new_column_info[col] = utils.Column(old_dtype, loc, order)
@@ -140,8 +140,8 @@ class StringClass(object):
         except KeyError:
             add_loc = 0
         for dtype, arr in self._df._data.items():
-            if dtype == 'O':
-                new_data['O'] = arr[:, locs_other]
+            if dtype == 'S':
+                new_data['S'] = arr[:, locs_other]
             elif dtype == dtype_new:
                 new_data[dtype_new] = np.asfortranarray(np.column_stack((arr, arr_new)))
             else:
@@ -153,7 +153,7 @@ class StringClass(object):
         new_column_info = {}
         for col, col_obj in self._df._column_info.items():
             old_dtype, loc, order = col_obj.values
-            if old_dtype != 'O':
+            if old_dtype != 'S':
                 new_column_info[col] = utils.Column(old_dtype, loc, order)
 
         # str columns that have changed type
@@ -164,7 +164,7 @@ class StringClass(object):
         # those that stayed str
         for i, col in enumerate(columns_other):
             order = self._df._column_info[col].order
-            new_column_info[col] = utils.Column('O', i, order)
+            new_column_info[col] = utils.Column('S', i, order)
 
         return self._df._construct_from_new(new_data, new_column_info, self._df._columns.copy())
 
@@ -173,7 +173,7 @@ class StringClass(object):
         cols_other = []
         locs_other = []
         for col in self._df._columns:
-            if col not in col_set and self._df._column_info[col].dtype == 'O':
+            if col not in col_set and self._df._column_info[col].dtype == 'S':
                 cols_other.append(col)
                 locs_other.append(self._df._column_info[col].loc)
         return cols_other, locs_other
@@ -187,20 +187,20 @@ class StringClass(object):
             locs = []
             for col in self._df._columns:
                 dtype, loc, _ = self._df._column_info[col].values
-                if dtype == 'O':
+                if dtype == 'S':
                     columns.append(col)
                     locs.append(loc)
         else:
             columns, locs = self._validate_columns(column)
 
-        data = self._df._data['O']
+        data = self._df._data['S']
 
         count = 0
-        if return_dtype != 'O':
+        if return_dtype != 'S':
             if return_dtype in self._df._data:
                 count = self._df._data[return_dtype].shape[1]
         else:
-            count = self._df._data['O'].shape[1] - len(columns)
+            count = self._df._data['S'].shape[1] - len(columns)
 
         kwargs['count'] = count
 
@@ -208,7 +208,7 @@ class StringClass(object):
         dtype_new = final_arr.dtype.kind
 
         if len(columns) > 1:
-            final_cols = np.repeat(columns, group_len).astype('O') + '_' + final_cols
+            final_cols = np.repeat(columns, group_len).astype('S') + '_' + final_cols
         new_column_info = {}
         new_data = {}
         add_loc = 0
@@ -252,7 +252,7 @@ class StringClass(object):
         else:
             columns, locs = self._validate_columns(column)
 
-        data = self._df._data['O']
+        data = self._df._data['S']
         if len(locs) == 1:
             arr = getattr(_sf, name)(data[:, locs[0]], **kwargs)[:, np.newaxis]
         else:
@@ -265,7 +265,7 @@ class StringClass(object):
                 data = data.copy()
                 for i, loc in enumerate(locs):
                     data[:, loc] = arr[:, i]
-                return self._create_df_all(data, 'O')
+                return self._create_df_all(data, 'S')
         else:
             return self._create_df(arr, arr.dtype.kind, columns)
 
@@ -275,14 +275,14 @@ class StringClass(object):
     def cat(self, column=None):
         columns, locs = self._validate_columns(column)
         if len(locs) == 1:
-            arr = self._df._data['O'][:, locs[0]]
+            arr = self._df._data['S'][:, locs[0]]
             nans = _math.isna_str_1d(arr)
             arr = arr[~nans].tolist()
             return ''.join(arr)
         else:
             data = {}
             for col, loc in zip(columns, locs):
-                arr = self._df._data['O'][:, loc]
+                arr = self._df._data['S'][:, loc]
                 nans = _math.isna_str_1d(arr)
                 arr = arr[~nans].tolist()
                 data[col] = [''.join(arr)]
@@ -370,7 +370,7 @@ class StringClass(object):
             raise TypeError('flags must be a `RegexFlag` or integer')
 
         return self._str_generic_concat('findall', column, keep, pat=pat, pos=pos,
-                                        case=case, flags=flags, return_dtype='O')
+                                        case=case, flags=flags, return_dtype='S')
 
     def get(self, column=None, i=None, keep=False):
         if not isinstance(i, (int, np.integer)):
@@ -452,7 +452,7 @@ class StringClass(object):
         if not isinstance(sep, str):
             raise TypeError('`sep` must be an intege or None')
 
-        return self._str_generic_concat('partition', column, keep, sep=sep, return_dtype='O')
+        return self._str_generic_concat('partition', column, keep, sep=sep, return_dtype='S')
 
     def replace(self, column=None, pat=None, repl=None, n=0, case=True, flags=0, keep=False):
         if not isinstance(case, (bool, np.bool_)):
@@ -495,7 +495,7 @@ class StringClass(object):
         if not isinstance(sep, str):
             raise TypeError('`sep` must be an intege or None')
 
-        return self._str_generic_concat('rpartition', column, keep, sep=sep, return_dtype='O')
+        return self._str_generic_concat('rpartition', column, keep, sep=sep, return_dtype='S')
 
     def rsplit(self, column=None, pat=None, n=0, case=True, flags=0, keep=False):
         if not isinstance(pat, (str, Pattern)):
@@ -508,7 +508,7 @@ class StringClass(object):
             raise TypeError('flags must be a `RegexFlag` or integer')
 
         return self._str_generic_concat('rsplit', column, keep, pat=pat, n=n, case=case, flags=flags,
-                                        return_dtype='O')
+                                        return_dtype='S')
 
     def rstrip(self, column=None, to_strip=None, keep=False):
         if not isinstance(to_strip, str) and to_strip is not None:
@@ -551,7 +551,7 @@ class StringClass(object):
             raise TypeError('flags must be a `RegexFlag` or integer')
 
         return self._str_generic_concat('split', column, keep, pat=pat, n=n, case=case, flags=flags,
-                                        return_dtype='O')
+                                        return_dtype='S')
 
     def startswith(self, column=None, pat=None, keep=False):
         if not isinstance(pat, str):

@@ -4,15 +4,15 @@ import numpy as np
 from numpy import ndarray
 from ._libs import validate_arrays as va
 
-_DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str',
+_DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'S': 'str',
        'M': 'datetime64[ns]', 'm': 'timedelta64[ns]'}
-_DT_GENERIC = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str', 'M': 'date', 'm': 'date'}
-_DT_FUNC_NAME = {'i': 'int', 'f': 'float', 'b': 'bool', 'O': 'str',
+_DT_GENERIC = {'i': 'int', 'f': 'float', 'b': 'bool', 'S': 'str', 'M': 'date', 'm': 'date'}
+_DT_FUNC_NAME = {'i': 'int', 'f': 'float', 'b': 'bool', 'S': 'str',
                  'M': 'datetime', 'm': 'timedelta'}
-_KIND = {'int': 'i', 'float': 'f', 'bool': 'b', 'str': 'O'}
-_KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'], 'str': ['O'], 'number': ['i', 'f'],
+_KIND = {'int': 'i', 'float': 'f', 'bool': 'b', 'str': 'S'}
+_KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'], 'str': ['S'], 'number': ['i', 'f'],
               'datetime': ['M'], 'timedelta': ['m']}
-_DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'O',
+_DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'S',
            'datetime64[ns]': 'datetime64[ns]', 'datetime64[us]': 'datetime64[us]',
            'datetime64[ms]': 'datetime64[ms]', 'datetime64[s]': 'datetime64[s]',
            'datetime64[m]': 'datetime64[m]', 'datetime64[h]': 'datetime64[h]',
@@ -24,9 +24,9 @@ _DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'O',
            'timedelta64[D]': 'timedelta64[D]', 'timedelta64[W]': 'timedelta64[W]',
            'timedelta64[M]': 'timedelta64[M]', 'timedelta64[Y]': 'timedelta64[Y]'
            }
-_KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'O': 'O',
+_KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'S': 'S',
             'M': 'datetime64[ns]', 'm': 'timedelta64[ns]' }
-_NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'O': 'O', 'U': 'U'}
+_NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'S': 'S', 'U': 'U'}
 
 _AXIS = {'rows': 0, 'columns': 1}
 _NON_AGG_FUNCS = {'cumsum', 'cummin', 'cummax', 'cumprod'}
@@ -167,7 +167,7 @@ def maybe_convert_1d_array(arr: ndarray, column: Optional[str]=None) -> ndarray:
         return arr.astype('timedelta64[ns]')
     elif kind == 'U':
         return arr.astype('O')
-    elif kind == 'O':
+    elif kind == 'S':
         return va.validate_strings_in_object_array(arr, column)
     else:
         raise NotImplementedError(f'Data type {kind} unknown')
@@ -283,7 +283,7 @@ def convert_array_to_arrays(arr: ndarray) -> List[ndarray]:
     i: int
     for i in range(arr.shape[1]):
         a = convert_bytes_or_unicode(arr[:, i])
-        if a.dtype.kind == 'O':
+        if a.dtype.kind == 'S':
             va.validate_strings_in_object_array(a)
         arrs.append(a)
     return arrs
@@ -357,7 +357,7 @@ def get_kind_from_scalar(s: Any) -> str:
     elif isinstance(s, (float, np.floating)):
         return 'f'
     elif isinstance(s, (str, bytes)) or s is None:
-        return 'O'
+        return 'S'
     else:
         return ''
 
@@ -394,7 +394,7 @@ def check_compatible_kinds(kinds1: List[str], kinds2: List[str], all_nans: List[
             continue
         if k1 in 'ifb' and k2 in 'ifb':
             continue
-        if k1 in 'O' and an:
+        if k1 == 'S' and an:
             continue
         if k1 in 'mM' and k2 in 'mM':
             continue

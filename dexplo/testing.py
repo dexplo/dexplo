@@ -6,7 +6,7 @@ from dexplo._frame import DataFrame
 
 
 def _check_1d_arrays(a: ndarray, b: ndarray, kind: str, tol: float = 10 ** -4) -> bool:
-    if kind == 'O':
+    if kind == 'S':
         return va.is_equal_1d_object(a, b)
     if kind == 'f':
         with np.errstate(invalid='ignore'):
