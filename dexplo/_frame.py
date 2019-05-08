@@ -1,6 +1,7 @@
 from collections import defaultdict, OrderedDict
 from itertools import zip_longest
 from math import ceil
+import copy
 from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
                     NoReturn, Set, Iterable, Any, TypeVar, Type, Generator)
 import warnings
@@ -25,6 +26,8 @@ from . import _stat_funcs as stat
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
 DictListArr = Dict[str, List[ndarray]]
+StrMap = Dict[int, Dict[int, str]]
+StrRevMap = Dict[int, List[str]]
 
 # can change to array of strings?
 ColumnT = Optional[Union[List[str], ndarray]]
@@ -36,8 +39,8 @@ ListIntNone = List[IntNone]
 
 ScalarT = TypeVar('ScalarT', int, float, str, bool)
 
-ColSelection = Union[int, str, slice, List[IntStr], 'DataFrame']
-RowSelection = Union[int, slice, List[int], 'DataFrame']
+ColSel = Union[int, str, slice, List[IntStr], 'DataFrame']
+RowSel = Union[int, slice, List[int], 'DataFrame']
 Scalar = Union[int, str, bool, float]
 NaT = np.datetime64('nat')
 
@@ -166,7 +169,7 @@ class DataFrame(object):
             return self._data[kind][:, order]
 
         if {'b', 'S', 'm', 'M'} & self._data.keys():
-            arr_dtype: str = 'S'
+            arr_dtype: str = 'O'
         else:
             arr_dtype = 'float64'
 
@@ -175,7 +178,10 @@ class DataFrame(object):
         for col, col_obj in self._column_info.items():
             dtype, loc, order2 = col_obj.values  # type: str, int, int
             col_arr = self._data[dtype][:, loc]
-            if dtype == 'M':
+            if dtype == 'S':
+                cur_list_map = self._str_reverse_map[loc]
+                _va.make_object_str_array(cur_list_map, v, col_arr, order2)
+            elif dtype == 'M':
                 unit = col_arr.dtype.name.replace(']', '').split('[')[1]
                 # changes array in place
                 _va.make_object_datetime_array(v, col_arr.view('uint64'), order2, unit)
@@ -486,7 +492,7 @@ class DataFrame(object):
         utils.check_duplicate_list(new_cols)
         return new_cols
 
-    def _convert_col_selection(self, cs: ColSelection) -> List[str]:
+    def _convert_col_sel(self, cs: ColSel) -> List[str]:
         if isinstance(cs, str):
             self._validate_column_name(cs)
             return [cs]
@@ -541,7 +547,7 @@ class DataFrame(object):
             raise TypeError('Selection must either be one of '
                             'int, str, list, array, slice or DataFrame')
 
-    def _convert_row_selection(self, rs: RowSelection) -> Union[List[int], ndarray]:
+    def _convert_row_sel(self, rs: RowSel) -> Union[List[int], ndarray]:
         if isinstance(rs, slice):
             def check_none_int(obj: Any) -> bool:
                 return obj is None or isinstance(obj, int)
@@ -605,7 +611,6 @@ class DataFrame(object):
         # most common case, string column, integer row
         try:
             dtype, loc, _ = self._column_info[cs].values  # type: ignore
-            return self._data[dtype][rs, loc]
         # if its not a key error then it will be an index error
         # for the rows and raise the default exception message
         except KeyError:
@@ -622,28 +627,44 @@ class DataFrame(object):
                                      'out of range from the columns')
                 # now we know column is valid
                 dtype, loc, _ = self._column_info[cs].values  # type: ignore
-                return self._data[dtype][rs, loc]
 
-    def _select_entire_single_column(self, col_selection):
-        self._validate_column_name(col_selection)
-        dtype, loc, _ = self._column_info[col_selection].values
+        if dtype == 'S':
+            val = self._data[dtype][rs, loc]
+            return self._str_reverse_map[loc][val]
+        else:
+            return self._data[dtype][rs, loc]
+
+    def _select_entire_single_column(self, col_sel):
+        self._validate_column_name(col_sel)
+        dtype, loc, _ = self._column_info[col_sel].values
         new_data = {dtype: self._data[dtype][:, loc].reshape(-1, 1)}
-        new_columns = np.array([col_selection], dtype='O')
-        new_column_info = {col_selection: utils.Column(dtype, 0, 0)}
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        new_columns = np.array([col_sel], dtype='O')
+        new_column_info = {col_sel: utils.Column(dtype, 0, 0)}
+        new_str_map = {}
+        new_str_reverse_map = {}
+        if dtype == 'S':
+            new_str_map = {0: self._str_map[loc]}
+            new_str_reverse_map = {0: self._str_reverse_map[loc]}
+        return self._construct_from_new(new_data, new_column_info, new_columns,
+                                        new_str_map, new_str_reverse_map)
 
     def _construct_df_from_selection(self, rs: Union[List[int], ndarray],
                                      cs: List[str]) -> 'DataFrame':
         new_data: Dict[str, ndarray] = {}
         dt_positions: Dict[str, List[int]] = defaultdict(list)
         new_column_info: ColInfoT = {}
-        new_columns: ColumnT = cs
+        new_columns = np.asarray(cs, dtype='O')
+        new_str_map: StrMap = {}
+        new_str_reverse_map: StrRevMap = {}
 
         for i, col in enumerate(cs):
             dtype, loc, _ = self._column_info[col].values
             cur_loc: int = len(dt_positions[dtype])
             new_column_info[col] = utils.Column(dtype, cur_loc, i)
             dt_positions[dtype].append(loc)
+            if dtype == 'S':
+                new_str_map[cur_loc] = self._str_map[loc]
+                new_str_reverse_map[cur_loc] = self._str_reverse_map[loc]
 
         for dtype, pos in dt_positions.items():
             if isinstance(rs, (list, ndarray)):
@@ -654,8 +675,8 @@ class DataFrame(object):
 
             new_data[dtype] = np.asfortranarray(arr)
 
-        return self._construct_from_new(new_data, new_column_info,
-                                        np.asarray(new_columns, dtype='O'))
+        return self._construct_from_new(new_data, new_column_info, new_columns,
+                                        new_str_map, new_str_reverse_map)
 
     @overload
     def __getitem__(self, value: Tuple[List, slice]) -> 'DataFrame':
@@ -673,8 +694,8 @@ class DataFrame(object):
     def __getitem__(self, value: Tuple[slice, 'DataFrame']) -> 'DataFrame':
         pass
 
-    def __getitem__(self, value: Tuple[RowSelection,
-                                       ColSelection]) -> Union[Scalar, 'DataFrame']:
+    def __getitem__(self, value: Tuple[RowSel,
+                                       ColSel]) -> Union[Scalar, 'DataFrame']:
         """
         Selects a subset of the DataFrame. Must always pass a row and column selection.
 
@@ -691,17 +712,16 @@ class DataFrame(object):
 
         """
         utils.validate_selection_size(value)
-        row_selection, col_selection = value  # type: RowSelection, ColSelection
-        if isinstance(row_selection, int) and isinstance(col_selection, (int, str)):
-            return self._getitem_scalar(row_selection, col_selection)
+        row_sel, col_sel = value  # type: RowSel, ColSel
+        if utils.is_integer(row_sel) and isinstance(col_sel, (int, str)):
+            return self._getitem_scalar(row_sel, col_sel)
 
-        if utils.is_entire_column_selection(row_selection, col_selection):
-            return self._select_entire_single_column(col_selection)
-
-        cs_final: List[str] = self._convert_col_selection(col_selection)
-        rs_final: Union[List[int], ndarray] = self._convert_row_selection(row_selection)
-
-        return self._construct_df_from_selection(rs_final, cs_final)
+        elif utils.is_entire_column_selection(row_sel, col_sel):
+            return self._select_entire_single_column(col_sel)
+        else:
+            col_sel = self._convert_col_sel(col_sel)
+            row_sel = self._convert_row_sel(row_sel)
+            return self._construct_df_from_selection(row_sel, col_sel)
 
     def to_dict(self, orient: str = 'array') -> Dict[str, Union[ndarray, List]]:
         """
@@ -774,7 +794,10 @@ class DataFrame(object):
         new_data: Dict[str, ndarray] = {dt: arr.copy() for dt, arr in self._data.items()}
         new_columns: ColumnT = self._columns.copy()
         new_column_info: ColInfoT = self._copy_column_info()
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        new_str_map = copy.deepcopy(self._str_map)
+        new_str_reverse_map = self._str_reverse_map.copy()
+        return self._construct_from_new(new_data, new_column_info, new_columns,
+                                        new_str_map, new_str_reverse_map)
 
     def select_dtypes(self, include: Optional[Union[str, List[str]]] = None,
                       exclude: Optional[Union[str, List[str]]] = None, copy=False) -> 'DataFrame':
@@ -824,6 +847,8 @@ class DataFrame(object):
 
         new_column_info: ColInfoT = {}
         new_columns: ColumnT = []
+        new_str_map: StrMap = {}
+        new_str_reverse_map: StrRevMap = {}
         order: int = 0
         for col in self._columns:
             dtype, loc, _ = self._column_info[col].values  # type: str, int, int
@@ -831,8 +856,15 @@ class DataFrame(object):
                 new_column_info[col] = utils.Column(dtype, loc, order)
                 new_columns.append(col)
                 order += 1
-        return self._construct_from_new(new_data, new_column_info,
-                                        np.asarray(new_columns, dtype='O'))
+        if 'S' in include_final:
+            new_str_map = self._str_map
+            new_str_reverse_map = self._str_reverse_map
+            if copy:
+                new_str_map = copy.deepcopy(new_str_map)
+                new_str_reverse_map = copy.deepcopy(new_str_reverse_map)
+        new_columns = np.asarray(new_columns, dtype='O')
+        return self._construct_from_new(new_data, new_column_info, new_columns,
+                                        new_str_map, new_str_reverse_map)
 
     @classmethod
     def _construct_from_new(cls: Type[object], data: Dict[str, ndarray],
@@ -852,18 +884,28 @@ class DataFrame(object):
         data_dict: DictListArr = defaultdict(list)
         kind_shape: Dict[str, Tuple[str, int]] = {}
         arr_res: ndarray
+        new_str_map: StrMap = {}
+        new_str_reverse_map: StrRevMap = {}
 
         for old_kind, arr in self._data.items():
             # TODO: will have to do custom cython function here for add,
             # radd, gt, ge, lt, le for object array
             if old_kind == 'S' and op_string in stat.funcs_str:
                 func = stat.funcs_str[op_string]
-                arr_res = func(arr, other)
+                if stat.still_string(op_string):
+                    new_str_map, new_str_reverse_map = func(self._str_reverse_map, other)
+                    new_kind = 'S'
+                    arr_res = arr
+                else:
+                    arr_res = func(self._str_reverse_map, other, self._data['S'])
+                    new_kind = arr_res.dtype.kind
+
             else:
                 with np.errstate(invalid='ignore', divide='ignore'):
-                    # TODO: do something about zero divison error
+                    # TODO: do something about zero division error
                     arr_res = getattr(arr, op_string)(other)
-            new_kind = arr_res.dtype.kind
+                new_kind = arr_res.dtype.kind
+
             cur_len: int = utils.get_num_cols(data_dict.get(new_kind, []))
             kind_shape[old_kind] = (new_kind, cur_len)
             data_dict[new_kind].append(arr_res)
@@ -873,7 +915,8 @@ class DataFrame(object):
             old_kind, old_loc, order = col_obj.values  # type: str, int, int
             new_kind, new_loc = kind_shape[old_kind]  # type: str, int
             new_column_info[col] = utils.Column(new_kind, new_loc + old_loc, order)
-        return data_dict, new_column_info
+
+        return data_dict, new_column_info, new_str_map, new_str_reverse_map
 
     def _get_both_column_info(self, other: 'DataFrame') -> Tuple:
         kinds1: List[str] = []
@@ -936,9 +979,10 @@ class DataFrame(object):
             raise ValueError('This error should not run. This is a bug.')
 
         if bool_statement:
-            data_dict, new_column_info = self._do_eval(op_string, other)
+            data_dict, new_column_info, new_str_map, new_str_reverse_map = self._do_eval(op_string, other)
             new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
-            return self._construct_from_new(new_data, new_column_info, self._columns.copy())
+            return self._construct_from_new(new_data, new_column_info, self._columns.copy(),
+                                            new_str_map, new_str_reverse_map)
         else:
             raise TypeError('This operation is unavailable with the given data types')
 
@@ -949,43 +993,61 @@ class DataFrame(object):
             data1: ndarray = self._data[dtype1]
             data2: ndarray = other._data[dtype2]
             cur_locs1, cur_locs2 = locs1[dtype1], locs2[dtype2]  # type: List[int], List[int]
+            final_locs = cur_locs1
+            srm1 = self._str_reverse_map
+            srm2 = other._str_reverse_map
             if cur_locs1 != cur_locs2:
                 data1 = data1[:, cur_locs1]
                 data2 = data2[:, cur_locs2]
-                cur_locs1 = list(range(len(cur_locs1)))
-            return data1, data2, cur_locs1
 
-        def calculate_arrays(data1, data2):
+                if dtype1 == 'S':
+                    srm1, srm2 = {}, {}
+                    for i, (cur_loc1, cur_loc2) in enumerate(zip(cur_locs1, cur_locs2)):
+                        srm1[i] = self._str_reverse_map[cur_loc1]
+                        srm2[i] = other._str_reverse_map[cur_loc2]
+                final_locs = list(range(len(cur_locs1)))
+
+            return data1, data2, final_locs, srm1, srm2
+
+        def calculate_string_arrays(data1, data2, srm1, srm2):
             # TODO: multiply string by number dataframe. very rare occurrence
-            if data1.dtype.kind == 'S':
-                if data1.shape == data2.shape:
-                    if data1.ndim == 1:
-                        func: Callable = stat.funcs_str1[op_string]
-                    else:
-                        func: Callable = stat.funcs_str2[op_string]
-                elif other.shape[0] == 1:
-                    func = stat.funcs_str2_1row_right[op_string]
-                    data2 = data2[0]
-                elif self.shape[0] == 1:
-                    func = stat.funcs_str2_1row_left[op_string]
-                    data1 = data1[0]
-                return func(data1, data2)
-            return getattr(data1, op_string)(data2)
+            print(srm1, srm2)
+            print(data1, data2)
+            if data1.shape == data2.shape:
+                if data1.ndim == 1:
+                    func: Callable = stat.funcs_str1[op_string]
+                else:
+                    print('here')
+                    func: Callable = stat.funcs_str2[op_string]
+            elif other.shape[0] == 1:
+                func = stat.funcs_str2_1row_right[op_string]
+                data2 = data2[0]
+            elif self.shape[0] == 1:
+                func = stat.funcs_str2_1row_left[op_string]
+                data1 = data1[0]
+            return func(data1, data2, srm1, srm2)
 
         def set_data_and_info(dtype1, dtype2, locs1, locs2):
-            data1, data2, cur_locs1 = get_cur_arr(dtype1, dtype2, locs1, locs2)
-            arr_new = calculate_arrays(data1, data2)
-            new_dtype: str = arr_new.dtype.kind
+            str_map, str_reverse_map = {}, {}
+            data1, data2, cur_locs1, srm1, srm2 = get_cur_arr(dtype1, dtype2, locs1, locs2)
+            if dtype1 == 'S':
+                arr_new, str_map, str_reverse_map = calculate_string_arrays(data1, data2, srm1, srm2)
+                new_dtype: str = 'S'
+            else:
+                arr_new = getattr(data1, op_string)(data2)
+                new_dtype = arr_new.dtype.kind
+
             cur_len: int = utils.get_num_cols(data_dict.get(new_dtype, []))
             data_dict[new_dtype].append(arr_new)
             info: Iterable = zip(cols1[dtype1], cur_locs1, ords1[dtype1])
             for col, loc, order in info:  # type: str, int, int
                 new_column_info[col] = utils.Column(new_dtype, loc + cur_len, order)
+            return str_map, str_reverse_map
 
         def calculate_column_wise(col1, col2, col3):
             arr1 = self._get_column_values(col1)
             arr2 = other._get_column_values(col2)
-            arr_new = calculate_arrays(arr1, arr2)
+            arr_new = getattr(arr1, op_string)(arr2)
             if arr_new.ndim == 1:
                 arr_new = arr_new[:, np.newaxis]
             new_kind = arr_new.dtype.kind
@@ -1011,12 +1073,12 @@ class DataFrame(object):
             new_columns: ndarray = self._columns.copy()
             if kinds1 == kinds2:
                 # fast path for similar data frames
-                for dtype1 in self._data:
-                    set_data_and_info(dtype1, dtype1, locs1, locs2)
+                for kind1 in set(kinds1):
+                    str_map, str_reverse_map = set_data_and_info(kind1, kind1, locs1, locs2)
             elif utils.check_compatible_kinds(kinds1, kinds2, [False] * len(kinds1)):
                 # fast path for single dtype frames
                 if len(set(kinds1)) == 1 and len(set(kinds2)) == 1:
-                    set_data_and_info(kinds1[0], kinds2[0], locs1, locs2)
+                    str_map, str_reverse_map = set_data_and_info(kinds1[0], kinds2[0], locs1, locs2)
                 else:
                     for i, (col1, col2) in enumerate(zip(self._columns, other._columns)):
                         calculate_column_wise(col1, col2, col1)
@@ -1031,7 +1093,7 @@ class DataFrame(object):
                                  f'with column {other._columns[i]}')
         elif rows_equal and (self.shape[1] == 1 or other.shape[1] == 1):
             if self.shape[1] > other.shape[1]:
-                last_col = last_col = other._columns[0]
+                last_col = other._columns[0]
                 new_columns = self._columns.copy()
             else:
                 last_col = self._columns[0]
@@ -1055,7 +1117,7 @@ class DataFrame(object):
                              'both DataFrames need the same shape or have one axis the '
                              'same and the other length of 1.')
         new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
-        return self._construct_from_new(new_data, new_column_info, new_columns)
+        return self._construct_from_new(new_data, new_column_info, new_columns, str_map, str_reverse_map)
 
     def _op_array(self, other: Any, op_string: str) -> 'DataFrame':
         if other.ndim == 1:
@@ -1162,7 +1224,7 @@ class DataFrame(object):
         else:
             raise TypeError('Only works for all numeric columns')
         new_column_info: ColInfoT = self._copy_column_info()
-        return self._construct_from_new(new_data, new_column_info, self._columns.copy())
+        return self._construct_from_new(new_data, new_column_info, self._columns.copy(), {}, {})
 
     def __bool__(self) -> NoReturn:
         raise ValueError(': The truth value of an array with more than one element is ambiguous. '
@@ -1203,12 +1265,12 @@ class DataFrame(object):
                                  for col in self._columns]
         arr: ndarray = np.array(dtype_list, dtype='O')
         columns: List[str] = ['Column Name', 'Data Type']
-        cn: ndarray = self._columns.astype('O')
-        data: ndarray = np.column_stack((cn, arr))
+        data, str_map, str_reverse_map = _va.convert_str_to_cat_list_2d([self._columns, arr])
         new_data: Dict[str, ndarray] = {'S': data}
         new_column_info: ColInfoT = {'Column Name': utils.Column('S', 0, 0),
                                      'Data Type': utils.Column('S', 1, 1)}
-        return self._construct_from_new(new_data, new_column_info, np.array(columns, dtype='O'))
+        return self._construct_from_new(new_data, new_column_info, np.array(columns, dtype='O'),
+                                        str_map, str_reverse_map)
 
     def __and__(self, other: Any) -> 'DataFrame':
         return self._op_logical(other, '__and__')
@@ -1235,30 +1297,30 @@ class DataFrame(object):
             raise TypeError(f'Must use {d[op_logical]} operator with either DataFrames or arrays.')
 
         self._validate_matching_shape(other)
-        is_other_df = isinstance(other, DataFrame)
         new_data: Dict[str, ndarray] = {}
 
         arr_left: ndarray = self.values
-        arr_right: ndarray
 
-        if is_other_df:
-            arr_right = other.values
+        if isinstance(other, DataFrame):
+            arr_right: ndarray = other.values
         else:
             arr_right = other
 
-        arr_res: ndarray = getattr(arr_left, op_logical)(arr_right)
-        new_data[arr_res.dtype.kind] = arr_res
-        new_column_info: ColInfoT = {col: utils.Column('b', i, i)
-                                     for i, (col, _) in
-                                     enumerate(self._column_info.items())}
+        if arr_left.dtype.kind != 'b' or arr_left.dtype.kind != 'b':
+            raise TypeError(f'The logical operator {d[op_logical]} only works with boolean arrays'
+                            'or DataFrames')
 
-        return self._construct_from_new(new_data, new_column_info, self._columns.copy())
+        new_data['b'] = getattr(arr_left, op_logical)(arr_right)
+        new_column_info: ColInfoT = {col: utils.Column('b', i, i)
+                                     for i, col in enumerate(self._columns)}
+
+        return self._construct_from_new(new_data, new_column_info, self._columns.copy(), {}, {})
 
     def __invert__(self) -> 'DataFrame':
         if set(self._data) == {'b'}:
             new_data: Dict[str, ndarray] = {dt: ~arr for dt, arr in self._data.items()}
             new_column_info: ColInfoT = self._copy_column_info()
-            return self._construct_from_new(new_data, new_column_info, self._columns.copy())
+            return self._construct_from_new(new_data, new_column_info, self._columns.copy(), {}, {})
         else:
             raise TypeError('Invert operator only works on DataFrames with all boolean columns')
 
@@ -1348,7 +1410,7 @@ class DataFrame(object):
         utils.validate_selection_size(key)
 
         # row selection and column selection
-        rs, cs = key  # type: RowSelection, ColSelection
+        rs, cs = key  # type: RowSel, ColSel
         if isinstance(rs, int) and isinstance(cs, (int, str)):
             return self._setitem_scalar(rs, cs, value)
 
@@ -1357,12 +1419,12 @@ class DataFrame(object):
             # ignore type check here. Function ensures cs is a string
             return self._setitem_entire_column(cs, value)  # type: ignore
 
-        col_list: List[str] = self._convert_col_selection(cs)
-        row_list: Union[List[int], ndarray] = self._convert_row_selection(rs)
+        col_list: List[str] = self._convert_col_sel(cs)
+        row_list: Union[List[int], ndarray] = self._convert_row_sel(rs)
 
         self._setitem_all_other(row_list, col_list, value)
 
-    def _setitem_scalar(self, rs: RowSelection, cs: Union[int, str], value: Scalar) -> None:
+    def _setitem_scalar(self, rs: RowSel, cs: Union[int, str], value: Scalar) -> None:
         """
         Assigns a scalar to exactly a single cell
         """

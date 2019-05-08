@@ -4,6 +4,7 @@ import numpy as np
 from numpy import ndarray
 
 from ._libs import math as m
+from ._libs import math_oper_string as mos
 from . import _math_columns as mc
 from . import _date_funcs as df
 
@@ -128,53 +129,54 @@ funcs_columns = {'sum': mc.sum_columns,
                  'all': mc.all_columns,
                  'count': mc.count_columns}
 
-funcs_str = {'__add__': m.add_obj,
-             '__radd__': m.radd_obj,
-             '__lt__': m.lt_obj,
-             '__le__': m.le_obj,
-             '__gt__': m.gt_obj,
-             '__ge__': m.ge_obj,
-             '__eq__': m.eq_obj,
-             '__ne__': m.ne_obj,
-             '__mul__': m.mul_obj,
-             '__rmul__': m.mul_obj}
+funcs_str = {'__add__': mos.add_str,
+             '__radd__': mos.radd_str,
+             '__lt__': mos.lt_str,
+             '__le__': mos.le_str,
+             '__gt__': mos.gt_str,
+             '__ge__': mos.ge_str,
+             '__eq__': mos.eq_str,
+             '__ne__': mos.ne_str,
+             '__mul__': mos.mul_str,
+             '__rmul__': mos.mul_str}
 
-funcs_str1 = {'__add__': m.add_obj_one,
-              '__lt__': m.lt_obj_one,
-              '__le__': m.le_obj_one,
-              '__gt__': m.gt_obj_one,
-              '__ge__': m.ge_obj_one,
-              '__eq__': m.eq_obj_one,
-              '__ne__': m.ne_obj_one,
-              '__mul__': m.mul_obj_one,
-              '__rmul__': m.mul_obj_one}
+funcs_str1 = {'__add__': mos.add_str_one,
+              '__lt__': mos.lt_str_one,
+              '__le__': mos.le_str_one,
+              '__gt__': mos.gt_str_one,
+              '__ge__': mos.ge_str_one,
+              '__eq__': mos.eq_str_one,
+              '__ne__': mos.ne_str_one,
+              '__mul__': mos.mul_str_one,
+              '__rmul__': mos.mul_str_one}
 
-funcs_str2 = {'__add__': m.add_obj_two,
-              '__lt__': m.lt_obj_two,
-              '__le__': m.le_obj_two,
-              '__gt__': m.gt_obj_two,
-              '__ge__': m.ge_obj_two,
-              '__eq__': m.eq_obj_two,
-              '__ne__': m.ne_obj_two,
-              '__mul__': m.mul_obj_two,
-              '__rmul__': m.mul_obj_two}
+funcs_str2 = {'__add__': mos.add_str_two,
+              '__lt__': mos.lt_str_two,
+              '__le__': mos.le_str_two,
+              '__gt__': mos.gt_str_two,
+              '__ge__': mos.ge_str_two,
+              '__eq__': mos.eq_str_two,
+              '__ne__': mos.ne_str_two,
+              '__mul__': mos.mul_str_two,
+              '__rmul__': mos.mul_str_two}
 
-funcs_str2_1row_right = {'__add__': m.add_obj_two_1row_right,
-                         '__radd__': m.add_obj_two_1row_left,
-                         '__lt__': m.lt_obj_two_1row_right,
-                         '__le__': m.le_obj_two_1row_right,
-                         '__gt__': m.gt_obj_two_1row_right,
-                         '__ge__': m.ge_obj_two_1row_right,
-                         '__eq__': m.eq_obj_two_1row_right,
-                         '__ne__': m.ne_obj_two_1row_right,}
+funcs_str2_1row_right = {'__add__': mos.add_str_two_1row_right,
+                         '__radd__': mos.add_str_two_1row_left,
+                         '__lt__': mos.lt_str_two_1row_right,
+                         '__le__': mos.le_str_two_1row_right,
+                         '__gt__': mos.gt_str_two_1row_right,
+                         '__ge__': mos.ge_str_two_1row_right,
+                         '__eq__': mos.eq_str_two_1row_right,
+                         '__ne__': mos.ne_str_two_1row_right,}
 
-funcs_str2_1row_left = {'__add__': m.add_obj_two_1row_left,
-                        '__radd__': m.add_obj_two_1row_right,
-                        '__lt__': m.lt_obj_two_1row_left,
-                        '__le__': m.le_obj_two_1row_left,
-                        '__gt__': m.gt_obj_two_1row_left,
-                        '__ge__': m.ge_obj_two_1row_left,
-                        '__eq__': m.eq_obj_two_1row_left,
-                        '__ne__': m.ne_obj_two_1row_left,}
+funcs_str2_1row_left = {'__add__': mos.add_str_two_1row_left,
+                        '__radd__': mos.add_str_two_1row_right,
+                        '__lt__': mos.lt_str_two_1row_left,
+                        '__le__': mos.le_str_two_1row_left,
+                        '__gt__': mos.gt_str_two_1row_left,
+                        '__ge__': mos.ge_str_two_1row_left,
+                        '__eq__': mos.eq_str_two_1row_left,
+                        '__ne__': mos.ne_str_two_1row_left,}
 
-
+def still_string(name):
+    return name in {'__add__', '__radd__', '__mul__', '__rmul__'}

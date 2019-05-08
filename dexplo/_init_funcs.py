@@ -112,10 +112,14 @@ def data_from_dict(data: DataC) -> None:
         else:
             raise TypeError('Values of dictionary must be an array or a list')
         arr = utils.maybe_convert_1d_array(arr)
+
         kind: str = arr.dtype.kind
         if kind == 'U':
             kind = 'S'
             arr, col_str_map = va.convert_str_to_cat(arr)
+        elif kind == 'O':
+            kind = 'S'
+            arr, col_str_map = va.convert_obj_to_cat(arr)
         loc: int = len(data_dict.get(kind, []))
         data_dict[kind].append(arr)
         if kind == 'S':
@@ -167,7 +171,8 @@ def data_from_typed_array(data: ndarray, columns: ndarray) -> Tuple:
     kind = data.dtype.kind
     if kind == 'U':
         kind = 'S'
-        data, str_map = va.convert_str_to_cat_2d(data)
+        data, col_str_map = va.convert_str_to_cat_2d(data)
+        str_map[0] = col_str_map
     # Force array to be fortran ordered
     new_data = {kind: np.asfortranarray(data)}
     column_info: ColInfoT = {col: utils.Column(kind, i, i) for i, col in enumerate(columns)}
@@ -192,14 +197,21 @@ def data_from_object_array(data: ndarray, columns: ndarray) -> Tuple:
 
     column_info: ColInfoT = {}
     data_dict: DictListArr = defaultdict(list)
+    str_map = {}
     for i, col in enumerate(columns):
         arr: ndarray = va.maybe_convert_object_array(data[:, i], col)
         kind: str = arr.dtype.kind
+        if kind == 'O':
+            kind = 'S'
+            arr, col_str_map = va.convert_str_to_cat(arr)
         loc: int = len(data_dict[kind])
+        if kind == 'S':
+            str_map[loc] = col_str_map
         data_dict[kind].append(arr)
         column_info[col] = utils.Column(kind, loc, i)
 
-    return concat_arrays(data_dict), column_info
+    str_reverse_map = {k: list(v.keys()) for k, v in str_map.items()}
+    return concat_arrays(data_dict), column_info, str_map, str_reverse_map
 
 
 def concat_arrays(data_dict: DictListArr) -> Dict[str, ndarray]:

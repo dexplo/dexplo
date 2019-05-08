@@ -1,14 +1,16 @@
 import numpy as np
 from numpy import ndarray
 import dexplo._utils as utils
-import dexplo._libs.validate_arrays as va
 from dexplo._frame import DataFrame
+import dexplo._libs.validate_arrays as va
 
 
 def _check_1d_arrays(a: ndarray, b: ndarray, kind: str, tol: float = 10 ** -4) -> bool:
-    if kind == 'S':
-        return va.is_equal_1d_object(a, b)
-    if kind == 'f':
+    if kind == 'O':
+        if not va.is_equal_1d_object(a, b):
+            raise AssertionError(f'The values of column {col} are not equal')
+        return True
+    elif kind == 'f':
         with np.errstate(invalid='ignore'):
             criteria1 = np.abs(a - b) < tol
             criteria2 = np.isnan(a) & np.isnan(b)
@@ -47,7 +49,12 @@ def assert_frame_equal(df1: DataFrame, df2: DataFrame) -> None:
             raise AssertionError(f'The data types of column {col} are not '
                                  f'equal. {dtype1} != {dtype2}')
 
-        if not _check_1d_arrays(arr1, arr2, kind1):
+        if kind1 == 'S':
+            srm1 = df1._str_reverse_map[loc1]
+            srm2 = df2._str_reverse_map[loc2]
+            if not va.is_equal_str_cat_array(arr1, arr2, srm1, srm2):
+                raise AssertionError(f'The values of column {col} are not equal')
+        elif not _check_1d_arrays(arr1, arr2, kind1):
             raise AssertionError(f'The values of column {col} are not equal')
 
 

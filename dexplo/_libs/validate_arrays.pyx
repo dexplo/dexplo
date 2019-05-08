@@ -116,6 +116,21 @@ def convert_str_array(ndarray[object] arr, column):
     return result
 
 
+def convert_obj_to_cat(ndarray[object] arr):
+    cdef Py_ssize_t i, n = len(arr)
+    cdef ndarray[np.uint32_t] arr_map = np.empty(len(arr), 'uint32', 'F')
+    cdef dict d = {}
+
+    for i in range(n):
+        if isinstance(arr[i], (float, np.floating)) and isnan(arr[i]):
+            arr_map[i] = d.setdefault(None, len(d))
+        elif arr[i] is None:
+            arr_map[i] = d.setdefault(None, len(d))
+        else:
+            arr_map[i] = d.setdefault(str(arr[i]), len(d))
+
+    return arr_map, d
+
 def convert_str_to_cat(ndarray arr):
     cdef Py_ssize_t i, n = len(arr)
     cdef ndarray[np.uint32_t] arr_map = np.empty(len(arr), 'uint32', 'F')
@@ -139,6 +154,23 @@ def convert_str_to_cat_2d(ndarray arr):
             arr_map[i, j] = d.setdefault(arr[i, j], len(d))
 
     return arr_map, str_map
+
+
+def convert_str_to_cat_list_2d(list arrs):
+    cdef Py_ssize_t i, j, n = len(arrs[0]), m = len(arrs)
+    cdef ndarray arr
+    cdef ndarray[np.uint32_t, ndim=2] arr_map = np.empty((n, m), 'uint32', 'F')
+    cdef dict d, str_map = {}, str_reverse_map = {}
+
+    for j in range(m):
+        d = {}
+        str_map[j] = d
+        arr = arrs[j]
+        for i in range(n):
+            arr_map[i, j] = d.setdefault(arr[i], len(d))
+    for k, v in str_map.items():
+        str_reverse_map[k] = list(v.keys())
+    return arr_map, str_map, str_reverse_map
 
 
 # def convert_datetime_array(ndarray[object] arr, column):
@@ -166,6 +198,30 @@ def convert_str_to_cat_2d(ndarray arr):
 #                              f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
 #         result[i] = arr[i]
 #     return result.astype('timedelta64[ns]')
+
+def is_equal_1d_object(ndarray[object] a, ndarray[object] b):
+    cdef int i
+    cdef int n = len(a)
+    for i in range(n):
+        if a[i] == b[i]:
+            continue
+        if a[i] is None and b[i] is None:
+            continue
+        if (isinstance(a[i], (float, np.floating)) and isnan(a[i]) and
+            isinstance(b[i], (float, np.floating)) and isnan(b[i])):
+            continue
+        return False
+    return True
+
+
+def is_equal_str_cat_array(ndarray[np.uint32_t] a, ndarray[np.uint32_t] b, list srm_a, list srm_b):
+    cdef Py_ssize_t i, n = len(a)
+
+    for i in range(n):
+        if srm_a[a[i]] != srm_b[b[i]]:
+            return False
+    return True
+
 
 def validate_strings_in_object_array(ndarray[object] arr, columns=None):
     """
@@ -202,21 +258,6 @@ def isnan_object(ndarray[object, ndim=2] a):
                 hasnan[j] = True
                 break
     return hasnan
-
-
-def is_equal_1d_object(ndarray[object] a, ndarray[object] b):
-    cdef int i
-    cdef int n = len(a)
-    for i in range(n):
-        if a[i] == b[i]:
-            continue
-        if a[i] is None and b[i] is None:
-            continue
-        if (isinstance(a[i], (float, np.floating)) and isnan(a[i]) and
-            isinstance(b[i], (float, np.floating)) and isnan(b[i])):
-            continue
-        return False
-    return True
 
 def any_int(ndarray[np.int64_t] a):
     cdef int i
@@ -290,3 +331,12 @@ def make_object_timedelta_array(ndarray[object, ndim=2] a, ndarray[np.uint64_t] 
 
     for i in range(nr):
         a[i, j] = np.timedelta64(b[i], unit)
+
+def make_object_str_array(list cur_list_map, ndarray[object, ndim=2] a,
+                          ndarray[np.uint32_t] data, int j):
+    cdef int i
+    cdef int nr = a.shape[0]
+    cdef int nc = a.shape[1]
+
+    for i in range(nr):
+        a[i, j] = cur_list_map[data[i]]

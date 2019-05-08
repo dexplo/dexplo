@@ -150,11 +150,11 @@ def is_compatible_values(v1: Any, v2: Any) -> str:
 def convert_list_to_single_arr(values: List) -> ndarray:
     arr: ndarray = np.array(values)
     kind: str = arr.dtype.kind
-    if kind in 'ifbmMU':
+    if kind in 'ifbmMUO':
         return arr
-    elif kind in 'OS':
+    elif kind == 'S':
         # this will return an array of kind 'U'
-        return values.astype('str')
+        return arr.astype('str')
     else:
         raise NotImplementedError(f'Unknown numpy data type {arr.dtype}')
 
@@ -162,7 +162,7 @@ def convert_list_to_single_arr(values: List) -> ndarray:
 def maybe_convert_1d_array(arr: ndarray) -> ndarray:
     arr = try_to_squeeze_array(arr)
     kind: str = arr.dtype.kind
-    if kind in 'ifbU':
+    if kind in 'ifbUO':
         return arr
     elif kind == 'M':
         return arr.astype('datetime64[ns]')
