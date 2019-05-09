@@ -15,59 +15,50 @@ You must have cython installed. Run `python setup.py build_ext --use-cython -i`
 * Only DataFrames
 * No Series
 
-### Data Types
-* Only primitive types - int, float, boolean, str (unicode)
-* No object data types
+### Only Scalar Data Types
+All data types allow nulls
+- [x] bool - always 8 bits
+- [x] int
+- [x] float
+- [x] str - stored as a categorical
+- [x] datetime
+- [x] timedelta
 
 ### Column Labels
 * No hierarchical index
 * Column names must be strings
 * Column names must be unique
-* Columns stored in a numpy array
 
 ### Row Labels
 * No row labels for now
 * Only a number display on the output
-* Might add row labels in future
 
 ### Subset Selection
 * Only one way to select data - `[ ]`
 * Subset selection will be explicit and necessitate both rows and columns
-* Rows will be selected only by integer location (for now)
+* Rows will be selected only by integer location
 * Columns will be selected by either label or integer location. Since columns must be strings, this will not be amibguous
-* Column names cannot be duplicated
 * Slice notation is also OK
-
-### All selections and operations copy
-* All selections and operations provide new copies of the data
-* This will avoid any chained indexing confusion
 
 ### Development
 * Must use type hints
-* Must use 3.6 - fstrings
-* Must have numpy
+* Must use 3.6+ - fstrings
+* numpy
 
-### Small feature set
-* Implement as few attributes and methods as possible
-* Focus on good idiomatic cookbook examples for doing more complex tasks
+### Advantages over pandas
+* Easier to write idiomatically
+* String processing will be much faster
+* Nulls allowed in each data type
+* Nearly all operations will be faster
 
-### Only Scalar Data Types
-No complex Python data types
-- [x] bool - always 8 bits, not-null
-- [x] int - always 64 bits, not-null
-- [x] float - always 64 bits, nulls allowed
-- [x] str - A python unicode object, nulls allowed
-- [x] datetime
-- [x] timedelta
-- [ ] categorical
+## API
 
-#### Attributes to implement
+#### Attributes
 - [x] size
 - [x] shape
 - [x] values
 - [x] dtypes
 
-May not implement any of the binary operators as methods (add, sub, mul, etc...)
 
 #### Methods
 **Stats**
@@ -139,7 +130,6 @@ May not implement any of the binary operators as methods (add, sub, mul, etc...)
 - [x] to_csv
 
 **Other (after 0.1 release)**
-- [ ] apply
 - [ ] cut
 - [ ] plot
 - [ ] profile
