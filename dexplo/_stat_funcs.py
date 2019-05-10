@@ -129,54 +129,5 @@ funcs_columns = {'sum': mc.sum_columns,
                  'all': mc.all_columns,
                  'count': mc.count_columns}
 
-funcs_str = {'__add__': mos.add_str,
-             '__radd__': mos.radd_str,
-             '__lt__': mos.lt_str,
-             '__le__': mos.le_str,
-             '__gt__': mos.gt_str,
-             '__ge__': mos.ge_str,
-             '__eq__': mos.eq_str,
-             '__ne__': mos.ne_str,
-             '__mul__': mos.mul_str,
-             '__rmul__': mos.mul_str}
-
-funcs_str1 = {'__add__': mos.add_str_one,
-              '__lt__': mos.lt_str_one,
-              '__le__': mos.le_str_one,
-              '__gt__': mos.gt_str_one,
-              '__ge__': mos.ge_str_one,
-              '__eq__': mos.eq_str_one,
-              '__ne__': mos.ne_str_one,
-              '__mul__': mos.mul_str_one,
-              '__rmul__': mos.mul_str_one}
-
-funcs_str2 = {'__add__': mos.add_str_two,
-              '__lt__': mos.lt_str_two,
-              '__le__': mos.le_str_two,
-              '__gt__': mos.gt_str_two,
-              '__ge__': mos.ge_str_two,
-              '__eq__': mos.eq_str_two,
-              '__ne__': mos.ne_str_two,
-              '__mul__': mos.mul_str_two,
-              '__rmul__': mos.mul_str_two}
-
-funcs_str2_1row_right = {'__add__': mos.add_str_two_1row_right,
-                         '__radd__': mos.add_str_two_1row_left,
-                         '__lt__': mos.lt_str_two_1row_right,
-                         '__le__': mos.le_str_two_1row_right,
-                         '__gt__': mos.gt_str_two_1row_right,
-                         '__ge__': mos.ge_str_two_1row_right,
-                         '__eq__': mos.eq_str_two_1row_right,
-                         '__ne__': mos.ne_str_two_1row_right,}
-
-funcs_str2_1row_left = {'__add__': mos.add_str_two_1row_left,
-                        '__radd__': mos.add_str_two_1row_right,
-                        '__lt__': mos.lt_str_two_1row_left,
-                        '__le__': mos.le_str_two_1row_left,
-                        '__gt__': mos.gt_str_two_1row_left,
-                        '__ge__': mos.ge_str_two_1row_left,
-                        '__eq__': mos.eq_str_two_1row_left,
-                        '__ne__': mos.ne_str_two_1row_left,}
-
 def still_string(name):
     return name in {'__add__', '__radd__', '__mul__', '__rmul__'}

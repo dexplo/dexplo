@@ -16,6 +16,7 @@ from ._date import DateTimeClass, TimeDeltaClass
 from ._libs import (groupby as _gb,
                     validate_arrays as _va,
                     math as _math,
+                    math_oper_string as _mos,
                     sort_rank as _sr,
                     unique as _uq,
                     replace as _repl,
@@ -23,6 +24,7 @@ from ._libs import (groupby as _gb,
                     out_files as _of)
 from ._strings import StringClass
 from . import _stat_funcs as stat
+from ._arithmetic_ops import OP_2D
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
 DictListArr = Dict[str, List[ndarray]]
@@ -880,7 +882,7 @@ class DataFrame(object):
         df_new._str_reverse_map = str_reverse_map
         return df_new
 
-    def _do_eval(self, op_string: str, other: Any) -> Tuple[DictListArr, ColInfoT]:
+    def _op_scalar_eval(self, other: Any, op_string: str) -> Tuple[DictListArr, ColInfoT]:
         data_dict: DictListArr = defaultdict(list)
         kind_shape: Dict[str, Tuple[str, int]] = {}
         arr_res: ndarray
@@ -888,17 +890,21 @@ class DataFrame(object):
         new_str_reverse_map: StrRevMap = {}
 
         for old_kind, arr in self._data.items():
-            # TODO: will have to do custom cython function here for add,
-            # radd, gt, ge, lt, le for object array
-            if old_kind == 'S' and op_string in stat.funcs_str:
-                func = stat.funcs_str[op_string]
-                if stat.still_string(op_string):
-                    new_str_map, new_str_reverse_map = func(self._str_reverse_map, other)
-                    new_kind = 'S'
-                    arr_res = arr
+            if old_kind == 'S':
+                func_name = f'str{op_string}'
+                if hasattr(_mos, func_name):
+                    func = getattr(_mos, func_name)
+                    if op_string in {'__add__', '__radd__', '__mul__', '__rmul__'}:
+                        new_str_map, new_str_reverse_map = func(self._str_reverse_map, other)
+                        new_kind = 'S'
+                        arr_res = arr
+                    else:
+                        if not isinstance(other, (str, np.str_)):
+                            raise TypeError('Operation does not work on string columns')
+                        arr_res = func(self._str_reverse_map, self._data['S'], other)
+                        new_kind = arr_res.dtype.kind
                 else:
-                    arr_res = func(self._str_reverse_map, other, self._data['S'])
-                    new_kind = arr_res.dtype.kind
+                    raise TypeError('Operation does not work on string columns')
 
             else:
                 with np.errstate(invalid='ignore', divide='ignore'):
@@ -916,208 +922,13 @@ class DataFrame(object):
             new_kind, new_loc = kind_shape[old_kind]  # type: str, int
             new_column_info[col] = utils.Column(new_kind, new_loc + old_loc, order)
 
-        return data_dict, new_column_info, new_str_map, new_str_reverse_map
-
-    def _get_both_column_info(self, other: 'DataFrame') -> Tuple:
-        kinds1: List[str] = []
-        kinds2: List[str] = []
-        locs1: Dict[str, List[int]] = defaultdict(list)
-        locs2: Dict[str, List[int]] = defaultdict(list)
-        ords1: Dict[str, List[int]] = defaultdict(list)
-        ords2: Dict[str, List[int]] = defaultdict(list)
-        cols1: Dict[str, List[str]] = defaultdict(list)
-        cols2: Dict[str, List[str]] = defaultdict(list)
-
-        columns1, columns2 = self._columns, other._columns  # type: ndarray, ndarray
-        if len(columns1) > len(columns2):
-            columns2 = columns2.repeat(len(columns1))
-        elif len(columns1) < len(columns2):
-            columns1 = columns1.repeat(len(columns2))
-
-        for col1, col2 in zip(columns1, columns2):  # type: str, str
-            dtype1, loc1, order1 = self._column_info[col1].values
-            dtype2, loc2, order2 = other._column_info[col2].values
-            kinds1.append(dtype1)
-            kinds2.append(dtype2)
-            locs1[dtype1].append(loc1)
-            locs2[dtype2].append(loc2)
-            ords1[dtype1].append(order1)
-            ords2[dtype2].append(order2)
-            cols1[dtype1].append(col1)
-            cols2[dtype2].append(col2)
-        return kinds1, kinds2, locs1, locs2, ords1, ords2, cols1, cols2
-
-    # def _get_single_column_values(self, iloc: int) -> ndarray:
-    #     col = self._columns[iloc]
-    #     dtype, loc, order = self._column_info[col].values  # type: str, int, int
-    #     return self._data[dtype][:, loc]
-
-    def _op_scalar(self, other: Any, op_string: str) -> 'DataFrame':
-        if isinstance(other, (int, float, bool, np.integer, np.floating)):
-            bool_statement = self._is_numeric_or_bool() or op_string in ['__mul__', '__rmul__']
-        elif isinstance(other, str):
-            bool_statement = self._is_string() and op_string in ['__add__', '__radd__', '__gt__',
-                                                                 '__ge__', '__lt__', '__le__',
-                                                                 '__ne__', '__eq__']
-        elif isinstance(other, np.timedelta64):
-            dtypes = set(self._data)
-            if dtypes == {'M', 'm'} or dtypes == {'M'}:
-                bool_statement = op_string in ['__add__', '__radd__', '__sub__']
-            elif dtypes == {'m'}:
-                bool_statement = op_string in ['__add__', '__radd__', '__gt__', '__ge__',
-                                               '__lt__', '__le__', '__ne__', '__eq__']
-        elif isinstance(other, np.datetime64):
-            dtypes = set(self._data)
-            if dtypes == {'M'}:
-                bool_statement =  op_string in ['__sub__', '__gt__', '__ge__', '__lt__',
-                                                '__le__', '__ne__', '__eq__']
-            elif dtypes == {'m'}:
-                bool_statement =  op_string in ['__add__', '__radd__', '__sub__', '__rsub__']
-            elif dtypes == {'M', 'm'}:
-                bool_statement =  op_string in ['__sub__', '__rsub__']
-        else:
-            raise ValueError('This error should not run. This is a bug.')
-
-        if bool_statement:
-            data_dict, new_column_info, new_str_map, new_str_reverse_map = self._do_eval(op_string, other)
-            new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
-            return self._construct_from_new(new_data, new_column_info, self._columns.copy(),
-                                            new_str_map, new_str_reverse_map)
-        else:
-            raise TypeError('This operation is unavailable with the given data types')
+        new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
+        return self._construct_from_new(new_data, new_column_info, self._columns.copy(),
+                                        new_str_map, new_str_reverse_map)
 
     def _op_df(self, other: Any, op_string: str) -> 'DataFrame':
-        def get_cur_arr(dtype1: str, dtype2: str,
-                        locs1: Dict[str, List[int]],
-                        locs2: Dict[str, List[int]]):
-            data1: ndarray = self._data[dtype1]
-            data2: ndarray = other._data[dtype2]
-            cur_locs1, cur_locs2 = locs1[dtype1], locs2[dtype2]  # type: List[int], List[int]
-            final_locs = cur_locs1
-            srm1 = self._str_reverse_map
-            srm2 = other._str_reverse_map
-            if cur_locs1 != cur_locs2:
-                data1 = data1[:, cur_locs1]
-                data2 = data2[:, cur_locs2]
-
-                if dtype1 == 'S':
-                    srm1, srm2 = {}, {}
-                    for i, (cur_loc1, cur_loc2) in enumerate(zip(cur_locs1, cur_locs2)):
-                        srm1[i] = self._str_reverse_map[cur_loc1]
-                        srm2[i] = other._str_reverse_map[cur_loc2]
-                final_locs = list(range(len(cur_locs1)))
-
-            return data1, data2, final_locs, srm1, srm2
-
-        def calculate_string_arrays(data1, data2, srm1, srm2):
-            # TODO: multiply string by number dataframe. very rare occurrence
-            print(srm1, srm2)
-            print(data1, data2)
-            if data1.shape == data2.shape:
-                if data1.ndim == 1:
-                    func: Callable = stat.funcs_str1[op_string]
-                else:
-                    print('here')
-                    func: Callable = stat.funcs_str2[op_string]
-            elif other.shape[0] == 1:
-                func = stat.funcs_str2_1row_right[op_string]
-                data2 = data2[0]
-            elif self.shape[0] == 1:
-                func = stat.funcs_str2_1row_left[op_string]
-                data1 = data1[0]
-            return func(data1, data2, srm1, srm2)
-
-        def set_data_and_info(dtype1, dtype2, locs1, locs2):
-            str_map, str_reverse_map = {}, {}
-            data1, data2, cur_locs1, srm1, srm2 = get_cur_arr(dtype1, dtype2, locs1, locs2)
-            if dtype1 == 'S':
-                arr_new, str_map, str_reverse_map = calculate_string_arrays(data1, data2, srm1, srm2)
-                new_dtype: str = 'S'
-            else:
-                arr_new = getattr(data1, op_string)(data2)
-                new_dtype = arr_new.dtype.kind
-
-            cur_len: int = utils.get_num_cols(data_dict.get(new_dtype, []))
-            data_dict[new_dtype].append(arr_new)
-            info: Iterable = zip(cols1[dtype1], cur_locs1, ords1[dtype1])
-            for col, loc, order in info:  # type: str, int, int
-                new_column_info[col] = utils.Column(new_dtype, loc + cur_len, order)
-            return str_map, str_reverse_map
-
-        def calculate_column_wise(col1, col2, col3):
-            arr1 = self._get_column_values(col1)
-            arr2 = other._get_column_values(col2)
-            arr_new = getattr(arr1, op_string)(arr2)
-            if arr_new.ndim == 1:
-                arr_new = arr_new[:, np.newaxis]
-            new_kind = arr_new.dtype.kind
-            cur_len = len(data_dict[new_kind])
-            data_dict[new_kind].append(arr_new)
-            new_column_info[col3] = utils.Column(new_kind, cur_len, i)
-
-        data_dict: DictListArr = defaultdict(list)
-        new_column_info: ColInfoT = {}
-
-        col_info = self._get_both_column_info(other)
-        kinds1, kinds2 = col_info[:2]  # type: List[str], List[str]
-        locs1, locs2 = col_info[2:4]  # type: Dict[str, List[int]], Dict[str, List[int]]
-        ords1, ords2 = col_info[4:6]  # type: Dict[str, List[int]], Dict[str, List[int]]
-        cols1, cols2 = col_info[6:]  # type: Dict[str, List[int]], Dict[str, List[int]]
-
-        shapes_equal = self.shape == other.shape
-        columns_equal = self.shape[1] == other.shape[1]
-        rows_equal = self.shape[0] == other.shape[0]
-        one_row = self.shape[0] == 1 or other.shape[0] == 1
-
-        if shapes_equal or (columns_equal and one_row):
-            new_columns: ndarray = self._columns.copy()
-            if kinds1 == kinds2:
-                # fast path for similar data frames
-                for kind1 in set(kinds1):
-                    str_map, str_reverse_map = set_data_and_info(kind1, kind1, locs1, locs2)
-            elif utils.check_compatible_kinds(kinds1, kinds2, [False] * len(kinds1)):
-                # fast path for single dtype frames
-                if len(set(kinds1)) == 1 and len(set(kinds2)) == 1:
-                    str_map, str_reverse_map = set_data_and_info(kinds1[0], kinds2[0], locs1, locs2)
-                else:
-                    for i, (col1, col2) in enumerate(zip(self._columns, other._columns)):
-                        calculate_column_wise(col1, col2, col1)
-            else:
-                # Incompatible - a detailed error message is produced
-                for i, (kind1, kind2) in enumerate(zip(kinds1, kinds2)):
-                    if kind1 == 'S' and kind1 != 'S':
-                        break
-                    if kind1 in 'ifb' and kind2 not in 'ifb':
-                        break
-                raise ValueError(f'Column {self._columns[i]} has an incompatible type '
-                                 f'with column {other._columns[i]}')
-        elif rows_equal and (self.shape[1] == 1 or other.shape[1] == 1):
-            if self.shape[1] > other.shape[1]:
-                last_col = other._columns[0]
-                new_columns = self._columns.copy()
-            else:
-                last_col = self._columns[0]
-                new_columns = other._columns.copy()
-            zipper = zip_longest(self._columns, other._columns, new_columns, fillvalue=last_col)
-            for i, (col1, col2, col3) in enumerate(zipper):
-                calculate_column_wise(col1, col2, col3)
-        else:
-            if rows_equal:
-                raise ValueError('Both DataFrames have the same number of rows but a '
-                                 'different number of columns. To make this operation work, '
-                                 'both DataFrames need the same shape or have one axis the '
-                                 'same and the other length of 1.')
-            if columns_equal:
-                raise ValueError('Both DataFrames have the same number of columns but a '
-                                 'different number of rows. To make this operation work, '
-                                 'both DataFrames need the same shape or have one axis the '
-                                 'same and the other length of 1.')
-            raise ValueError('Both DataFrames have a different number of rows and columns. '
-                             'To make this operation work, '
-                             'both DataFrames need the same shape or have one axis the '
-                             'same and the other length of 1.')
-        new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
-        return self._construct_from_new(new_data, new_column_info, new_columns, str_map, str_reverse_map)
+        op = OP_2D(self, other, op_string)
+        return op.operate()
 
     def _op_array(self, other: Any, op_string: str) -> 'DataFrame':
         if other.ndim == 1:
@@ -1147,7 +958,7 @@ class DataFrame(object):
 
     def _op(self, other: Any, op_string: str) -> 'DataFrame':
         if utils.is_scalar(other):
-            return self._op_scalar(other, op_string)
+            return self._op_scalar_eval(other, op_string)
         elif isinstance(other, DataFrame):
             return self._op_df(other, op_string)
         elif isinstance(other, ndarray):

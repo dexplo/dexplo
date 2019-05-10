@@ -1,5 +1,5 @@
 import decimal
-from typing import List, Dict, Set, Any, Optional, Union, Tuple
+from typing import List, Dict, Set, Any, Union, Tuple
 import numpy as np
 from numpy import ndarray
 from ._libs import validate_arrays as va
@@ -24,8 +24,8 @@ _DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'S',
            'timedelta64[D]': 'timedelta64[D]', 'timedelta64[W]': 'timedelta64[W]',
            'timedelta64[M]': 'timedelta64[M]', 'timedelta64[Y]': 'timedelta64[Y]'
            }
-_KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'S': 'S',
-            'M': 'datetime64[ns]', 'm': 'timedelta64[ns]' }
+_KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'S': 'uint32',
+            'M': 'datetime64[ns]', 'm': 'timedelta64[ns]'}
 _NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'S': 'S', 'U': 'U'}
 
 _AXIS = {'rows': 0, 'columns': 1}
@@ -35,6 +35,9 @@ _COLUMN_STACK_FUNCS = {'cumsum', 'cummin', 'cummax', 'mean', 'median', 'var', 's
 
 _SPECIAL_METHODS = {'__sub__': 'subtraction', '__mul__': 'multiplication',
                     '__pow__': 'exponentiation', '__rsub__': '(right) subtraction'}
+
+# make full mapping from special method to common name for better error messages?
+#_OPERATION_NAMES = {'__add__': 'add'}
 
 ColumnSelection = Union[int, str, slice, List[Union[str, int]]]
 RowSelection = Union[int, slice, List[int], 'DataFrame']
@@ -451,14 +454,42 @@ def swap_axis_name(axis: str) -> str:
     raise ValueError('axis must be either "rows" or "columns"')
 
 
+def create_empty_arrs(data_dict):
+    empty_arrs = {}
+    for dtype, list_arrs in data_dict.items():
+        nc = 0
+        for arr in list_arrs:
+            if arr.ndim == 1:
+                nc += 1
+            else:
+                nc += arr.shape[1]
+        nr = len(list_arrs[0])
+        if nc > 1:
+            empty_arrs[dtype] = np.empty((nr, nc), _KIND_NP[dtype], 'F')
+    return empty_arrs
+
+
 def concat_stat_arrays(data_dict: Dict[str, List[ndarray]]) -> Dict[str, ndarray]:
     new_data: Dict[str, ndarray] = {}
+    empty_arrs = create_empty_arrs(data_dict)
     for dtype, arrs in data_dict.items():
         if len(arrs) == 1:
-            new_data[dtype] = np.asfortranarray(arrs[0])
+            arr = arrs[0]
+            if arr.ndim == 1:
+                arr = arr.reshape(-1, 1)
+            new_data[dtype] = np.asfortranarray(arr)
         else:
-            arrs = np.column_stack(arrs)
-            new_data[dtype] = np.asfortranarray(arrs)
+            data = empty_arrs[dtype]
+            i = 0
+            for arr in arrs:
+                if arr.ndim == 1:
+                    data[:, i] = arr
+                    i += 1
+                else:
+                    for j in range(arr.shape[1]):
+                        data[:, i] = arr[:, j]
+                        i += 1
+            new_data[dtype] = data
     return new_data
 
 
