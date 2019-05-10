@@ -4,7 +4,6 @@ import numpy as np
 from numpy import ndarray
 
 from ._libs import math as m
-from ._libs import math_oper_string as mos
 from . import _math_columns as mc
 from . import _date_funcs as df
 
@@ -128,6 +127,3 @@ funcs_columns = {'sum': mc.sum_columns,
                  'any': mc.any_columns,
                  'all': mc.all_columns,
                  'count': mc.count_columns}
-
-def still_string(name):
-    return name in {'__add__', '__radd__', '__mul__', '__rmul__'}
