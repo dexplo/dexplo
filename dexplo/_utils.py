@@ -9,6 +9,8 @@ _DT = {'i': 'int', 'f': 'float', 'b': 'bool', 'S': 'str',
 _DT_GENERIC = {'i': 'int', 'f': 'float', 'b': 'bool', 'S': 'str', 'M': 'date', 'm': 'date'}
 _DT_FUNC_NAME = {'i': 'int', 'f': 'float', 'b': 'bool', 'S': 'str',
                  'M': 'datetime', 'm': 'timedelta'}
+_DT_STAT_FUNC_NAME = {'i': 'int', 'f': 'float', 'b': 'bool', 'S': 'str', 'M': 'date', 'm': 'date'}
+
 _KIND = {'int': 'i', 'float': 'f', 'bool': 'b', 'str': 'S'}
 _KIND_LIST = {'int': ['i'], 'float': ['f'], 'bool': ['b'], 'str': ['S'], 'number': ['i', 'f'],
               'datetime': ['M'], 'timedelta': ['m']}
@@ -36,8 +38,13 @@ _COLUMN_STACK_FUNCS = {'cumsum', 'cummin', 'cummax', 'mean', 'median', 'var', 's
 _SPECIAL_METHODS = {'__sub__': 'subtraction', '__mul__': 'multiplication',
                     '__pow__': 'exponentiation', '__rsub__': '(right) subtraction'}
 
+_SPECIAL_OPS = {'__add__': '+', '__radd__': '+', '__mul__': '*', '__rmul__': '*', '__sub__': '-',
+                '__rsub__': '-', '__truediv__': '/', '__rtruediv__': '/', '__floordiv__': '//',
+                '__rfloordiv__': '//', '__pow__': '**', '__rpow__': '**', '__mod__': '%',
+                '__rmod__': '%', '__gt__': '>', '__ge__': '>=', '__lt__': '<', '__le__': '<=',
+                '__eq__': '==', '__ne__': '!=', '__neg__': '-'}
+
 # make full mapping from special method to common name for better error messages?
-#_OPERATION_NAMES = {'__add__': 'add'}
 
 ColumnSelection = Union[int, str, slice, List[Union[str, int]]]
 RowSelection = Union[int, slice, List[int], 'DataFrame']
@@ -72,7 +79,9 @@ def get_num_cols(arrs: List[ndarray]) -> int:
     return col_length
 
 
-def get_decimal_len(num: float) -> int:
+def get_decimal_len(num: Union[float, str]) -> int:
+    if isinstance(num, str):
+        return 0
     if not np.isfinite(num):
         return 0
     return abs(decimal.Decimal(str(num)).as_tuple().exponent)
@@ -349,6 +358,11 @@ def convert_numpy_to_kind(dtype: str) -> str:
 
 def convert_dtype_to_func_name(dtype: str) -> str:
     return _DT_FUNC_NAME[dtype]
+
+
+def get_stat_func_name(name: str, dtype: str) -> str:
+    dtype_name: str = _DT_STAT_FUNC_NAME[dtype]
+    return f'{name}_{dtype_name}'
 
 
 def get_kind_from_scalar(s: Any) -> str:

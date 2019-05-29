@@ -4,9 +4,9 @@ from ._libs import math_oper_string as mos
 
 
 class OP_2D:
-    '''
+    """
     Arithmetic and comparison operations with a DataFrame and another DataFrame/Array
-    '''
+    """
 
     def __init__(self, left, right, string_op):
         self.left = left
@@ -34,7 +34,7 @@ class OP_2D:
     def operate(self):
         new_column_info = {}
         data_dict = defaultdict(list)
-        str_map, str_reverse_map = {}, {}
+        str_reverse_map = {}
         if self.shapes_equal:
             for i, (col1, col2) in enumerate(zip(self.left._columns, self.right._columns)):
                 dtype1, loc1, order1 = self.left._column_info[col1].values
@@ -54,15 +54,42 @@ class OP_2D:
                     srm1 = self.left._str_reverse_map[loc1]
                     srm2 = self.right._str_reverse_map[loc2]
                     func = getattr(mos, f'str{self.string_op}arr')
-                    arr_final, cur_str_map, cur_str_reverse_map = func(arr1, arr2, srm1, srm2)
-                    new_kind = 'S'
+                    cur_str_reverse_map, arr_final, new_kind = func(arr1, arr2, srm1, srm2)
                     loc = len(data_dict[new_kind])
-                    str_map[loc] = cur_str_map
+                    str_reverse_map[loc] = cur_str_reverse_map
+                elif dtype1 == 'S' and dtype2 == 'i':
+                    # should only work for multiplication
+                    srm1 = self.left._str_reverse_map[loc1]
+                    srm2 = []
+                    func = getattr(mos, f'str{self.string_op}arr')
+                    try:
+                        cur_str_reverse_map, arr_final, new_kind = func(arr1, arr2, srm1, srm2)
+                    except:
+                        op_name = utils._SPECIAL_OPS[self.string_op]
+                        raise TypeError(f'Cannot perform {op_name} operation '
+                                        'with string and integer columns')
+                    loc = len(data_dict[new_kind])
+                    str_reverse_map[loc] = cur_str_reverse_map
+                elif dtype1 == 'i' and dtype2 == 'S':
+                    # should only work for multiplication
+                    srm1 = []
+                    srm2 = self.right._str_reverse_map[loc2]
+                    func = getattr(mos, f'str{self.string_op}arr')
+                    try:
+                        cur_str_reverse_map, arr_final, new_kind = func(arr2, arr1, srm2, srm1)
+                    except:
+                        op_name = utils._SPECIAL_OPS[self.string_op]
+                        raise TypeError(f'Cannot perform {op_name} operation '
+                                        'with string and integer columns')
+                    loc = len(data_dict[new_kind])
                     str_reverse_map[loc] = cur_str_reverse_map
 
                 new_column_info[col1] = utils.Column(new_kind, loc, i)
                 data_dict[new_kind].append(arr_final)
+        else:
+            raise NotImplementedError('Cannot operate on dataframes with different '
+                                      'number of columns yet')
 
         new_data = utils.concat_stat_arrays(data_dict)
         new_columns = self.left._columns.copy()
-        return self.left._construct_from_new(new_data, new_column_info, new_columns, str_map, str_reverse_map)
+        return self.left._construct_from_new(new_data, new_column_info, new_columns, str_reverse_map)

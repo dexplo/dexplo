@@ -133,7 +133,7 @@ def data_from_dict(data: DataC) -> None:
 
     str_reverse_map = {k: list(v.keys()) for k, v in str_map.items()}
 
-    return concat_arrays(data_dict), column_info, str_map, str_reverse_map
+    return concat_arrays(data_dict), column_info, str_reverse_map
 
 
 def data_from_array(data: ndarray, columns: ndarray) -> Tuple:
@@ -177,7 +177,7 @@ def data_from_typed_array(data: ndarray, columns: ndarray) -> Tuple:
     new_data = {kind: np.asfortranarray(data)}
     column_info: ColInfoT = {col: utils.Column(kind, i, i) for i, col in enumerate(columns)}
     str_reverse_map = {k: list(v.keys()) for k, v in str_map.items()}
-    return new_data, column_info, str_map, str_reverse_map
+    return new_data, column_info, str_reverse_map
 
 
 def data_from_object_array(data: ndarray, columns: ndarray) -> Tuple:
@@ -211,7 +211,7 @@ def data_from_object_array(data: ndarray, columns: ndarray) -> Tuple:
         column_info[col] = utils.Column(kind, loc, i)
 
     str_reverse_map = {k: list(v.keys()) for k, v in str_map.items()}
-    return concat_arrays(data_dict), column_info, str_map, str_reverse_map
+    return concat_arrays(data_dict), column_info, str_reverse_map
 
 
 def concat_arrays(data_dict: DictListArr) -> Dict[str, ndarray]:

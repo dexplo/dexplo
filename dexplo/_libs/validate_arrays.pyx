@@ -170,7 +170,7 @@ def convert_str_to_cat_list_2d(list arrs):
             arr_map[i, j] = d.setdefault(arr[i], len(d))
     for k, v in str_map.items():
         str_reverse_map[k] = list(v.keys())
-    return arr_map, str_map, str_reverse_map
+    return arr_map, str_reverse_map
 
 
 # def convert_datetime_array(ndarray[object] arr, column):
@@ -340,3 +340,26 @@ def make_object_str_array(list cur_list_map, ndarray[object, ndim=2] a,
 
     for i in range(nr):
         a[i, j] = cur_list_map[data[i]]
+
+def bool_selection_str_mapping(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map):
+    cdef Py_ssize_t i, j
+    cdef int nr = a.shape[0], nc = a.shape[1], cur_code, new_val
+    cdef list cur_srm, new_srm
+    cdef ndarray[np.uint32_t] new_code
+    cdef ndarray[np.uint32_t, ndim=2] b = np.empty((nr, nc), 'uint32', 'F')
+    cdef dict new_str_reverse_map = {}
+
+    for i in range(nc):
+        cur_srm = str_reverse_map[i]
+        new_code = np.full(len(cur_srm), 0, 'uint32')
+        new_srm = [False]
+        new_str_reverse_map[i] = new_srm
+        for j in range(nr):
+            cur_code = a[j, i]
+            new_val = new_code[cur_code]
+            if new_val == 0:
+                new_val = len(new_srm)
+                new_code[cur_code] = new_val
+                new_srm.append(cur_srm[cur_code])
+            b[j, i] = new_val
+    return new_str_reverse_map, b

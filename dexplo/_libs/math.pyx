@@ -1,5 +1,5 @@
-#cython: boundscheck=False
-#cython: wraparound=False
+#asdfcython: boundscheck=False
+#asfdcython: wraparound=False
 import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
@@ -17,14 +17,11 @@ except ImportError:
     import numpy as bn
 
 
-MAX_FLOAT = np.finfo(np.float64).max
-MIN_FLOAT = np.finfo(np.float64).min
+cdef np.float64_t MAX_FLOAT = np.finfo(np.float64).max
+cdef np.float64_t MIN_FLOAT = np.finfo(np.float64).min
 
-MAX_INT = np.iinfo(np.int64).max
-MIN_INT = np.iinfo(np.int64).min
-
-MAX_CHAR = chr(1_000_000)
-MIN_CHAR = chr(0)
+cdef np.int64_t MAX_INT = np.iinfo(np.int64).max
+cdef np.int64_t MIN_INT = np.iinfo(np.int64).min
 
 def min_max_int(ndarray[np.int64_t] a):
     cdef int i, n = len(a)
@@ -73,47 +70,39 @@ def min_max_int2(ndarray[np.int64_t, ndim=2] a, axis):
     return lows, highs
 
 
-def nunique_str(ndarray[object, ndim=2] a, axis, count_na=False, **kwargs):
-    cdef int i, j, ct_nan
-    cdef int nr = a.shape[0]
-    cdef int nc = a.shape[1]
+def nunique_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map,
+                axis, count_na, hasnans, **kwargs):
+    cdef Py_ssize_t i, j
+    cdef ct_nan, nr, nc
     cdef set s
     cdef ndarray[np.int64_t] result
+    cdef dict cur_srm
+    cdef np.uint32_t cur_num
+    cdef bint has_missing
 
     if axis == 0:
+        nc = len(str_reverse_map)
         result = np.empty(nc, dtype='int64')
         for i in range(nc):
-            s = set()
-            for j in range(nr):
-                s.add(a[j, i])
-            if None in s:
-                if count_na:
-                    result[i] = len(s)
-                else:
-                    result[i] = len(s) - 1
-            else:
-                result[i] = len(s)
-
+            result[i] = len(str_reverse_map[i])
+            if hasnans[i] and not count_na:
+                result[i] -= 1
     if axis == 1:
-        result = np.empty(nr, dtype='int64')
-        if count_na:
-            for i in range(nr):
-                s = set()
-                ct_nan = 0
-                for j in range(nc):
-                    if (isinstance(a[i, j], (float, np.floating)) and np.isnan(a[i, j])) or a[i, j] is None:
-                        ct_nan = 1
-                    else:
-                        s.add(a[i, j])
-                result[i] = len(s) + ct_nan
-        else:
-            for i in range(nr):
-                s = set()
-                for j in range(nc):
-                    if not(isinstance(a[i, j], (float, np.floating)) and np.isnan(a[i, j])) and a[i, j] is not None:
-                        s.add(a[i, j])
-                result[i] = len(s)
-
+        nr = a.shape[0]
+        nc = a.shape[1]
+        result = np.empty(nr, 'int64', 'F')
+        for i in range(nr):
+            s = set()
+            has_missing = False
+            for j in range(nc):
+                cur_num = a[i, j]
+                if cur_num == 0:
+                    has_missing = True
+                else:
+                    s.add(str_reverse_map[j][cur_num])
+            result[j] = len(s)
+            if count_na and has_missing:
+                result[j] += 1
     return result
 
 def nunique_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
@@ -313,7 +302,7 @@ def sum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, **kwargs):
     if axis == 0:
         total = np.zeros(nc, dtype=np.float64)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] == True:
+            if hasnans[i] is None or hasnans[i]:
                 for j in range(nr):
                     if not isnan(arr[i * nr + j]):
                         total[i] += arr[i * nr + j]
@@ -324,7 +313,7 @@ def sum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, **kwargs):
     else:
         total = np.zeros(nr, dtype=np.float64)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] == True:
+            if hasnans[i] is None or hasnans[i]:
                 for j in range(nr):
                     if not isnan(arr[i * nr + j]):
                         total[j] += arr[i * nr + j]
@@ -333,42 +322,62 @@ def sum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, **kwargs):
                     total[j] += arr[i * nr + j]
     return total
 
-def sum_str(ndarray[object, ndim=2] a, axis, hasnans):
-    cdef int i, j
-    cdef int nc = a.shape[1]
-    cdef int nr = a.shape[0]
-    cdef ndarray[object] total
-    cdef int ct
+def sum_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, axis, hasnans):
+    cdef Py_ssize_t i, j
+    cdef np.uint32_t nc = a.shape[1]
+    cdef np.uint32_t nr = a.shape[0]
+    cdef np.uint32_t ct, cur_num
+    cdef dict new_str_reverse_map = {}
+    cdef ndarray[np.uint32_t] arr
+    cdef list cur_srm
+    cdef str cur_val
+    cdef bint has_one_string
 
     if axis == 0:
-        total = np.zeros(nc, dtype='U').astype('O')
+        arr = np.ones(nc, 'uint32', 'F')
         for i in range(nc):
-            ct = 0
-            if hasnans[i] is None or hasnans[i] == True:
+            cur_srm = str_reverse_map[i]
+            cur_total = ''
+            if hasnans[i] is None or hasnans[i]:
+                has_one_string = False
                 for j in range(nr):
-                    if a[j, i] is not None:
-                        total[i] = total[i] + a[j, i]
-                        ct += 1
-                if ct == 0:
-                    total[i] = None
+                    cur_num = a[j, i]
+                    if cur_num != 0:
+                        cur_val = cur_srm[cur_num]
+                        cur_total += cur_val
+                        has_one_string = True
+                if has_one_string:
+                    new_str_reverse_map[i] = [False, cur_total]
+                else:
+                    new_str_reverse_map[i] = [False]
             else:
                 for j in range(nr):
-                    total[i] = total[i] + a[j, i]
+                    cur_total += cur_srm[a[j, i]]
+                new_str_reverse_map[i] = [cur_total]
     else:
-        total = np.zeros(nr, dtype='U').astype('O')
-        for i in range(nc):
+        arr = np.ones(nr, 'uint32', 'F')
+        cur_sm = {False: 0}
+        cur_srm = [False]
+        for i in range(nr):
             ct = 0
-            if hasnans[i] is None or hasnans[i] == True:
-                for j in range(nr):
-                    if a[j, i] is not None:
-                        total[j] = total[j] + a[j, i]
-                        ct += 1
-                if ct == 0:
-                    total[i] = None
+            cur_total = ''
+            has_one_string = False
+            for j in range(nc):
+                cur_num = a[i, j]
+                if cur_num != 0:
+                    cur_val = str_reverse_map[cur_num]
+                    cur_total += cur_val
+                    has_one_string = True
+            if has_one_string:
+                if cur_total in cur_sm:
+                    arr[i] = cur_sm[cur_total]
+                else:
+                    arr[i] = len(cur_sm)
+                    cur_sm[cur_total] = len(cur_sm)
+                    cur_srm.append(cur_total)
             else:
-                for j in range(nr):
-                    total[j] = total[j] + a[j, i]
-    return total
+                arr[i] = 0
+    return arr, new_str_reverse_map
 
 def mode_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans, keep):
     cdef int i, j, order, low, high, last
@@ -700,7 +709,7 @@ def max_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     if axis == 0:
         amax = np.full(nc, nan, dtype=np.float64)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] == True:
+            if hasnans[i] is None or hasnans[i]:
                 k = 0
                 while isnan(arr[i * nr + k]) and k < nr - 1:
                     k += 1
@@ -743,7 +752,7 @@ def min_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     if axis == 0:
         amin = np.full(nc, nan, dtype=np.float64)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] == True:
+            if hasnans[i] is None or hasnans[i]:
                 k = 0
                 while isnan(arr[i * nr + k]) and k < nr - 1:
                     k += 1
@@ -776,89 +785,117 @@ def min_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                         amin[i] = arr[j * nr + i]
     return amin
 
-def max_str(ndarray[object, ndim=2] a, axis, hasnans):
+def max_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, axis, hasnans, **kwargs):
     cdef int i, j, k
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef ndarray[object] amax
+    cdef int num_vals, cur_code
+    cdef list cur_srm
+    cdef str cur_max_min, cur_val
+    cdef dict new_str_reverse_map = {}, cur_sm = {}
+    cdef ndarray[np.uint32_t, ndim=2] codes
+    cdef bint has_one_string
 
     if axis == 0:
-        amax = np.full(nc, None, dtype='O')
+        codes = np.ones((1, nc), dtype='uint32', order='F')
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] == True:
-                k = 0
-                while a[k, i] is None and k < nr:
-                    k += 1
-                amax[i] = a[k, i]
-                for j in range(k, nr):
-                    if a[j, i] is not None:
-                        if a[j, i] > amax[i]:
-                            amax[i] = a[j, i]
+            cur_srm = str_reverse_map[i]
+            num_vals = len(cur_srm)
+            if num_vals == 1:
+                new_str_reverse_map[i] = [False]
+                codes[0, i] = 0
+                continue
             else:
-                amax[i] = a[0, i]
-                for j in range(nr):
-                    if a[j, i] > amax[i]:
-                        amax[i] = a[j, i]
+                cur_max_min = cur_srm[1]
+                for j in range(2, num_vals):
+                    cur_val = cur_srm[j]
+                    if cur_val > cur_max_min:
+                        cur_max_min = cur_val
+            new_str_reverse_map[i] = [False, cur_max_min]
     else:
-        amax = np.full(nr, None, dtype='O')
-        if hasnans.sum() > 0:
-            for i in range(nr):
-                k = 0
-                while a[i, k] is None and k < nc:
-                    k += 1
-                amax[i] = a[i, k]
-                for j in range(k, nc):
-                    if not a[i, j] is None:
-                        if a[i, j]  > amax[i]:
-                            amax[i] = a[i, j] 
-        else:
-            for i in range(nr):
-                for j in range(nc):
-                    if a[i, j]  > amax[i]:
-                        amax[i] = a[i, j]
-    return amax
+        codes = np.zeros((nr, 1), dtype='uint32', order='F')
+        cur_srm = [False]
+        cur_sm = {False: 0}
 
-def min_str(ndarray[object, ndim=2] a, axis, hasnans):
+        for i in range(nr):
+            has_one_string = False
+            for j in range(nc):
+                cur_code = a[i, j]
+                if cur_code != 0:
+                    cur_max_min = str_reverse_map[j][cur_code]
+                    has_one_string = True
+                    break
+            for k in range(j, nc):
+                cur_code = a[i, k]
+                if cur_code != 0:
+                    cur_val = str_reverse_map[k][cur_code]
+                    if cur_val > cur_max_min:
+                        cur_max_min = cur_val
+            if has_one_string:
+                if cur_max_min in cur_sm:
+                    codes[i, 1] = cur_sm[cur_max_min]
+                else:
+                    codes[i, 1] = len(cur_sm)
+                    cur_sm[cur_max_min] = len(cur_sm)
+                    cur_srm.append(cur_max_min)
+        new_str_reverse_map[0] = cur_srm
+    return codes, new_str_reverse_map
+
+def min_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, axis, hasnans, **kwargs):
     cdef int i, j, k
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef ndarray[object] amin
+    cdef int num_vals, cur_code
+    cdef list cur_srm
+    cdef str cur_max_min, cur_val
+    cdef dict new_str_reverse_map = {}, cur_sm = {}
+    cdef ndarray[np.uint32_t, ndim=2] codes
+    cdef bint has_one_string
 
     if axis == 0:
-        amin = np.full(nc, nan, dtype='O')
+        codes = np.ones((1, nc), dtype='uint32', order='F')
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] == True:
-                k = 0
-                while a[k, i] is None and k < nr:
-                    k += 1
-                amin[i] = a[k, i]
-                for j in range(k, nr):
-                    if not a[j, i] is None:
-                        if a[j, i] < amin[i]:
-                            amin[i] = a[j, i]
+            cur_srm = str_reverse_map[i]
+            num_vals = len(cur_srm)
+            if num_vals == 1:
+                new_str_reverse_map[i] = [False]
+                codes[0, i] = 0
+                continue
             else:
-                amin[i] = a[0, i]
-                for j in range(nr):
-                    if a[j, i] < amin[i]:
-                        amin[i] = a[j, i]
+                cur_max_min = cur_srm[1]
+                for j in range(2, num_vals):
+                    cur_val = cur_srm[j]
+                    if cur_val < cur_max_min:
+                        cur_max_min = cur_val
+            new_str_reverse_map[i] = [False, cur_max_min]
     else:
-        amin = np.full(nr, nan, dtype='O')
-        if hasnans.sum() > 0:
-            for i in range(nr):
-                k = 0
-                while a[i, k] is None and k < nc:
-                    k += 1
-                amin[i] = a[i, k]
-                for j in range(k, nc):
-                    if not a[i, j] is None:
-                        if a[i, j] < amin[i]:
-                            amin[i] = a[i, j]
-        else:
-            for i in range(nr):
-                for j in range(nc):
-                    if a[i, j] < amin[i]:
-                        amin[i] = a[i, j]
-    return amin
+        codes = np.zeros((nr, 1), dtype='uint32', order='F')
+        cur_srm = [False]
+        cur_sm = {False: 0}
+
+        for i in range(nr):
+            has_one_string = False
+            for j in range(nc):
+                cur_code = a[i, j]
+                if cur_code != 0:
+                    cur_max_min = str_reverse_map[j][cur_code]
+                    has_one_string = True
+                    break
+            for k in range(j, nc):
+                cur_code = a[i, k]
+                if cur_code != 0:
+                    cur_val = str_reverse_map[k][cur_code]
+                    if cur_val < cur_max_min:
+                        cur_max_min = cur_val
+            if has_one_string:
+                if cur_max_min in cur_sm:
+                    codes[i, 1] = cur_sm[cur_max_min]
+                else:
+                    codes[i, 1] = len(cur_sm)
+                    cur_sm[cur_max_min] = len(cur_sm)
+                    cur_srm.append(cur_max_min)
+        new_str_reverse_map[0] = cur_srm
+    return codes, new_str_reverse_map
 
 def mean_int(ndarray[np.int64_t, ndim=2] a, axis, **kwargs):
     cdef long *arr = <long*> a.data
@@ -913,7 +950,7 @@ def mean_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     if axis == 0:
         total = np.zeros(nc, dtype=np.float64)
         for i in range(nc):
-            if hasnans[i] is None or hasnans[i] == True:
+            if hasnans[i] is None or hasnans[i]:
                 ct = 0
                 for j in range(nr):
                     if not isnan(arr[i * nr + j]):
@@ -1005,45 +1042,6 @@ def median_float_1d(ndarray[np.float64_t] a, hasnans):
     if hasnans.any():
         return bn.nanmedian(a)
     return bn.median(a)
-
-# def median_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
-#     cdef:
-#         Py_ssize_t i, nr = a.shape[0], nc = a.shape[1]
-#         long xlen
-#         np.float64_t first, second
-#         ndarray[np.float64_t] result, x
-#
-#     if axis == 0:
-#         result = np.empty(nc, dtype='float64')
-#     else:
-#         result = np.empty(nr, dtype='float64')
-#
-#     if axis == 0:
-#         if hasnans.any():
-#             for i in range(nc):
-#                 x = a[:, i]
-#                 x = x[~np.isnan(x)]
-#                 xlen = len(x)
-#                 if xlen % 2 == 1:
-#                     result[i] = quick_select_float2(x, xlen, xlen // 2)
-#                 else:
-#                     first = quick_select_float2(x, xlen, xlen // 2 - 1)
-#                     second = quick_select_float2(x, xlen, xlen // 2)
-#                     result[i] = (first + second) / 2
-#         else:
-#             if nr % 2 == 1:
-#                 for i in range(nc):
-#                     x = a[:, i]
-#                     result[i] = quick_select_float2(x, nr, nr // 2)
-#             else:
-#                 for i in range(nc):
-#                     x = a[:, i]
-#                     first = quick_select_float2(x, nr, nr // 2 - 1)
-#                     second = quick_select_float2(x, nr, nr // 2)
-#                     result[i] = (first + second) / 2
-#         return result
-#     else:
-#         return bn.nanmedian(a, axis=1)
 
 def var_float(ndarray[double, ndim=2] a, axis, int ddof, hasnans):
 
@@ -1264,30 +1262,35 @@ def any_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                     break
     return result
 
-def any_str(ndarray[object, ndim=2] a, axis, hasnans):
-    cdef int i, j
+def any_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map,
+            axis, hasnans, **kwargs):
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
+    cdef int num_vals
+    cdef list cur_srm
     cdef ndarray[np.uint8_t, cast=True] result
 
     if axis == 0:
         result = np.full(nc, False, dtype='bool')
         for i in range(nc):
-            for j in range(nr):
-                if a[j, i] != '' and a[j, i] is not None:
+            cur_srm = str_reverse_map[i]
+            num_vals = len(cur_srm)
+            for j in range(1, num_vals):
+                if cur_srm[j] != '':
                     result[i] = True
                     break
     else:
         result = np.full(nr, False, dtype='bool')
         for i in range(nr):
             for j in range(nc):
-                if a[i, j] != '' and a[i, j] is not None:
+                if a[i, j] != 0 and str_reverse_map[a[i, j]] != '':
                     result[i] = True
                     break
     return result
 
 def all_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
-    cdef int i, j
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.uint8_t, cast=True] result
@@ -1308,7 +1311,7 @@ def all_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
     return result
 
 def all_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, hasnans):
-    cdef int i, j
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.uint8_t, cast=True] result
@@ -1330,7 +1333,7 @@ def all_bool(ndarray[np.uint8_t, ndim=2, cast=True] a, axis, hasnans):
     return result
 
 def all_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
-    cdef int i, j
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.uint8_t, cast=True] result
@@ -1351,31 +1354,36 @@ def all_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
                     break
     return result
 
-def all_str(ndarray[object, ndim=2] a, axis, hasnans):
-    cdef int i, j
+def all_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map,
+            axis, hasnans, **kwargs):
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
+    cdef int num_vals
+    cdef list cur_srm
     cdef ndarray[np.uint8_t, cast=True] result
 
     if axis == 0:
         result = np.full(nc, True, dtype='bool')
         for i in range(nc):
-            for j in range(nr):
-                if a[j, i] == '' or a[j, i] is None:
+            cur_srm = str_reverse_map[i]
+            num_vals = len(cur_srm)
+            for j in range(1, num_vals):
+                if cur_srm[j] == '':
                     result[i] = False
                     break
     else:
         result = np.full(nr, True, dtype='bool')
         for i in range(nr):
             for j in range(nc):
-                if a[i, j] == '' or a[i, j] is None:
+                if a[i, j] == 0 or str_reverse_map[a[i, j]] == '':
                     result[i] = False
                     break
     return result
 
 def argmax_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
     cdef long *arr = <long*> a.data
-    cdef int i, j
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef long amax
@@ -1401,7 +1409,7 @@ def argmax_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
 
 def argmin_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
     cdef long *arr = <long*> a.data
-    cdef int i, j
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef long amin
@@ -1427,7 +1435,7 @@ def argmin_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
 
 def argmax_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, hasnans):
     cdef unsigned char *arr = <unsigned char*> a.data
-    cdef int i, j
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.int64_t] result
@@ -1450,7 +1458,7 @@ def argmax_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, hasnans):
 
 def argmin_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, hasnans):
     cdef unsigned char *arr = <unsigned char*> a.data
-    cdef int i, j
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef ndarray[np.int64_t] result
@@ -1473,7 +1481,7 @@ def argmin_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, hasnans):
 
 def argmax_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     cdef double *arr = <double*> a.data
-    cdef int i, j
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef long iloc = -1
@@ -1511,7 +1519,7 @@ def argmax_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
 
 def argmin_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     cdef double *arr = <double*> a.data
-    cdef int i, j
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
     cdef long iloc = -1
@@ -1547,90 +1555,76 @@ def argmin_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
         return result.astype('int64')
     return result
 
-def argmax_str(ndarray[object, ndim=2] a, axis, hasnans):
-    cdef int i, j
+def argmax_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, axis, hasnans, **kwargs):
+    cdef Py_ssize_t i, j
+    cdef int k
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef long iloc = -1
-    cdef str amax
-    cdef ndarray[np.float64_t] result
+    cdef int num_vals
+    cdef list cur_srm
+    cdef np.uint32_t max_code
+    cdef str cur_max_min
+    cdef ndarray[np.int64_t] result
 
     if axis == 0:
-        result = np.empty(nc, dtype=np.float64)
+        result = np.empty(nc, 'int64', 'F')
         for i in range(nc):
-            amax = MIN_CHAR
+            cur_srm = str_reverse_map[i]
+            num_vals = len(cur_srm)
+            if num_vals == 1:
+                result[i] = np.nan
+                continue
+            else:
+                cur_max_min = cur_srm[1]
+                max_code = 1
+                for j in range(2, num_vals):
+                    cur_val = cur_srm[j]
+                    if cur_val > cur_max_min:
+                        cur_max_min = cur_val
+                        max_code = j
             for j in range(nr):
-                try:
-                    if a[j, i] > amax:
-                        amax = a[j, i]
-                        iloc = j
-                except TypeError:
-                    pass
-            if amax == MIN_CHAR:
-                result[i] = nan
-            else:
-                result[i] = iloc
+                if max_code == a[j, i]:
+                    result[i] = j
+                    break
     else:
-        result = np.empty(nr, dtype=np.float64)
-        for i in range(nr):
-            amax = MIN_CHAR
-            for j in range(nc):
-                try:
-                    if a[i, j] > amax:
-                        amax = a[i, j]
-                        iloc = j
-                except TypeError:
-                    pass
-            if amax == MIN_CHAR:
-                result[i] = nan
-            else:
-                result[i] = iloc
+        pass
 
-    if (result % 1).sum() == 0:
-        return result.astype('int64')
     return result
 
-def argmin_str(ndarray[object, ndim=2] a, axis, hasnans):
-    cdef int i, j
+def argmin_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, axis, hasnans, **kwargs):
+    cdef Py_ssize_t i, j
+    cdef int k
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef long iloc = -1
-    cdef str amin
-    cdef ndarray[np.float64_t] result
+    cdef int num_vals
+    cdef list cur_srm
+    cdef np.uint32_t max_code
+    cdef str cur_max_min
+    cdef ndarray[np.int64_t] result
 
     if axis == 0:
-        result = np.empty(nc, dtype=np.float64)
+        result = np.empty(nc, 'int64', 'F')
         for i in range(nc):
-            amin = MAX_CHAR
+            cur_srm = str_reverse_map[i]
+            num_vals = len(cur_srm)
+            if num_vals == 1:
+                result[i] = np.nan
+                continue
+            else:
+                cur_max_min = cur_srm[1]
+                max_code = 1
+                for j in range(2, num_vals):
+                    cur_val = cur_srm[j]
+                    if cur_val < cur_max_min:
+                        cur_max_min = cur_val
+                        max_code = j
             for j in range(nr):
-                try:
-                    if a[j, i] < amin:
-                        amin = a[j, i]
-                        iloc = j
-                except TypeError:
-                    pass
-            if amin == MAX_CHAR:
-                result[i] = nan
-            else:
-                result[i] = iloc
+                if max_code == a[j, i]:
+                    result[i] = j
+                    break
     else:
-        result = np.empty(nr, dtype=np.float64)
-        for i in range(nr):
-            amin = MAX_CHAR
-            for j in range(nc):
-                try:
-                    if a[i, j] < amin:
-                        amin = a[i, j]
-                        iloc = j
-                except TypeError:
-                    pass
-            if amin == MAX_CHAR:
-                result[i] = nan
-            else:
-                result[i] = iloc
+        pass
 
-    if (result % 1).sum() == 0:
-        return result.astype('int64')
     return result
 
 def count_int(ndarray[np.int64_t, ndim=2] a, axis, hasnans):
@@ -1673,27 +1667,23 @@ def count_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
             result[i] = ct
     return result
             
-def count_str(ndarray[object, ndim=2] a, axis, hasnans):
-    cdef int i, j
-    cdef int nc = a.shape[1]
-    cdef int nr = a.shape[0]
-    cdef long ct
+def count_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, axis, hasnans, **kwargs):
+    cdef Py_ssize_t i, j
+    cdef int nc = a.shape[1], nr = a.shape[0], num_vals
+    cdef list cur_srm
     cdef ndarray[np.int64_t] result
 
     if axis == 0:
-        result = np.zeros(nc, dtype=np.int64)
+        result = np.full(nc, nr, dtype=np.int64)
         for i in range(nc):
-            ct = 0
-            for j in range(nr):
-                if a[j, i] is not None:
-                    ct += 1
-            result[i] = ct
+            if hasnans[i] is None or hasnans[i]:
+                result[i] = nr - (a[:, i] == 0).sum()
     else:
         result = np.zeros(nr, dtype=np.int64)
         for i in range(nr):
             ct = 0
             for j in range(nc):
-                if a[i, j] is not None:
+                if a[i, j] != 0:
                     ct += 1
             result[i] = ct
     return result
@@ -1932,9 +1922,9 @@ def cummin_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, hasnans):
             b = np.empty((nr, nc), dtype='bool')
             amin = True
             for j in range(nr):
-                if amin == False:
+                if not amin:
                     b[j, i] = False
-                elif arr[i * nr + j] == False:
+                elif not arr[i * nr + j]:
                     amin = False
                     b[j, i] = False
                 else:
@@ -1944,92 +1934,100 @@ def cummin_bool(ndarray[np.uint8_t, cast=True, ndim=2] a, axis, hasnans):
             b = np.empty((nr, nc), dtype='bool')
             amin = True
             for j in range(nc):
-                if amin == False:
+                if not amin:
                     b[i, j] = False
-                elif arr[j * nr + i] == False:
+                elif not arr[j * nr + i]:
                     amin = False
                     b[i, j] = False
                 else:
                     b[i, j] = True
     return b
 
-def cummax_str(ndarray[object, ndim=2] a, axis, hasnans):
-    cdef int i, j, ct
+def cummax_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, axis, hasnans, **kwargs):
+    cdef Py_ssize_t i, j
+    cdef int k, cur_code
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef str amax
-    cdef ndarray[object, ndim=2] b
+    cdef list cur_srm
+    cdef np.uint32_t cur_max_code
+    cdef str cur_max, cur_val
+    cdef dict new_str_reverse_map = {}
+    cdef list new_srm
+    cdef ndarray[np.uint32_t, ndim=2] result = np.empty((nr, nc), 'uint32', 'F')
 
     if axis == 0:
-        b = np.empty((nr, nc), dtype='O')
         for i in range(nc):
-            amax = ''
-            ct = 0
-            for j in range(nr):
-                if a[j, i] is None:
-                    if ct == 0:
-                        b[j, i] = None
-                    else:
-                        b[j, i] = amax 
-                else:
-                    ct = 1
-                    if a[j, i] > amax:
-                        amax = a[j, i]
-                    b[j, i] = amax
-    else:
-        b = np.empty((nr, nc), dtype='O')
-        for i in range(nr):
-            amax = ''
-            ct = 0
-            for j in range(nc):
-                if a[i, j] is None:
-                    if ct == 0:
-                        b[i, j] = None
-                    else:
-                        b[i, j] = amax 
-                else:
-                    ct = 1
-                    if a[i, j] > amax:
-                        amax = a[i, j]
-                    b[i, j] = amax
-    return b
+            cur_srm = str_reverse_map[i]
+            new_srm = [False]
+            if hasnans[i] is None or hasnans[i]:
+                cur_max_code = 0
+                k = 0
+                while k < nr and cur_max_code == 0:
+                    cur_code =  a[k, i]
+                    if cur_code != 0:
+                        cur_val = cur_srm[cur_code]
+                        new_srm.append(cur_val)
+                        cur_max = cur_val
+                        cur_max_code = 1
+                    result[k, i] = cur_max_code
+                    k += 1
 
-def cummin_str(ndarray[object, ndim=2] a, axis, hasnans):
-    cdef int i, j
+                for j in range(k, nr):
+                    cur_code = a[j, i]
+                    if cur_code != 0:
+                        cur_val = cur_srm[cur_code]
+                        if  cur_val > cur_max:
+                            cur_max = cur_val
+                            new_srm.append(cur_max)
+                            cur_max_code += 1
+                    result[j, i] = cur_max_code
+            new_str_reverse_map[i] = new_srm
+    else:
+        pass
+    return result, new_str_reverse_map
+
+def cummin_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, axis, hasnans, **kwargs):
+    cdef Py_ssize_t i, j
+    cdef int k, cur_code
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef str amin
-    cdef ndarray[object, ndim=2] b
+    cdef list cur_srm
+    cdef np.uint32_t cur_max_code
+    cdef str cur_max, cur_val
+    cdef dict new_str_reverse_map = {}
+    cdef list new_srm
+    cdef ndarray[np.uint32_t, ndim=2] result = np.empty((nr, nc), 'uint32', 'F')
 
     if axis == 0:
-        b = np.empty((nr, nc), dtype='O')
         for i in range(nc):
-            amin = MAX_CHAR
-            for j in range(nr):
-                if a[j, i] is None:
-                    if amin == MAX_CHAR:
-                        b[j, i] = None
-                    else:
-                        b[j, i] = amin 
-                else:
-                    if a[j, i] < amin:
-                        amin = a[j, i]
-                    b[j, i] = amin
+            cur_srm = str_reverse_map[i]
+            new_srm = [False]
+            if hasnans[i] is None or hasnans[i]:
+                cur_max_code = 0
+                k = 0
+                while k < nr and cur_max_code == 0:
+                    cur_code =  a[k, i]
+                    if cur_code != 0:
+                        cur_val = cur_srm[cur_code]
+                        new_srm.append(cur_val)
+                        cur_max = cur_val
+                        cur_max_code = 1
+                    result[k, i] = cur_max_code
+                    k += 1
+
+                for j in range(k, nr):
+                    cur_code = a[j, i]
+                    if cur_code != 0:
+                        cur_val = cur_srm[cur_code]
+                        if  cur_val < cur_max:
+                            cur_max = cur_val
+                            new_srm.append(cur_max)
+                            cur_max_code += 1
+                    result[j, i] = cur_max_code
+            new_str_reverse_map[i] = new_srm
     else:
-        b = np.empty((nr, nc), dtype='O')
-        for i in range(nr):
-            amin = MAX_CHAR
-            for j in range(nc):
-                if a[i, j] is None:
-                    if amin == MAX_CHAR:
-                        b[i, j] = None
-                    else:
-                        b[i, j] = amin 
-                else:
-                    if a[i, j] < amin:
-                        amin = a[i, j]
-                    b[i, j] = amin
-    return b
+        pass
+    return result, new_str_reverse_map
 
 def cumsum_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
     cdef np.float64_t *arr = <np.float64_t*> a.data
@@ -2099,48 +2097,54 @@ def cumsum_bool(ndarray[np.int8_t, ndim=2, cast=True] a, axis, hasnans):
                 total[i, j] = cur_total
     return total
 
-def cumsum_str(ndarray[object, ndim=2] a, axis, hasnans):
-    cdef int i, j, k
+def cumsum_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, axis, hasnans, **kwargs):
+    cdef Py_ssize_t i, j
+    cdef int ct, cur_code
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef str cur_total
-    cdef ndarray[object, ndim=2] total = np.full((nr, nc), nan, dtype='O')
+    cdef list cur_srm
+    cdef ndarray[np.uint32_t, ndim=2] result = np.empty((nr, nc), 'uint32', 'F')
+    cdef str cur_max, cur_val, total
+    cdef dict new_str_reverse_map = {}
+    cdef list new_srm
+    cdef bint contains_nan, contains_empty_str
+    cdef int empty_str_loc, nan_str_loc
 
     if axis == 0:
         for i in range(nc):
-            k = 0
-            while a[k, i] is None and k < nr - 1:
-                total[k, i] = None
-                k += 1
-            if a[k, i] is not None:
-                cur_total = a[k, i]
-                total[k, i] = cur_total
+            cur_srm = str_reverse_map[i]
+            total = ''
+            new_srm = [False]
+            new_str_reverse_map[i] = new_srm
+            ct = 1
+            contains_nan = False
+            contains_empty_str = False
+            empty_str_loc = 0
+            if hasnans[i] is None or hasnans[i]:
+                for j in range(nr):
+                    cur_code = a[j, i]
+                    if cur_code != 0:
+                        cur_val = cur_srm[cur_code]
+                        if cur_val == '':
+                            if not contains_empty_str:
+                                result[j, i] = ct
+                                contains_empty_str = True
+                                cur_srm.append('')
+                                ct += 1
+                            else:
+                                result[j, i] = ct - 1
+                        else:
+                            result[j, i] = ct
+                            total += cur_val
+                            new_srm.append(total)
+                            ct += 1
+                    else:
+                        result[j, i] = 0
             else:
-                total[k, i] = None
-            for j in range(k + 1, nr):
-                try:
-                    cur_total += a[j, i]
-                except TypeError:
-                    pass
-                total[j, i] = cur_total
+                pass
     else:
-        for i in range(nr):
-            k = 0
-            while a[i, k] is None and k < nc - 1:
-                total[i, k] = None
-                k += 1
-            if a[i, k] is not None:
-                cur_total = a[i, k]
-                total[i, k] = cur_total
-            else:
-                total[i, k] = None
-            for j in range(k + 1, nc):
-                try:
-                    cur_total += a[i, j]
-                except TypeError:
-                    pass
-                total[i, j] = cur_total
-    return total
+        pass
+    return result, new_str_reverse_map
 
 
 def cumprod_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans):
@@ -2211,25 +2215,17 @@ def cumprod_bool(ndarray[np.int8_t, ndim=2, cast=True] a, axis, hasnans):
                 total[i, j] = cur_total
     return total
 
-def isna_str(ndarray[object, ndim=2] a, ndarray[np.uint8_t, cast=True] hasnans):
-    cdef int i, j
+def isna_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, hasnans, **kwargs):
+    cdef Py_ssize_t i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
-    cdef ndarray[np.int8_t, cast=True, ndim=2] b = np.zeros((nr, nc), dtype='bool')
-    for i in range(nc):
-        if hasnans[i] is False:
-            continue
-        for j in range(nr):
-            b[j, i] = a[j, i] is None
-    return b
+    cdef list cur_srm
 
-def isna_str_1d(ndarray[object] a):
-    cdef int i
-    cdef int n = a.shape[0]
-    cdef ndarray[np.int8_t, cast=True] b = np.zeros(n, dtype='bool')
-    for i in range(n):
-        b[i] = a[i] is None
-    return b
+    for i in range(nc):
+        if hasnans[i] is None or hasnans[i]:
+            return a == 0
+        else:
+            return np.zeros((nr, nc), dtype='bool')
 
 def isna_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.uint8_t, cast=True] hasnans):
     # slower than numpy
@@ -2388,7 +2384,7 @@ def ffill_float(ndarray[np.float64_t, ndim=2] a, int limit):
                     ct = 0
     return a
 
-def ffill_str(ndarray[object, ndim=2] a, int limit):
+def ffill_str(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_map, int limit, hasnans, **kwargs):
     cdef int i, j
     cdef int nc = a.shape[1]
     cdef int nr = a.shape[0]
