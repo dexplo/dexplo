@@ -22,13 +22,13 @@ class TestFrameConstructorOneCol(object):
     def test_single_array_bool(self):
         a = np.array([True, False])
         df1 = dx.DataFrame({'a': a})
-        assert_array_equal(a, df1._data['b'][:, 0])
+        assert_array_equal(a.astype('int8'), df1._data['b'][:, 0])
         assert df1._column_info['a'].values == ('b', 0, 0)
 
     def test_single_array_string(self):
         a = np.array(['a', 'b'])
         df1 = dx.DataFrame({'a': a})
-        a1 = array([0, 1], dtype='uint32')
+        a1 = array([1, 2], dtype='uint32')
         assert_array_equal(a1, df1._data['S'][:, 0])
         assert df1._column_info['a'].values == ('S', 0, 0)
 
@@ -59,13 +59,13 @@ class TestFrameConstructorOneCol(object):
     def test_single_list_bool(self):
         a = np.array([True, False])
         df1 = dx.DataFrame({'a': a.tolist()})
-        assert_array_equal(a, df1._data['b'][:, 0])
+        assert_array_equal(a.astype('int8'), df1._data['b'][:, 0])
         assert df1._column_info['a'].values == ('b', 0, 0)
 
     def test_single_list_string(self):
         a = np.array(['a', 'b'])
         df1 = dx.DataFrame({'a': a.tolist()})
-        a1 = array([0, 1], dtype='uint32')
+        a1 = array([1, 2], dtype='uint32')
         assert_array_equal(a1, df1._data['S'][:, 0])
         assert df1._column_info['a'].values == ('S', 0, 0)
 
@@ -99,13 +99,13 @@ class TestFrameConstructorOneColArr(object):
     def test_single_array_bool(self):
         a = np.array([True, False])
         df1 = dx.DataFrame(a)
-        assert_array_equal(a, df1._data['b'][:, 0])
+        assert_array_equal(a.astype('int8'), df1._data['b'][:, 0])
         assert df1._column_info['a0'].values == ('b', 0, 0)
 
     def test_single_array_string(self):
         a = np.array(['a', 'b'])
         df1 = dx.DataFrame(a)
-        a1 = array([0, 1], dtype='uint32')
+        a1 = array([1, 2], dtype='uint32')
         assert_array_equal(a1, df1._data['S'][:, 0])
         assert df1._column_info['a0'].values == ('S', 0, 0)
 
@@ -145,7 +145,7 @@ class TestFrameConstructorMultipleCol(object):
     def test_array_bool(self):
         a = np.array([True, False, True])
         b = np.array([False, False, False])
-        arr = np.column_stack((a, b))
+        arr = np.column_stack((a, b)).astype('int8')
         df1 = dx.DataFrame({'a': a, 'b': b})
         assert_array_equal(arr, df1._data['b'])
         assert df1._column_info['a'].values == ('b', 0, 0)
@@ -155,7 +155,7 @@ class TestFrameConstructorMultipleCol(object):
         a = np.array(['asdf', 'wer'])
         b = np.array(['wyw', 'xcvd'])
         df1 = dx.DataFrame({'a': a, 'b': b})
-        a1 = array([[0, 0], [1, 1]], dtype='uint32')
+        a1 = array([[1, 1], [2, 2]], dtype='uint32')
         assert_array_equal(a1, df1._data['S'])
         assert df1._column_info['a'].values == ('S', 0, 0)
         assert df1._column_info['b'].values == ('S', 1, 1)
@@ -205,9 +205,9 @@ class TestAllDataTypesList:
     def test_all(self):
         assert_array_equal(np.array(a), df_mix._data['i'][:, 0])
         assert_array_equal(np.array(b), df_mix._data['f'][:, 0])
-        a1 = array([0, 1, 2, 3, 4, 5, 6, 7], dtype='uint32')
+        a1 = array([1, 2, 3, 4, 5, 6, 7, 8], dtype='uint32')
         assert_array_equal(a1, df_mix._data['S'][:, 0])
-        assert_array_equal(np.array(d), df_mix._data['b'][:, 0])
+        assert_array_equal(np.array(d).astype('int8'), df_mix._data['b'][:, 0])
         assert_array_equal(np.array(e, dtype='datetime64[ns]'), df_mix._data['M'][:, 0])
         assert_array_equal(np.array(f, dtype='timedelta64[ns]'), df_mix._data['m'][:, 0])
 
@@ -239,9 +239,9 @@ class TestAllDataTypesArray:
     def test_all(self):
         assert_array_equal(a1, df_mix1._data['i'][:, 0])
         assert_array_equal(b1, df_mix1._data['f'][:, 0])
-        arr1 = array([0, 1, 2, 3, 4, 5, 6, 7], dtype='uint32')
+        arr1 = array([1, 2, 3, 4, 5, 6, 7, 8], dtype='uint32')
         assert_array_equal(arr1, df_mix1._data['S'][:, 0])
-        assert_array_equal(d1, df_mix1._data['b'][:, 0])
+        assert_array_equal(d1.astype('int8'), df_mix1._data['b'][:, 0])
         assert_array_equal(e1, df_mix1._data['M'][:, 0])
         assert_array_equal(f1, df_mix1._data['m'][:, 0])
 
@@ -262,9 +262,9 @@ class TestAllDataTypesObjectArray:
     def test_all(self):
         assert_array_equal(a1, df_mix2._data['i'][:, 0])
         assert_array_equal(b1, df_mix2._data['f'][:, 0])
-        arr1 = array([0, 1, 2, 3, 4, 5, 6, 7], dtype='uint32')
+        arr1 = array([1, 2, 3, 4, 5, 6, 7, 8], dtype='uint32')
         assert_array_equal(arr1, df_mix2._data['S'][:, 0])
-        assert_array_equal(d1, df_mix2._data['b'][:, 0])
+        assert_array_equal(d1.astype('int8'), df_mix2._data['b'][:, 0])
         assert_array_equal(e1, df_mix2._data['M'][:, 0])
         assert_array_equal(f1, df_mix2._data['m'][:, 0])
 
@@ -379,12 +379,13 @@ class TestScalarSelection:
         assert (df[1, 1] == 8)
         assert (df[3, 'h'] == 6)
         assert (df[0, 'e'] == 10)
+        assert (df[0, 'd'] == True)
 
 
 class TestRowOnlySelection:
 
     def test_scalar_row_selection(self):
-        # slice all
+        # slice alldf
         df1 = df[:, :]
         assert_frame_equal(df, df1)
 
@@ -865,9 +866,6 @@ class TestSetItem:
                             'd': [True, False]})
         assert_frame_equal(df1, df2)
 
-        with pytest.raises(ValueError):
-            df1[1, 'b'] = nan
-
     def test_setitem_entire_column_one_value(self):
         df1 = self.df.copy()
         df1[:, 'e'] = 5
@@ -901,7 +899,7 @@ class TestSetItem:
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
-        df1[:, 'e'] = np.array([9, np.nan])
+        df1[:, 'e'] = [9, np.nan]
         df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
                             'd': [True, False], 'e': [9, np.nan]})
         assert_frame_equal(df1, df2)
@@ -975,9 +973,10 @@ class TestSetItem:
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
-        df1[:, 'd'] = np.array([9, np.nan])
+        arr = np.array([9, np.nan])
+        df1[:, 'd'] = arr
         df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
-                            'd': [9, np.nan]})
+                            'd': arr})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()

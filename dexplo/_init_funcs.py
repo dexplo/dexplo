@@ -4,14 +4,17 @@ from typing import Union, Dict, List, Optional, Tuple, Set
 import numpy as np
 from numpy import ndarray
 
-from ._libs import validate_arrays as va
-from . import _utils as utils
+from ._libs import validate_arrays as _va
+from . import _utils
 
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
 DictListArr = Dict[str, List[ndarray]]
 ColumnT = Optional[Union[List[str], ndarray]]
-ColInfoT = Dict[str, utils.Column]
+ColInfoT = Dict[str, _utils.Column]
+DataOutput = Dict[str, ndarray]
+StrReverse = Dict[int, List]
+TupleReturn = Tuple[DataOutput, ColInfoT, StrReverse]  # not correct typing, fix
 
 
 def columns_from_dict(columns: ColumnT, data: DataC) -> ndarray:
@@ -76,7 +79,7 @@ def check_column_validity(cols: ColumnT) -> ndarray:
     if not isinstance(cols, (list, ndarray)):
         raise TypeError('Columns must be a list or an array')
     if isinstance(cols, ndarray):
-        cols = utils.try_to_squeeze_array(cols)
+        cols = _utils.try_to_squeeze_array(cols)
 
     col_set: Set[str] = set()
     for i, col in enumerate(cols):
@@ -88,7 +91,7 @@ def check_column_validity(cols: ColumnT) -> ndarray:
     return np.asarray(cols, dtype='O')
 
 
-def data_from_dict(data: DataC) -> None:
+def data_from_dict(data: DataC) -> TupleReturn:
     """
     Sets the _data attribute whenever a dictionary is passed to the `data` parameter in the
     DataFrame constructor. Also sets `_column_info`
@@ -103,47 +106,50 @@ def data_from_dict(data: DataC) -> None:
     """
     column_info: ColInfoT = {}
     data_dict: DictListArr = defaultdict(list)
-    str_map = {}
+    str_reverse_map: StrReverse = {}
     for i, (col, values) in enumerate(data.items()):
         if isinstance(values, list):
-            arr: ndarray = utils.convert_list_to_single_arr(values)
+            arr, kind, srm = _va.convert_object_array(values, col)
         elif isinstance(values, ndarray):
-            arr = values
+            arr = _utils.try_to_squeeze_array(values)
+            kind = arr.dtype.kind
+            if kind == 'O':
+                arr, kind, srm = _va.convert_object_array(values, col)
+            elif kind == 'b':
+                arr = arr.astype('int8')
+            elif kind in 'SU':
+                arr = arr.astype('U')
+                arr, kind, srm = _va.convert_str_to_cat(arr)
+            elif kind == 'M':
+                arr = arr.astype('datetime64[ns]')
+            elif kind == 'm':
+                arr = arr.astype('timedelta64[ns]')
         else:
             raise TypeError('Values of dictionary must be an array or a list')
-        arr = utils.maybe_convert_1d_array(arr)
 
-        kind: str = arr.dtype.kind
-        if kind == 'U':
-            kind = 'S'
-            arr, col_str_map = va.convert_str_to_cat(arr)
-        elif kind == 'O':
-            kind = 'S'
-            arr, col_str_map = va.convert_obj_to_cat(arr)
         loc: int = len(data_dict.get(kind, []))
+        print(kind, len(arr), arr)
         data_dict[kind].append(arr)
         if kind == 'S':
-            str_map[loc] = col_str_map
-        column_info[col] = utils.Column(kind, loc, i)
+            str_reverse_map[loc] = srm
+        column_info[col] = _utils.Column(kind, loc, i)
 
         if i == 0:
             first_len: int = len(arr)
         elif len(arr) != first_len:
             raise ValueError('All columns must be the same length')
 
-    str_reverse_map = {k: list(v.keys()) for k, v in str_map.items()}
-
     return concat_arrays(data_dict), column_info, str_reverse_map
 
 
-def data_from_array(data: ndarray, columns: ndarray) -> Tuple:
+def data_from_array(data: ndarray, columns: ndarray) -> TupleReturn:
     if data.dtype.kind == 'O':
         return data_from_object_array(data, columns)
     else:
         return data_from_typed_array(data, columns)
 
 
-def data_from_typed_array(data: ndarray, columns: ndarray) -> Tuple:
+def data_from_typed_array(data: ndarray, columns: ndarray) -> TupleReturn:
     """
     Stores entire array, `data` into `self._data` as one kind
 
@@ -157,30 +163,29 @@ def data_from_typed_array(data: ndarray, columns: ndarray) -> Tuple:
     None
     """
     kind: str = data.dtype.kind
-    str_map: Dict[int, Dict[str, int]] = {}
-    if kind in 'OS':
-        data = data.astype('str')
-    elif kind == 'M':
-        data = data.astype('datetime64[ns]')
-    elif kind == 'm':
-        data = data.astype('timedelta64[ns]')
+    str_reverse_map: StrReverse = {}
 
     if data.ndim == 1:
         data = data[:, np.newaxis]
 
-    kind = data.dtype.kind
-    if kind == 'U':
+    if kind in 'OSU':
         kind = 'S'
-        data, col_str_map = va.convert_str_to_cat_2d(data)
-        str_map[0] = col_str_map
+        data, col_str_map = _va.convert_str_to_cat_2d(data)
+        str_reverse_map = {0: list(col_str_map)}
+    elif kind == 'M':
+        data = data.astype('datetime64[ns]')
+    elif kind == 'm':
+        data = data.astype('timedelta64[ns]')
+    elif kind == 'b':
+        data = data.astype('int8')
+
     # Force array to be fortran ordered
     new_data = {kind: np.asfortranarray(data)}
-    column_info: ColInfoT = {col: utils.Column(kind, i, i) for i, col in enumerate(columns)}
-    str_reverse_map = {k: list(v.keys()) for k, v in str_map.items()}
+    column_info: ColInfoT = {col: _utils.Column(kind, i, i) for i, col in enumerate(columns)}
     return new_data, column_info, str_reverse_map
 
 
-def data_from_object_array(data: ndarray, columns: ndarray) -> Tuple:
+def data_from_object_array(data: ndarray, columns: ndarray) -> TupleReturn:
     """
     Special initialization when array if of kind 'O'. Must check each column individually
 
@@ -188,33 +193,30 @@ def data_from_object_array(data: ndarray, columns: ndarray) -> Tuple:
     ----------
     data : A numpy object array
 
+    columns: A numpy object array
+
     Returns
     -------
-    None
+    Tuple
     """
     if data.ndim == 1:
         data = data[:, np.newaxis]
 
     column_info: ColInfoT = {}
     data_dict: DictListArr = defaultdict(list)
-    str_map = {}
+    str_reverse_map = {}
     for i, col in enumerate(columns):
-        arr: ndarray = va.maybe_convert_object_array(data[:, i], col)
-        kind: str = arr.dtype.kind
-        if kind == 'O':
-            kind = 'S'
-            arr, col_str_map = va.convert_str_to_cat(arr)
+        arr, kind, srm = _va.convert_object_array(data[:, i], col)
         loc: int = len(data_dict[kind])
         if kind == 'S':
-            str_map[loc] = col_str_map
+            str_reverse_map[loc] = srm
         data_dict[kind].append(arr)
-        column_info[col] = utils.Column(kind, loc, i)
+        column_info[col] = _utils.Column(kind, loc, i)
 
-    str_reverse_map = {k: list(v.keys()) for k, v in str_map.items()}
     return concat_arrays(data_dict), column_info, str_reverse_map
 
 
-def concat_arrays(data_dict: DictListArr) -> Dict[str, ndarray]:
+def concat_arrays(data_dict: DictListArr) -> DataOutput:
     """
     Concatenates the lists for each kind into a single array
     """

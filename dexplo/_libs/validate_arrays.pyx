@@ -9,146 +9,150 @@ from libc.math cimport isnan
 import warnings
 import datetime
 
-
-# def validate_1D_object_array(ndarray[object] arr, columns):
-#     cdef int i
-#     cdef int n = len(arr)
-#
-#     cur_dtype = type(arr[0])
-#     for i in range(n):
-#         if not isinstance(arr[i], cur_dtype):
-#             raise TypeError(f'Found mixed data in column {columns[i]}')
+cdef np.int64_t MIN_INT = np.iinfo('int64').min
 
 
 def get_kind(obj):
     if isinstance(obj, (bool, np.bool_)):
-        return 'bool'
+        return 'b'
     if isinstance(obj, (int, np.integer)):
-        return 'int'
+        if not isinstance(obj, (datetime.timedelta, np.timedelta64)):
+            return 'i'
     if isinstance(obj, (float, np.floating)):
         if isnan(obj):
             return 'missing'
-        return 'float'
+        return 'f'
     # np.str_ is subclass of str? same for bytes
-    if isinstance(obj, (str, np.str_)):
-        return 'str'
+    if isinstance(obj, (str, bytes)):
+        return 'S'
     if isinstance(obj, (datetime.date, datetime.datetime, np.datetime64)):
-        return 'datetime'
+        return 'M'
     if isinstance(obj, (datetime.timedelta, np.timedelta64)):
-        return 'timedelta'
+        return 'm'
     if obj is None:
         return 'missing'
     return 'unknown'
 
 
-def maybe_convert_object_array(ndarray[object] arr, column):
-    cdef int i = 0
-    cdef int n = len(arr)
+def convert_object_array(arr, column):
+    # arr can be array or list
+    cdef:
+        int i = 0, n = len(arr)
+        list srm = []
 
     for i in range(n):
-        dtype = get_kind(arr[i])
-        if dtype != 'missing':
+        kind = get_kind(arr[i])
+        if kind != 'missing':
             break
 
-    if dtype == 'bool':
-        return convert_bool_array(arr, column)
-    if dtype == 'int':
-        return convert_int_array(arr, column)
-    if dtype == 'float':
-        return arr.astype('float64')
-    if dtype == 'str':
-        return convert_str_array(arr, column)
-    if dtype == 'datetime':
-        return arr.astype('datetime64[ns]')
-    if dtype == 'timedelta':
-        return arr.astype('timedelta64[ns]')
-    if dtype == 'unknown':
+    if kind == 'b':
+        result, kind = convert_untyped_to_bool(arr, column)
+    elif kind == 'i':
+        result, kind = convert_untyped_to_int(arr, column)
+    elif kind == 'f':
+        result = np.array(arr, dtype='float64')
+    elif kind == 'S':
+        result, kind, srm = convert_untyped_to_str(arr, column)
+    elif kind == 'M':
+        result = np.array(arr, dtype='datetime64[ns]')
+    elif kind == 'm':
+        result = np.array(arr, dtype='timedelta64[ns]')
+    elif kind == 'unknown':
         raise ValueError(f'Value in column {column} row {i} is {arr[i]} with type {type(arr[i])}. '
-                         'All values must be either bool, int, float, str or missing')
+                         'All values must be either bool, int, float, str, '
+                         'datetime, timedelta or missing')
     else:
-        warnings.warn('Column `{column}` contained all missing values. Converted to float')
-        return arr.astype('float64')
+        warnings.warn(f'Column `{column}` contained all missing values. Converted to float')
+        result = np.array(arr, dtype='float64')
+        kind = 'f'
+    return result, kind, srm
 
 
-def convert_bool_array(ndarray[object] arr, column):
-    cdef int i
-    cdef int n = len(arr)
-    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+def convert_untyped_to_bool(arr, column):
+    cdef:
+        Py_ssize_t i
+        int n = len(arr)
+        ndarray[np.int8_t] result = np.empty(n, dtype='int8')
 
     for i in range(n):
-        if not isinstance(arr[i], (bool, np.bool_)):
+        if isnan(arr[i]) or arr[i] is None:
+            result[i] = -1
+        elif isinstance(arr[i], (bool, np.bool_)):
+            result[i] = arr[i] * 1
+        elif isinstance(arr[i], (int, np.integer)):
+            return np.array(arr, 'int64'), 'i'
+        elif isinstance(arr[i], (float, np.floating)):
+            return np.array(arr, 'float64'), 'f'
+        else:
             raise ValueError(f'The first value of column `{column}` was a boolean. All the other '
                              'values in the array must also be a boolean. '
                              f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
-        result[i] = arr[i]
-    return result
+    return result, 'b'
 
-def convert_int_array(ndarray[object] arr, column):
-    cdef int i
-    cdef int n = len(arr)
-    cdef ndarray[np.int64_t] result = np.empty(n, dtype='int64')
+
+def convert_untyped_to_int(arr, column):
+    cdef:
+        Py_ssize_t i
+        int n = len(arr)
+        ndarray[np.int64_t] result = np.empty(n, dtype='int64')
 
     for i in range(n):
-        if isinstance(arr[i], (float, np.floating)) or arr[i] is None:
-            return arr.astype('float64')
+        if isnan(arr[i]) or arr[i] is None:
+            result[i] = MIN_INT
+        elif isinstance(arr[i], (float, np.floating)):
+            return np.array(arr, 'float64'), 'f'
         elif not isinstance(arr[i], (int, np.integer)):
-            raise ValueError('The first value of column `{column}` was an integer. All the other '
+            raise ValueError(f'The first value of column `{column}` was an integer. All the other '
                              'values in the array must either be integers or floats. '
                              f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
-        result[i] = arr[i]
-    return result
+        else:
+            result[i] = arr[i]
+    return result, 'i'
 
 
-def convert_str_array(ndarray[object] arr, column):
-    cdef int i
-    cdef int n = len(arr)
-    cdef ndarray[object] result = np.empty(n, dtype='O')
-    nt = type(None)
+def convert_untyped_to_str(arr, column):
+    cdef:
+        Py_ssize_t i
+        int n = len(arr)
+        ndarray[np.uint32_t] arr_map = np.empty(len(arr), 'uint32', 'F')
+        dict d = {False: 0}
 
     for i in range(n):
-        if isinstance(arr[i], (float, np.floating)) and isnan(arr[i]):
-            result[i] = None
-        elif not isinstance(arr[i], (str, np.str_, nt)):
+        if isinstance(arr[i], str):
+            arr_map[i] = d.setdefault(arr[i], len(d))
+        elif isinstance(arr[i], bytes):
+            arr_map[i] = d.setdefault(str(arr[i]), len(d))
+        elif isinstance(arr[i], (float, np.floating)) and isnan(arr[i]):
+            arr_map[i] = 0
+        elif arr[i] is None:
+            arr_map[i] = 0
+        else:
             raise ValueError(f'The first value of column `{column}` was a string. All the other '
                              'values in the array must either be strings or missing values. '
                              f'Found value {arr[i]} of type {type(arr[i])} in the {i}th row.')
-        result[i] = arr[i]
-    return result
+    return arr_map, 'S', list(d)
 
-
-def convert_obj_to_cat(ndarray[object] arr):
-    cdef Py_ssize_t i, n = len(arr)
-    cdef ndarray[np.uint32_t] arr_map = np.empty(len(arr), 'uint32', 'F')
-    cdef dict d = {}
-
-    for i in range(n):
-        if isinstance(arr[i], (float, np.floating)) and isnan(arr[i]):
-            arr_map[i] = d.setdefault(None, len(d))
-        elif arr[i] is None:
-            arr_map[i] = d.setdefault(None, len(d))
-        else:
-            arr_map[i] = d.setdefault(str(arr[i]), len(d))
-
-    return arr_map, d
-
-def convert_str_to_cat(ndarray arr):
-    cdef Py_ssize_t i, n = len(arr)
-    cdef ndarray[np.uint32_t] arr_map = np.empty(len(arr), 'uint32', 'F')
-    cdef dict d = {}
+def convert_str_to_cat(arr):
+    cdef:
+        Py_ssize_t i
+        int n = len(arr)
+        ndarray[np.uint32_t] arr_map = np.empty(len(arr), 'uint32', 'F')
+        dict d = {False: 0}
 
     for i in range(n):
         arr_map[i] = d.setdefault(arr[i], len(d))
-
-    return arr_map, d
+    return arr_map, 'S', list(d)
 
 
 def convert_str_to_cat_2d(ndarray arr):
-    cdef Py_ssize_t i, j, n = len(arr), m = arr.shape[1]
-    cdef ndarray[np.uint32_t, ndim=2] arr_map = np.empty((n, m), 'uint32', 'F')
-    cdef dict d, str_map = {}
+    cdef:
+        Py_ssize_t i, j
+        n = len(arr), m = arr.shape[1]
+        ndarray[np.uint32_t, ndim=2] arr_map = np.empty((n, m), 'uint32', 'F')
+        dict d, str_map = {}
 
     for j in range(m):
-        d = {}
+        d = {False: 0}
         str_map = d
         for i in range(n):
             arr_map[i, j] = d.setdefault(arr[i, j], len(d))
@@ -163,7 +167,7 @@ def convert_str_to_cat_list_2d(list arrs):
     cdef dict d, str_map = {}, str_reverse_map = {}
 
     for j in range(m):
-        d = {}
+        d = {False: 0}
         str_map[j] = d
         arr = arrs[j]
         for i in range(n):

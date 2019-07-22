@@ -58,11 +58,11 @@ def assert_frame_equal(df1: DataFrame, df2: DataFrame) -> None:
             raise AssertionError(f'The values of column {col} are not equal')
 
 
-def assert_array_equal(arr1, arr2):
+def assert_array_equal(arr1, arr2, check_dtype=True):
     if arr1.shape != arr2.shape:
         raise AssertionError(f'Array shapes not equal: {arr1.shape} != {arr2.shape}')
 
-    if arr1.dtype.kind != arr2.dtype.kind:
+    if check_dtype and arr1.dtype.kind != arr2.dtype.kind:
         raise AssertionError(f'Array data types not equal: {arr1.dtype} != {arr2.dtype}')
 
     if arr1.ndim == 1:

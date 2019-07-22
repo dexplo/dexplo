@@ -49,6 +49,9 @@ _SPECIAL_OPS = {'__add__': '+', '__radd__': '+', '__mul__': '*', '__rmul__': '*'
 ColumnSelection = Union[int, str, slice, List[Union[str, int]]]
 RowSelection = Union[int, slice, List[int], 'DataFrame']
 
+MIN_INT = np.iinfo('int64').min
+NaT = np.datetime64('NaT')
+
 
 class Column:
 
@@ -109,7 +112,7 @@ def try_to_squeeze_array(arr: ndarray) -> ndarray:
     if arr.ndim == 1:
         return arr
     if arr.ndim == 2 and (arr.shape[0] == 1 or arr.shape[1] == 1):
-        return arr.squeeze()
+        return np.atleast_1d(arr.squeeze())
     else:
         raise ValueError('Array must be one dimensional or two dimensional '
                          'with 1 column')
@@ -125,7 +128,7 @@ def convert_bytes_or_unicode(arr: ndarray) -> ndarray:
 
 def is_scalar(value: Any) -> bool:
     return isinstance(value, (int, str, float, np.number, bool, bytes,
-                              np.datetime64, np.timedelta64))
+                              np.datetime64, np.timedelta64)) or value is None
 
 
 def is_number(value: Any) -> bool:
@@ -160,26 +163,23 @@ def is_compatible_values(v1: Any, v2: Any) -> str:
 
 
 def convert_list_to_single_arr(values: List) -> ndarray:
-    arr: ndarray = np.array(values)
-    kind: str = arr.dtype.kind
-    if kind in 'ifbmMUO':
-        return arr
-    elif kind == 'S':
-        # this will return an array of kind 'U'
-        return arr.astype('str')
-    else:
-        raise NotImplementedError(f'Unknown numpy data type {arr.dtype}')
+    arr: ndarray = np.array(values, dtype='O')
+    return va.convert_object_array(arr)
 
 
-def maybe_convert_1d_array(arr: ndarray) -> ndarray:
+def convert_1d_array(arr: ndarray) -> ndarray:
     arr = try_to_squeeze_array(arr)
     kind: str = arr.dtype.kind
-    if kind in 'ifbUO':
+    if kind in 'ifU':
         return arr
+    elif kind == 'S':
+        return arr.astype('U')
     elif kind == 'M':
         return arr.astype('datetime64[ns]')
     elif kind == 'm':
         return arr.astype('timedelta64[ns]')
+    elif kind == 'b':
+        return arr.astype('int8')
     else:
         raise NotImplementedError(f'Data type {kind} unknown')
 
@@ -252,52 +252,97 @@ def validate_array_type_and_dim(data: ndarray) -> int:
         raise ValueError('Array must be either one or two dimensions')
 
 
-def is_one_row(num_rows_to_set: int, num_cols_to_set: int) -> bool:
-    return num_rows_to_set == 1 and num_cols_to_set >= 1
+def convert_list_to_arrays(value: Union[List, ndarray], ncols_to_set: int) -> List[ndarray]:
 
-
-def convert_list_to_arrays(value: List, single_row: bool) -> List[ndarray]:
-    # check if one dimensional array
-    if is_scalar(value[0]):
-        if single_row:
-            arrs: List[ndarray] = []
-            for v in value:
-                arr: ndarray = convert_list_to_single_arr(convert_list_to_single_arr([v]))
-                arrs.append(arr)
-            return arrs
-
-        arr = convert_list_to_single_arr(value)
-        return [maybe_convert_1d_array(arr)]
-    else:
-        arr = np.array(value, dtype='O')
-        if arr.ndim == 1:
-            arr = arr[:, np.newaxis]
-    if arr.ndim != 2:
-        raise ValueError(f'List converted to {arr.ndim} dimensions. '
-                         'Only 1 or 2 dimensions allowed')
-
-    arrs = []
-    for i in range(arr.shape[1]):
-        a = convert_list_to_single_arr(arr[:, i].tolist())
-        a = maybe_convert_1d_array(a)
-        arrs.append(a)
-    return arrs
-
-
-def convert_array_to_arrays(arr: ndarray) -> List[ndarray]:
-    if arr.ndim == 1:
-        arr = arr[:, np.newaxis]
-    if arr.ndim != 2:
-        raise ValueError('Setting array must be 1 or 2 dimensions')
+    if isinstance(value, ndarray):
+        if value.ndim == 1:
+            pass
+        elif value.ndim == 2:
+            value = [value[:, i] for i in range(value.shape[1])]
+        else:
+            raise ValueError('Setting array must be 1 or 2 dimensions')
 
     arrs: List[ndarray] = []
-    i: int
-    for i in range(arr.shape[1]):
-        a = convert_bytes_or_unicode(arr[:, i])
-        if a.dtype.kind == 'S':
-            va.validate_strings_in_object_array(a)
-        arrs.append(a)
-    return arrs
+    kinds: List[str] = []
+    srms: List[List] = []
+    # Assume each item in the list/array is a column
+    if ncols_to_set > 1:
+        for val in value:
+            if is_scalar(val):
+                val = [val]
+            elif not isinstance(val, (list, ndarray)):
+                raise TypeError("When setting multiple columns, provide a list of scalars, "
+                                f"lists, arrays. You provided a list of {type(val)}")
+            if isinstance(val, list):
+                result, kind, srm = va.convert_object_array(val, 'setting array')
+            elif isinstance(val, ndarray):
+                kind = val.dtype.kind
+                srm = []
+                if kind == 'O':
+                    result, kind, srm = va.convert_object_array(val)
+                elif kind == 'b':
+                    result = val.astype('int8')
+                elif kind in 'SU':
+                    if kind == 'S':
+                        val = val.astype('U')
+                    result, kind, srm = va.convert_str_to_cat(val)
+                else:
+                    result = val
+
+            arrs.append(result)
+            kinds.append(kind)
+            srms.append(srm)
+    else:
+        print('value is ', value)
+        if isinstance(value, list):
+            result, kind, srm = va.convert_object_array(value, 'setting array')
+        elif isinstance(value, ndarray):
+            kind = value.dtype.kind
+            srm = []
+            if kind == 'O':
+                result, kind, srm = va.convert_object_array(value)
+            elif kind == 'b':
+                result = value.astype('int8')
+            elif kind in 'SU':
+                if kind == 'S':
+                    value = value.astype('U')
+                result, kind, srm = va.convert_str_to_cat(value)
+            else:
+                result = value
+        arrs.append(result)
+        kinds.append(kind)
+        srms.append(srm)
+    return arrs, kinds, srms
+
+
+def setitem_validate_col_types(cur_kinds: List[str], kinds: List[str]) -> None:
+    """
+    Used to verify column dtypes when setting a scalar
+    to many columns
+    """
+    for cur_kind, kind in zip(cur_kinds, kinds):
+        if cur_kind == kind or (cur_kind in 'if' and kind in 'if') or kind == 'missing':
+            continue
+        else:
+            dt: str = convert_kind_to_dtype(kind)
+            ct: str = convert_kind_to_dtype(cur_kind)
+            raise TypeError(f'Trying to set a {dt} on column {col} which has type {ct}')
+
+
+def setitem_validate_shape(nrows_to_set: int, ncols_to_set: int,
+                            other: Union[List, 'DataFrame']) -> None:
+    if isinstance(other, list):
+        nrows_set = len(other[0])
+        ncols_set = len(other)
+    # Otherwise we have a DataFrame
+    else:
+        nrows_set = other.shape[0]
+        ncols_set = other.shape[1]
+
+    if nrows_to_set != nrows_set:
+        raise ValueError(f'Mismatch of number of rows {nrows_to_set} != {nrows_set}')
+    if ncols_to_set != ncols_set:
+        raise ValueError(f'Mismatch of number of columns {ncols_to_set} != {ncols_set}')
 
 
 def is_entire_column_selection(rs: Any, cs: Any) -> bool:
@@ -313,12 +358,6 @@ def validate_selection_size(key: Any) -> None:
         raise ValueError('You must provide exactly one row selection '
                          'and one column selection separated by a comma. '
                          f'You provided {len(key)} selections.')
-
-
-def check_set_value_type(dtype: str, good_dtypes: str, name: str) -> None:
-    if dtype not in good_dtypes:
-            raise TypeError(f'Cannot assign {name} to column of '
-                            f'type {_DT[dtype]}')
 
 
 def check_valid_dtype_convert(dtype: str) -> str:
@@ -351,10 +390,6 @@ def convert_numpy_to_kind(dtype: str) -> str:
         elif dt == 'timedelta64':
             return 'm'
 
-#
-# def convert_dtype_to_kind(dtype: str) -> str:
-#     return _KIND[dtype]
-
 
 def convert_dtype_to_func_name(dtype: str) -> str:
     return _DT_FUNC_NAME[dtype]
@@ -365,68 +400,26 @@ def get_stat_func_name(name: str, dtype: str) -> str:
     return f'{name}_{dtype_name}'
 
 
-def get_kind_from_scalar(s: Any) -> str:
-    if isinstance(s, bool):
-        return 'b'
-    elif isinstance(s, (int, np.integer)):
-        return 'i'
-    elif isinstance(s, (float, np.floating)):
-        return 'f'
-    elif isinstance(s, (str, bytes)) or s is None:
-        return 'S'
-    else:
-        return ''
-
-
-# def convert_special_method(name):
-#     return _SPECIAL_METHODS.get(name, 'unknown')
-
-
-def validate_array_size(arr: ndarray, num_rows: int) -> None:
+def validate_array_size(arr, num_rows: int) -> None:
     if len(arr) != num_rows:
         raise ValueError(f'Mismatch number of rows {len(arr)} vs {num_rows}')
 
 
-# def validate_multiple_string_cols(arr: ndarray) -> ndarray:
-#     if arr.ndim == 1:
-#         return va.validate_strings_in_object_array(arr)
-#     arrays: List[ndarray] = []
-#     for i in range(arr.shape[1]):
-#         arrays.append(va.validate_strings_in_object_array(arr[:, i]))
-#     return np.column_stack(arrays)
-
-
-# def get_selection_object(rs: RowSelection, cs: ColumnSelection) -> Any:
-#     is_row_list = isinstance(rs, (list, np.ndarray))
-#     is_col_list = isinstance(cs, (list, np.ndarray))
-#     if is_row_list and is_col_list:
-#         return np.ix_(rs, cs)
-#     return rs, cs
-
-
-def check_compatible_kinds(kinds1: List[str], kinds2: List[str], all_nans: List[bool]) -> bool:
-    for k1, k2, an in zip(kinds1, kinds2, all_nans):
-        if k1 == k2:
-            continue
-        if k1 in 'ifb' and k2 in 'ifb':
-            continue
-        if k1 == 'S' and an:
-            continue
-        if k1 in 'mM' and k2 in 'mM':
-            continue
-        raise TypeError(f'Incompaitble dtypes {_DT[k1]} and {_DT[k2]}')
-    return True
-
-
 def check_all_nans(arrs: List[ndarray]) -> List[bool]:
     all_nans: List[bool] = []
-    arr: ndarray
 
-    for arr in arrs:
-        if arr.dtype.kind in 'ibO':
-            all_nans.append(False)
-        else:
+    for arr in arrs:  # type: ndarray
+        kind: str = arr.dtype.kind
+        if kind == 'b':
+            all_nans.append((arr == -1).all())
+        elif kind == 'i':
+            all_nans.append((arr == MIN_INT).all())
+        elif kind == 'S':
+            all_nans.append((arr == 0).all())
+        elif kind == 'f':
             all_nans.append(np.isnan(arr).all())
+        elif kind in 'mM':
+            all_nans.append(np.isnat(arr).all())
     return all_nans
 
 
@@ -481,6 +474,32 @@ def create_empty_arrs(data_dict):
         if nc > 1:
             empty_arrs[dtype] = np.empty((nr, nc), _KIND_NP[dtype], 'F')
     return empty_arrs
+
+
+def get_missing_value_code(kind):
+    if kind == 'b':
+        return -1
+    elif kind == 'i':
+        return MIN_INT
+    elif kind == 'f':
+        return np.nan
+    elif kind in 'mM':
+        return NaT
+    elif kind == 'S':
+        return 0
+
+
+def isna_array(arr, dtype):
+    if dtype == 'b':
+        return arr == -1
+    elif dtype == 'i':
+        return arr == MIN_INT
+    elif dtype == 'f':
+        return np.isnan(arr)
+    elif dtype in 'mM':
+        return np.isnat(arr)
+    elif dtype == 'S':
+        return arr == 0
 
 
 def concat_stat_arrays(data_dict: Dict[str, List[ndarray]]) -> Dict[str, ndarray]:

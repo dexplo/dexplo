@@ -1,6 +1,5 @@
 #cython: boundscheck=False
 #cython: wraparound=False
-from collections import defaultdict
 import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
@@ -17,10 +16,11 @@ except ImportError:
 MIN_INT = np.iinfo('int64').min
 
 def str__add__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, str other):
-    cdef Py_ssize_t i
-    cdef int n
-    cdef dict new_str_reverse_map = {}
-    cdef list new_list, cur_srm
+    cdef:
+        Py_ssize_t i
+        int n
+        dict new_str_reverse_map = {}
+        list new_list, cur_srm
 
     for loc, cur_srm in str_reverse_map.items():
         new_list = [False]
@@ -31,10 +31,11 @@ def str__add__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, str other):
     return new_str_reverse_map, a.copy('F'), 'S'
 
 def str__radd__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, str other):
-    cdef Py_ssize_t i
-    cdef int n
-    cdef dict new_str_reverse_map = {}
-    cdef list new_list, cur_srm
+    cdef:
+        Py_ssize_t i
+        int n
+        dict new_str_reverse_map = {}
+        list new_list, cur_srm
 
     for loc, cur_srm in str_reverse_map.items():
         new_list = [False]
@@ -46,13 +47,12 @@ def str__radd__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, str other)
 
 def str__add__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
                   list srm1, list srm2):
-    cdef Py_ssize_t i, j
-    cdef int nr = len(arr1), r=len(srm1), c=len(srm2)
-    cdef int left_code, right_code, final_code
-    cdef list new_str_reverse_map = [False]
-    cdef dict new_str_map = {False: 0}
-    cdef ndarray[np.uint32_t] arr = np.zeros(nr, 'uint32', 'F')
-    cdef list str_combos
+    cdef:
+        Py_ssize_t i, j
+        int nr = len(arr1), r=len(srm1), c=len(srm2), left_code, right_code, final_code
+        list new_str_reverse_map = [False], str_combos
+        dict new_str_map = {False: 0}
+        ndarray[np.uint32_t] arr = np.zeros(nr, 'uint32', 'F')
 
     if r * c < nr / 10:
         str_combos = []
@@ -88,17 +88,17 @@ def str__add__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
 
     return new_str_reverse_map, arr, 'S'
 
-def str__radd__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
-                   list srm1, list srm2):
+def str__radd__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2, list srm1, list srm2):
     return str__add__arr(arr2, arr1,  srm2, srm1)
 
 def str__mul__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, int other):
-    cdef Py_ssize_t i
-    cdef int n
-    cdef dict new_str_reverse_map = {}
-    cdef list new_list, cur_srm
-    cdef bint has_empty_str
-    cdef ndarray[np.uint32_t, ndim=2] b
+    cdef:
+        Py_ssize_t i
+        int n
+        dict new_str_reverse_map = {}
+        list new_list, cur_srm
+        bint has_empty_str
+        ndarray[np.uint32_t, ndim=2] b
 
     if other == 0:
         for loc, cur_srm in str_reverse_map.items():
@@ -125,14 +125,14 @@ def str__mul__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, int other):
 def str__rmul__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, int other):
     return str__mul__(str_reverse_map, a, other)
 
-def str__mul__arr(ndarray[np.uint32_t] arr1, ndarray[np.int64_t] arr2,
-                  list srm1, list srm2):
-    cdef Py_ssize_t i
-    cdef int nr = arr1.shape[0], empty_loc, code
-    cdef ndarray[np.uint32_t] result = np.zeros(nr, 'uint32', 'F')
-    cdef list new_str_reverse_map = [False]
-    cdef dict new_str_map = {False: 0}
-    cdef str cur_val
+def str__mul__arr(ndarray[np.uint32_t] arr1, ndarray[np.int64_t] arr2, list srm1, list srm2):
+    cdef:
+        Py_ssize_t i
+        int nr = arr1.shape[0], empty_loc, code
+        ndarray[np.uint32_t] result = np.zeros(nr, 'uint32', 'F')
+        list new_str_reverse_map = [False]
+        dict new_str_map = {False: 0}
+        str cur_val
 
     for i in range(nr):
         if arr1[i] != 0 and arr2[i] != MIN_INT:
@@ -150,38 +150,32 @@ def str__rmul__arr(ndarray[np.int64_t] arr1, ndarray[np.uint32_t] arr2, list srm
     return str__mul__arr(arr2, arr1, srm2, srm1)
 
 def str__lt__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, str other):
-    cdef Py_ssize_t i, j
-    cdef int nr = a.shape[0], nc = a.shape[1], n, code
-    cdef ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
-    cdef list cur_srm, trues
-    cdef ndarray[np.int8_t] b
-    cdef str cur_val
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0], nc = a.shape[1], n, code
+        ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
+        ndarray[np.int8_t] b
+        list cur_srm
 
     for i in range(nc):
         cur_srm = str_reverse_map[i]
         n = len(cur_srm)
-        b = np.empty(n, 'int8')
-        for j in range(n):
-            code = a[j, i]
-            if code == 0:
-                b[code] = -1
-            else:
-                if cur_srm[code] < other:
-                    b[code] = 1
-                else:
-                    b[code] = 0
+        b = np.full(n, 0, 'int8')
+        b[0] = -1
+        for j in range(1, n):
+            if cur_srm[j] < other:
+                b[j] = 1
         for j in range(nr):
             final[j, i] = b[a[j, i]]
 
     return {}, final, 'b'
 
-def str__lt__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
-                  list srm1, list srm2):
-    cdef Py_ssize_t i, j
-    cdef int nr = len(arr1), r=len(srm1), c=len(srm2)
-    cdef int left_code, right_code, final_code
-    cdef ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
-    cdef ndarray[np.int8_t, ndim=2] combos
+def str__lt__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2, list srm1, list srm2):
+    cdef:
+        Py_ssize_t i, j
+        int nr = len(arr1), r=len(srm1), c=len(srm2), left_code, right_code, final_code
+        ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
+        ndarray[np.int8_t, ndim=2] combos
 
     if r * c < nr / 10:
         combos = np.empty((r - 1, c - 1), 'int8', 'F')
@@ -204,38 +198,32 @@ def str__lt__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
     return {}, result, 'b'
 
 def str__le__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, str other):
-    cdef Py_ssize_t i, j
-    cdef int nr = a.shape[0], nc = a.shape[1], n, code
-    cdef ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
-    cdef list cur_srm, trues
-    cdef ndarray[np.int8_t] b
-    cdef str cur_val
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0], nc = a.shape[1], n, code
+        ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
+        ndarray[np.int8_t] b
+        list cur_srm
 
     for i in range(nc):
         cur_srm = str_reverse_map[i]
         n = len(cur_srm)
-        b = np.empty(n, 'int8')
-        for j in range(n):
-            code = a[j, i]
-            if code == 0:
-                b[code] = -1
-            else:
-                if cur_srm[code] <= other:
-                    b[code] = 1
-                else:
-                    b[code] = 0
+        b = np.full(n, 0, 'int8')
+        b[0] = -1
+        for j in range(1, n):
+            if cur_srm[j] <= other:
+                b[j] = 1
         for j in range(nr):
             final[j, i] = b[a[j, i]]
 
     return {}, final, 'b'
 
-def str__le__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
-                  list srm1, list srm2):
-    cdef Py_ssize_t i, j
-    cdef int nr = len(arr1), r=len(srm1), c=len(srm2)
-    cdef int left_code, right_code, final_code
-    cdef ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
-    cdef ndarray[np.int8_t, ndim=2] combos
+def str__le__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2, list srm1, list srm2):
+    cdef:
+        Py_ssize_t i, j
+        int nr = len(arr1), r=len(srm1), c=len(srm2), left_code, right_code, final_code
+        ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
+        ndarray[np.int8_t, ndim=2] combos
 
     if r * c < nr / 10:
         combos = np.empty((r - 1, c - 1), 'int8', 'F')
@@ -258,38 +246,32 @@ def str__le__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
     return {}, result, 'b'
 
 def str__gt__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, str other):
-    cdef Py_ssize_t i, j
-    cdef int nr = a.shape[0], nc = a.shape[1], n, code
-    cdef ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
-    cdef list cur_srm, trues
-    cdef ndarray[np.int8_t] b
-    cdef str cur_val
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0], nc = a.shape[1], n, code
+        ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
+        ndarray[np.int8_t] b
+        list cur_srm
 
     for i in range(nc):
         cur_srm = str_reverse_map[i]
         n = len(cur_srm)
-        b = np.empty(n, 'int8')
-        for j in range(n):
-            code = a[j, i]
-            if code == 0:
-                b[code] = -1
-            else:
-                if cur_srm[code] > other:
-                    b[code] = 1
-                else:
-                    b[code] = 0
+        b = np.full(n, 0, 'int8')
+        b[0] = -1
+        for j in range(1, n):
+            if cur_srm[j] > other:
+                b[j] = 1
         for j in range(nr):
             final[j, i] = b[a[j, i]]
 
     return {}, final, 'b'
 
-def str__gt__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
-                  list srm1, list srm2):
-    cdef Py_ssize_t i, j
-    cdef int nr = len(arr1), r=len(srm1), c=len(srm2)
-    cdef int left_code, right_code, final_code
-    cdef ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
-    cdef ndarray[np.int8_t, ndim=2] combos
+def str__gt__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2, list srm1, list srm2):
+    cdef:
+        Py_ssize_t i, j
+        int nr = len(arr1), r=len(srm1), c=len(srm2), left_code, right_code, final_code
+        ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
+        ndarray[np.int8_t, ndim=2] combos
 
     if r * c < nr / 10:
         combos = np.empty((r - 1, c - 1), 'int8', 'F')
@@ -312,38 +294,32 @@ def str__gt__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
     return {}, result, 'b'
 
 def str__ge__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, str other):
-    cdef Py_ssize_t i, j
-    cdef int nr = a.shape[0], nc = a.shape[1], n, code
-    cdef ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
-    cdef list cur_srm, trues
-    cdef ndarray[np.int8_t] b
-    cdef str cur_val
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0], nc = a.shape[1], n, code
+        ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
+        ndarray[np.int8_t] b
+        list cur_srm
 
     for i in range(nc):
         cur_srm = str_reverse_map[i]
         n = len(cur_srm)
-        b = np.empty(n, 'int8')
-        for j in range(n):
-            code = a[j, i]
-            if code == 0:
-                b[code] = -1
-            else:
-                if cur_srm[code] >= other:
-                    b[code] = 1
-                else:
-                    b[code] = 0
+        b = np.full(n, 0, 'int8')
+        b[0] = -1
+        for j in range(1, n):
+            if cur_srm[j] >= other:
+                b[j] = 1
         for j in range(nr):
             final[j, i] = b[a[j, i]]
 
     return {}, final, 'b'
 
-def str__ge__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
-                  list srm1, list srm2):
-    cdef Py_ssize_t i, j
-    cdef int nr = len(arr1), r=len(srm1), c=len(srm2)
-    cdef int left_code, right_code, final_code
-    cdef ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
-    cdef ndarray[np.int8_t, ndim=2] combos
+def str__ge__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2, list srm1, list srm2):
+    cdef:
+        Py_ssize_t i, j
+        int nr = len(arr1), r=len(srm1), c=len(srm2), left_code, right_code, final_code
+        ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
+        ndarray[np.int8_t, ndim=2] combos
 
     if r * c < nr / 10:
         combos = np.empty((r - 1, c - 1), 'int8', 'F')
@@ -366,38 +342,32 @@ def str__ge__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
     return {}, result, 'b'
 
 def str__eq__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, str other):
-    cdef Py_ssize_t i, j
-    cdef int nr = a.shape[0], nc = a.shape[1], n, code
-    cdef ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
-    cdef list cur_srm, trues
-    cdef ndarray[np.int8_t] b
-    cdef str cur_val
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0], nc = a.shape[1], n
+        ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
+        ndarray[np.int8_t] b
+        list cur_srm
 
     for i in range(nc):
         cur_srm = str_reverse_map[i]
         n = len(cur_srm)
-        b = np.empty(n, 'int8')
-        for j in range(n):
-            code = a[j, i]
-            if code == 0:
-                b[code] = -1
-            else:
-                if cur_srm[code] == other:
-                    b[code] = 1
-                else:
-                    b[code] = 0
+        b = np.full(n, 0, 'int8')
+        b[0] = -1
+        for j in range(1, n):
+            if cur_srm[j] == other:
+                b[j] = 1
         for j in range(nr):
             final[j, i] = b[a[j, i]]
 
     return {}, final, 'b'
 
-def str__eq__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
-                  list srm1, list srm2):
-    cdef Py_ssize_t i, j
-    cdef int nr = len(arr1), r=len(srm1), c=len(srm2)
-    cdef int left_code, right_code, final_code
-    cdef ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
-    cdef ndarray[np.int8_t, ndim=2] combos
+def str__eq__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2, list srm1, list srm2):
+    cdef:
+        Py_ssize_t i, j
+        int nr = len(arr1), r=len(srm1), c=len(srm2), left_code, right_code, final_code
+        ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
+        ndarray[np.int8_t, ndim=2] combos
 
     if r * c < nr / 10:
         combos = np.empty((r - 1, c - 1), 'int8', 'F')
@@ -420,38 +390,32 @@ def str__eq__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
     return {}, result, 'b'
 
 def str__ne__(dict str_reverse_map, ndarray[np.uint32_t, ndim=2] a, str other):
-    cdef Py_ssize_t i, j
-    cdef int nr = a.shape[0], nc = a.shape[1], n, code
-    cdef ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
-    cdef list cur_srm, trues
-    cdef ndarray[np.int8_t] b
-    cdef str cur_val
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0], nc = a.shape[1], n
+        ndarray[np.int8_t, ndim=2] final = np.empty((nr, nc), dtype='int8', order='F')
+        ndarray[np.int8_t] b
+        list cur_srm
 
     for i in range(nc):
         cur_srm = str_reverse_map[i]
         n = len(cur_srm)
-        b = np.empty(n, 'int8')
-        for j in range(n):
-            code = a[j, i]
-            if code == 0:
-                b[code] = -1
-            else:
-                if cur_srm[code] != other:
-                    b[code] = 1
-                else:
-                    b[code] = 0
+        b = np.full(n, 0, 'int8')
+        b[0] = -1
+        for j in range(1, n):
+            if cur_srm[j] != other:
+                b[j] = 1
         for j in range(nr):
             final[j, i] = b[a[j, i]]
 
     return {}, final, 'b'
 
-def str__ne__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2,
-                  list srm1, list srm2):
-    cdef Py_ssize_t i, j
-    cdef int nr = len(arr1), r=len(srm1), c=len(srm2)
-    cdef int left_code, right_code, final_code
-    cdef ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
-    cdef ndarray[np.int8_t, ndim=2] combos
+def str__ne__arr(ndarray[np.uint32_t] arr1, ndarray[np.uint32_t] arr2, list srm1, list srm2):
+    cdef:
+        Py_ssize_t i, j
+        int nr = len(arr1), r=len(srm1), c=len(srm2), left_code, right_code, final_code
+        ndarray[np.int8_t] result = np.full(nr, -1, 'int8', 'F')
+        ndarray[np.int8_t, ndim=2] combos
 
     if r * c < nr / 10:
         combos = np.empty((r - 1, c - 1), 'int8', 'F')
