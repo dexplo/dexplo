@@ -1306,19 +1306,19 @@ class DataFrame(object):
             arr = arr.astype('timedelta64[ns]')
         self._full_columm_add(cs, kind, arr, srm)
 
-    def _setitem_all_other(self, rs: Union[List[int], ndarray], cs: List[str], value: Any) -> None:
+    def _setitem_all_other(self, rows: Union[List[int], ndarray], cols: List[str], value: Any) -> None:
         """
         Sets new data when not assigning a scalar
         and not assigning a single column
         """
-        cur_kinds = [self._column_info[col].dtype for col in cs]
+        cur_kinds = [self._column_info[col].dtype for col in cols]
         if utils.is_scalar(value):
             value_kind = _va.get_kind(value)
             if value_kind == 'unknown':
                 raise TypeError(f'Cannot set new value {value} which has type {type(value)}')
-            kinds = [value_kind] * len(cs)
-            utils.setitem_validate_col_types(cur_kinds, kinds)
-            for col in cs:
+            kinds = [value_kind] * len(cols)
+            utils.setitem_validate_col_types(cur_kinds, kinds, cols)
+            for col in cols:
                 dtype, loc, _ = self._column_info[col].values  # type: str, int, int
                 if dtype == 'i' and value_kind == 'f':
                     self._astype_internal(col, 'float64')
@@ -1331,32 +1331,38 @@ class DataFrame(object):
                     try:
                         value = srm.index(value)
                     except ValueError:
-                        value = len(srm)
                         srm.append(value)
+                        value = len(srm) - 1
                 elif value_kind == 'b':
                     value = int(value)
 
-                self._data[dtype][rs, loc] = value
+                self._data[dtype][rows, loc] = value
         # not scalar
         else:
-            nrows_to_set, ncols_to_set = self._setitem_nrows_ncols_to_set(rs, cs)  # type: int, int
+            nrows_to_set, ncols_to_set = self._setitem_nrows_ncols_to_set(rows, cols)  # type: int, int
             arrs: List[ndarray] = []
             kinds = []
             srms = []
-            if isinstance(value, (list, ndarray)):
-                arrs, kinds, srms = utils.convert_list_to_arrays(value, ncols_to_set)
+            if isinstance(value, list):
+                value = utils.convert_lists_vertical(value)
+                arrs, kinds, srms = utils.convert_to_arrays(value, ncols_to_set, cur_kinds)
+            elif isinstance(value, ndarray):
+                arrs, kinds, srms = utils.convert_to_arrays(value, ncols_to_set, cur_kinds)
             elif isinstance(value, DataFrame):
                 for col in value._columns:
+                    srm = []
                     kind, loc, _ = self._column_info[col].values
                     arrs.append(value._data[kind][:, loc])
                     kinds.append(kind)
-                    srms.append([])
+                    if kind == 'S':
+                        srm = self._str_reverse_map[loc]
+                    srms.append(srm)
             else:
                 raise TypeError('Must use a scalar, a list, an array, or a '
                                 'DataFrame when setting new values')
             utils.setitem_validate_shape(nrows_to_set, ncols_to_set, arrs)
-            utils.setitem_validate_col_types(cur_kinds, kinds)
-            self._setitem_other_cols(rs, cs, arrs, kinds, cur_kinds, srms)
+            utils.setitem_validate_col_types(cur_kinds, kinds, cols)
+            self._setitem_other_cols(rows, cols, arrs, cur_kinds, kinds, srms)
 
     def _setitem_nrows_ncols_to_set(self, rs: Union[List[int], ndarray],
                                     cs: List[str]) -> Tuple[int, int]:
@@ -1370,6 +1376,7 @@ class DataFrame(object):
     def _setitem_other_cols(self, rows: Union[List[int], ndarray], cols: List[str],
                             arrs: List[ndarray], kinds1: List[str], kinds2: List[str],
                             srms: List[List]) -> None:
+        print('\n\n\n\n')
         print(cols)
         print(rows)
         print(arrs)
@@ -1382,15 +1389,12 @@ class DataFrame(object):
             dtype, loc, _ = self._column_info[col].values  # type: str, int, int
             if dtype == 'S':
                 cur_srm = self._str_reverse_map[loc]
-                new_codes = []
-                for val in arr:
-                    try:
-                        code = cur_srm.index(val)
-                    except ValueError:
-                        code = len(cur_srm)
+                for val in srm:
+                    if val not in cur_srm:
                         cur_srm.append(val)
-                    new_codes.append(code)
-                arr = new_codes
+                print("string arr is", arr)
+                print("srm is", srm)
+                arr = [cur_srm.index(srm[code]) for code in arr]
 
             self._data[dtype][rows, loc] = arr
 
@@ -1519,7 +1523,7 @@ class DataFrame(object):
                 if kind in 'f':
                     self._hasnans['f'] = np.isnan(arr).any(0)
                 elif kind == 'S':
-                    self._hasnans['S'] = _va.isnan_object(arr)
+                    self._hasnans['S'] = _va.isnan_object_2d(arr)
                 elif kind in 'mM':
                     self._hasnans[kind] = np.isnat(arr).any(0)
                 else:

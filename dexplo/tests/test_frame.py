@@ -973,10 +973,10 @@ class TestSetItem:
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
-        arr = np.array([9, np.nan])
-        df1[:, 'd'] = arr
+        d = np.array([9, np.nan])
+        df1[:, 'd'] = d
         df2 = dx.DataFrame({'a': [1, 5], 'b': ['eleni', 'teddy'], 'c': [nan, 5.4],
-                            'd': arr})
+                            'd': d})
         assert_frame_equal(df1, df2)
 
         df1 = self.df.copy()
@@ -1116,14 +1116,12 @@ class TestSetItem:
 
         df1 = self.df1.copy()
         df1[2, ['c', 'b']] = [9.3, None]
-
         df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'teddy', None, 'penny'],
                             'c': [nan, 5.4, 9.3, .045], 'd': [True, False, False, True]})
         assert_frame_equal(df1, df2)
 
         df1 = self.df1.copy()
         df1[[1, -1], 'b':'d'] = [['TEDDY', nan, True], [nan, 5.5, False]]
-
         df2 = dx.DataFrame({'a': [1, 5, 7, 11], 'b': ['eleni', 'TEDDY', 'niko', nan],
                             'c': [nan, nan, -1.1, 5.5], 'd': [True, True, False, False]})
         assert_frame_equal(df1, df2)

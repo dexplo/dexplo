@@ -10,6 +10,7 @@ import warnings
 import datetime
 
 cdef np.int64_t MIN_INT = np.iinfo('int64').min
+NaT = np.datetime64('NaT')
 
 
 def get_kind(obj):
@@ -32,6 +33,21 @@ def get_kind(obj):
     if obj is None:
         return 'missing'
     return 'unknown'
+
+
+def get_missing_value_array(kind, n):
+    if kind == 'b':
+        return np.full(n, -1, 'int8', 'F')
+    elif kind == 'i':
+        return np.full(n, MIN_INT, 'int64', 'F')
+    elif kind == 'f':
+        return np.full(n, np.nan, 'float64', 'F')
+    elif kind == 'M':
+        return np.full(n, NaT, 'datetime64[ns]', 'F')
+    elif kind == 'M':
+        return np.full(n, NaT, 'timedelta64[ns]', 'F')
+    elif kind == 'S':
+        return np.full(n, 0, 'int32', 'F')
 
 
 def convert_object_array(arr, column):
@@ -65,6 +81,56 @@ def convert_object_array(arr, column):
         warnings.warn(f'Column `{column}` contained all missing values. Converted to float')
         result = np.array(arr, dtype='float64')
         kind = 'f'
+    return result, kind, srm
+
+
+def convert_object_array_with_kinds(arr, cur_kind):
+    # arr can be array or list
+    cdef:
+        int i = 0, n = len(arr)
+        list srm = []
+        bad_types = True
+
+    for i in range(n):
+        kind = get_kind(arr[i])
+        if kind != 'missing':
+            break
+    print(cur_kind, kind)
+    if cur_kind == 'f':
+        if kind in ['b', 'i', 'f', 'missing']:
+            result = np.array(arr, dtype='float64')
+            kind = 'f'
+            bad_types = False
+    elif cur_kind == 'i':
+        if kind in ['b', 'i', 'f', 'missing']:
+            # floats will get converted properly to floats in below function
+            result, kind = convert_untyped_to_int(arr, 'setting column')
+            bad_types = False
+    elif cur_kind == 'b':
+        if kind == 'b':
+            result, kind = convert_untyped_to_bool(arr, 'setting column')
+            bad_types = False
+    elif cur_kind == 'S':
+        if kind == 'S':
+            result, kind, srm = convert_untyped_to_str(arr, 'setting column')
+            bad_types = False
+    elif cur_kind == 'M':
+        if kind == 'M':
+            result = np.array(arr, dtype='datetime64[ns]')
+            bad_types = False
+    elif cur_kind == 'm':
+        if kind == 'm':
+            result = np.array(arr, dtype='timedelta64[ns]')
+            bad_types = False
+
+    if bad_types:
+        if kind == 'missing':
+            result = get_missing_value_array(cur_kind, len(arr))
+            kind = cur_kind
+        else:
+            raise TypeError(f'Value in setting column row {i} is {arr[i]} with type {type(arr[i])}.'
+                             'All values must be either bool, int, float, str, '
+                             'datetime, timedelta or missing')
     return result, kind, srm
 
 
@@ -251,7 +317,7 @@ def validate_strings_in_object_array(ndarray[object] arr, columns=None):
     return arr
 
 
-def isnan_object(ndarray[object, ndim=2] a):
+def isnan_object_2d(ndarray[object, ndim=2] a):
     cdef int i, j
     cdef int nr = a.shape[0]
     cdef int nc = a.shape[1]

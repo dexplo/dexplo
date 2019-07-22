@@ -162,11 +162,6 @@ def is_compatible_values(v1: Any, v2: Any) -> str:
     return overall_dtype1
 
 
-def convert_list_to_single_arr(values: List) -> ndarray:
-    arr: ndarray = np.array(values, dtype='O')
-    return va.convert_object_array(arr)
-
-
 def convert_1d_array(arr: ndarray) -> ndarray:
     arr = try_to_squeeze_array(arr)
     kind: str = arr.dtype.kind
@@ -252,7 +247,27 @@ def validate_array_type_and_dim(data: ndarray) -> int:
         raise ValueError('Array must be either one or two dimensions')
 
 
-def convert_list_to_arrays(value: Union[List, ndarray], ncols_to_set: int) -> List[ndarray]:
+def convert_lists_vertical(lists: List):
+    if len(lists) == 0:
+        raise ValueError('Cannot set with any empty list')
+    if isinstance(lists[0], list):
+        new_lists = []
+        for i, lst in enumerate(lists):
+            for j, val in enumerate(lst):
+                if i == 0:
+                    new_lists.append([])
+                new_lists[j].append(val)
+            if i > 0:
+                if len(new_lists[0]) != len(new_lists[i]):
+                    raise ValueError('You are setting with unequal list sizes. Column 0 has length '
+                                     f'{len(new_lists[0])} while column {i} has length '
+                                     f'{len(new_lists[i])} ')
+        return new_lists
+    else:
+        return lists
+
+
+def convert_to_arrays(value: Union[List, ndarray], ncols_to_set: int, cur_kinds: List[str]) -> List[ndarray]:
 
     if isinstance(value, ndarray):
         if value.ndim == 1:
@@ -267,19 +282,19 @@ def convert_list_to_arrays(value: Union[List, ndarray], ncols_to_set: int) -> Li
     srms: List[List] = []
     # Assume each item in the list/array is a column
     if ncols_to_set > 1:
-        for val in value:
+        for val, cur_kind in zip(value, cur_kinds):
             if is_scalar(val):
                 val = [val]
             elif not isinstance(val, (list, ndarray)):
                 raise TypeError("When setting multiple columns, provide a list of scalars, "
                                 f"lists, arrays. You provided a list of {type(val)}")
             if isinstance(val, list):
-                result, kind, srm = va.convert_object_array(val, 'setting array')
+                result, kind, srm = va.convert_object_array_with_kinds(val, cur_kind)
             elif isinstance(val, ndarray):
                 kind = val.dtype.kind
                 srm = []
                 if kind == 'O':
-                    result, kind, srm = va.convert_object_array(val)
+                    result, kind, srm = va.convert_object_array_with_kinds(val, cur_kind)
                 elif kind == 'b':
                     result = val.astype('int8')
                 elif kind in 'SU':
@@ -289,18 +304,28 @@ def convert_list_to_arrays(value: Union[List, ndarray], ncols_to_set: int) -> Li
                 else:
                     result = val
 
+            if check_all_nans(result, kind):
+                result = get_missing_value_array(cur_kind, len(val))
+                kind = cur_kind
+                if kind == 'S':
+                    srm = [False]
+
             arrs.append(result)
             kinds.append(kind)
             srms.append(srm)
     else:
-        print('value is ', value)
+        # setting a single column
+        cur_kind = cur_kinds[0]
         if isinstance(value, list):
-            result, kind, srm = va.convert_object_array(value, 'setting array')
+            print("value is", value)
+            print("cur_kind is", cur_kind)
+            result, kind, srm = va.convert_object_array_with_kinds(value, cur_kind)
         elif isinstance(value, ndarray):
             kind = value.dtype.kind
             srm = []
+            # check all missing
             if kind == 'O':
-                result, kind, srm = va.convert_object_array(value)
+                result, kind, srm = va.convert_object_array_with_kinds(value, cur_kind)
             elif kind == 'b':
                 result = value.astype('int8')
             elif kind in 'SU':
@@ -309,18 +334,24 @@ def convert_list_to_arrays(value: Union[List, ndarray], ncols_to_set: int) -> Li
                 result, kind, srm = va.convert_str_to_cat(value)
             else:
                 result = value
+            if check_all_nans(result, kind):
+                result = get_missing_value_array(cur_kind, len(value))
+                kind = cur_kind
+                if kind == 'S':
+                    srm = [False]
+
         arrs.append(result)
         kinds.append(kind)
         srms.append(srm)
     return arrs, kinds, srms
 
 
-def setitem_validate_col_types(cur_kinds: List[str], kinds: List[str]) -> None:
+def setitem_validate_col_types(cur_kinds: List[str], kinds: List[str], cols: List[str]) -> None:
     """
     Used to verify column dtypes when setting a scalar
     to many columns
     """
-    for cur_kind, kind in zip(cur_kinds, kinds):
+    for cur_kind, kind, col in zip(cur_kinds, kinds, cols):
         if cur_kind == kind or (cur_kind in 'if' and kind in 'if') or kind == 'missing':
             continue
         else:
@@ -405,22 +436,17 @@ def validate_array_size(arr, num_rows: int) -> None:
         raise ValueError(f'Mismatch number of rows {len(arr)} vs {num_rows}')
 
 
-def check_all_nans(arrs: List[ndarray]) -> List[bool]:
-    all_nans: List[bool] = []
-
-    for arr in arrs:  # type: ndarray
-        kind: str = arr.dtype.kind
-        if kind == 'b':
-            all_nans.append((arr == -1).all())
-        elif kind == 'i':
-            all_nans.append((arr == MIN_INT).all())
-        elif kind == 'S':
-            all_nans.append((arr == 0).all())
-        elif kind == 'f':
-            all_nans.append(np.isnan(arr).all())
-        elif kind in 'mM':
-            all_nans.append(np.isnat(arr).all())
-    return all_nans
+def check_all_nans(arr: ndarray, kind: str) -> bool:
+    if kind == 'b':
+        return (arr == -1).all()
+    elif kind == 'i':
+        return (arr == MIN_INT).all()
+    elif kind == 'S':
+        return (arr == 0).all()
+    elif kind == 'f':
+        return np.isnan(arr).all()
+    elif kind in 'mM':
+        return np.isnat(arr).all()
 
 
 def convert_axis_string(axis: str) -> int:
@@ -487,6 +513,21 @@ def get_missing_value_code(kind):
         return NaT
     elif kind == 'S':
         return 0
+
+
+def get_missing_value_array(kind, n):
+    if kind == 'b':
+        return np.full(n, -1, 'int8', 'F')
+    elif kind == 'i':
+        return np.full(n, MIN_INT, 'int64', 'F')
+    elif kind == 'f':
+        return np.full(n, np.nan, 'float64', 'F')
+    elif kind == 'M':
+        return np.full(n, NaT, 'datetime64[ns]', 'F')
+    elif kind == 'M':
+        return np.full(n, NaT, 'timedelta64[ns]', 'F')
+    elif kind == 'S':
+        return np.full(n, 0, 'int32', 'F')
 
 
 def isna_array(arr, dtype):
