@@ -128,7 +128,6 @@ def data_from_dict(data: DataC) -> TupleReturn:
             raise TypeError('Values of dictionary must be an array or a list')
 
         loc: int = len(data_dict.get(kind, []))
-        print(kind, len(arr), arr)
         data_dict[kind].append(arr)
         if kind == 'S':
             str_reverse_map[loc] = srm

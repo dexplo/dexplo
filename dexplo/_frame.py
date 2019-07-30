@@ -1197,7 +1197,34 @@ class DataFrame(object):
         dtype, loc, _ = self._column_info[col_name].values
         value = self._setitem_change_dtype(value, dtype, loc, col_name)
         dtype, loc, _ = self._column_info[col_name].values
-        self._data[dtype][rs, loc] = value
+        if dtype == 'S':
+            # update
+            old_codes = self._data[dtype][:, loc]
+            old_srm = self._str_reverse_map[loc]
+            old_code = old_codes[rs]
+            old_code_exists = old_code in old_codes[:rs] or old_code in old_codes[rs + 1:]
+            new_value = False
+            try:
+                value = old_srm.index(value)
+            except ValueError:
+                new_value = True
+            if old_code_exists:
+                if new_value:
+                    old_srm.append(value)
+                    value = len(old_srm) - 1
+                old_codes[rs] = value
+            else:
+                # old string doesn't exist any more
+                if new_value:
+                    old_srm[old_code] = value
+                else:
+                    old_srm.pop(old_code)
+                    old_codes[old_codes > old_code] -= 1
+                    if value > old_code:
+                        value -= 1
+                    old_codes[rs] = value
+        else:
+            self._data[dtype][rs, loc] = value
 
     def _setitem_change_dtype(self, value, dtype: str, loc: int, col_name: str):
         is_bool = isinstance(value, (bool, np.bool_))
@@ -1241,15 +1268,8 @@ class DataFrame(object):
                 bad_type = True
         elif dtype == 'S':
             if is_nan or is_none:
-                value = 0
-            elif is_str:
-                cur_srm = self._str_reverse_map[loc]
-                try:
-                    value = cur_srm.index(value)
-                except ValueError:
-                    cur_srm.append(value)
-                    value = len(cur_srm) - 1
-            else:
+                value = False
+            elif not is_str:
                 bad_type = True
 
         if bad_type:
@@ -1351,11 +1371,11 @@ class DataFrame(object):
             elif isinstance(value, DataFrame):
                 for col in value._columns:
                     srm = []
-                    kind, loc, _ = self._column_info[col].values
+                    kind, loc, _ = value._column_info[col].values
                     arrs.append(value._data[kind][:, loc])
                     kinds.append(kind)
                     if kind == 'S':
-                        srm = self._str_reverse_map[loc]
+                        srm = value._str_reverse_map[loc]
                     srms.append(srm)
             else:
                 raise TypeError('Must use a scalar, a list, an array, or a '
@@ -1376,12 +1396,6 @@ class DataFrame(object):
     def _setitem_other_cols(self, rows: Union[List[int], ndarray], cols: List[str],
                             arrs: List[ndarray], kinds1: List[str], kinds2: List[str],
                             srms: List[List]) -> None:
-        print('\n\n\n\n')
-        print(cols)
-        print(rows)
-        print(arrs)
-        print(kinds1)
-        print(kinds2)
         for col, arr, k1, k2, srm in zip(cols, arrs, kinds1, kinds2, srms):  # type: str, ndarray, str, str, List
             if k1 == 'i' and k2 == 'f':
                 dtype_internal: str = utils.convert_kind_to_numpy(k2)
@@ -1392,8 +1406,6 @@ class DataFrame(object):
                 for val in srm:
                     if val not in cur_srm:
                         cur_srm.append(val)
-                print("string arr is", arr)
-                print("srm is", srm)
                 arr = [cur_srm.index(srm[code]) for code in arr]
 
             self._data[dtype][rows, loc] = arr

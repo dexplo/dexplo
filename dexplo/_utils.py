@@ -317,8 +317,6 @@ def convert_to_arrays(value: Union[List, ndarray], ncols_to_set: int, cur_kinds:
         # setting a single column
         cur_kind = cur_kinds[0]
         if isinstance(value, list):
-            print("value is", value)
-            print("cur_kind is", cur_kind)
             result, kind, srm = va.convert_object_array_with_kinds(value, cur_kind)
         elif isinstance(value, ndarray):
             kind = value.dtype.kind
