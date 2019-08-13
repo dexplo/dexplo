@@ -20,7 +20,7 @@ class StringClass(object):
     def _validate_columns(self, column):
         if isinstance(column, str):
             try:
-                dtype, loc, _ = self._df._column_info[column].values
+                dtype, loc = self._df._get_col_dtype_loc(column)  # type: str, int
             except KeyError:
                 raise KeyError(f'Column "{column}" does not exist in the DataFrame')
             if dtype != 'S':
@@ -30,7 +30,7 @@ class StringClass(object):
             locs = []
             for col in column:
                 try:
-                    dtype, loc, _ = self._df._column_info[col].values
+                    dtype, loc = self._df._get_col_dtype_loc(col)  # type: str, int
                 except KeyError:
                     raise KeyError(f'Column {col} does not exist in the DataFrame')
 
@@ -43,8 +43,7 @@ class StringClass(object):
         elif column is None:
             locs = []
             columns = []
-            for col in self._df._columns:
-                dtype, loc, _ = self._df._column_info[col].values
+            for col, dtype, loc in self._df._col_info_iter():  # type: str, str, int
                 if dtype == 'S':
                     columns.append(col)
                     locs.append(loc)
@@ -58,8 +57,7 @@ class StringClass(object):
 
         str_cols = []
         str_locs = []
-        for col in self._df._columns:
-            dtype, loc, _ = self._df._column_info[col].values
+        for col, dtype, loc in self._df._col_info_iter():  # type: str, str, int
             if dtype == 'S':
                 str_cols.append(col)
                 str_locs.append(loc)
@@ -71,7 +69,7 @@ class StringClass(object):
             locs = []
             for col in column:
                 try:
-                    dtype, loc, _ = self._df._column_info[col].values
+                    dtype, loc = self._df._get_col_dtype_loc(col)  # type: str, int
                 except KeyError:
                     raise KeyError(f'Column {col} does not exist in the DataFrame')
 
@@ -122,8 +120,7 @@ class StringClass(object):
                 new_data[dtype] = arr
 
             new_column_info = {}
-            for col, col_obj in self._df._column_info.items():
-                old_dtype, loc, order = col_obj.values
+            for col, old_dtype, loc, order in self._df._col_info_iter(with_order=True):  # type: str, str, int, int
                 if old_dtype == 'S':
                     new_column_info[col] = utils.Column(dtype, loc + add_loc, order)
                 else:
@@ -151,8 +148,7 @@ class StringClass(object):
             new_data[dtype_new] = arr_new
 
         new_column_info = {}
-        for col, col_obj in self._df._column_info.items():
-            old_dtype, loc, order = col_obj.values
+        for col, old_dtype, loc, order in self._df._col_info_iter(with_order=True):  # type: str, str, int, int
             if old_dtype != 'S':
                 new_column_info[col] = utils.Column(old_dtype, loc, order)
 
@@ -185,8 +181,7 @@ class StringClass(object):
         if column is None:
             columns = []
             locs = []
-            for col in self._df._columns:
-                dtype, loc, _ = self._df._column_info[col].values
+            for col, dtype, loc in self._df._col_info_iter():  # type: str, str, int
                 if dtype == 'S':
                     columns.append(col)
                     locs.append(loc)

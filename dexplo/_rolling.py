@@ -164,12 +164,11 @@ class Roller(object):
                   new_order: Dict = None, num_agg_cols: int = None,
                   func_kwargs: Dict = None):
 
-        col_info = self._df._column_info
         kept_dtype_loc = defaultdict(list)
         new_column_info = {}
         dtype_ct = defaultdict(int)
         for i, col in enumerate(self._kept_columns):
-            dtype, loc, _ = col_info[col].values
+            dtype, loc = self._df._get_col_dtype_loc(col)  # type: str, int
             new_loc = len(kept_dtype_loc[dtype])
             kept_dtype_loc[dtype].append(loc)
             new_column_info[col] = utils.Column(dtype, new_loc, i)
@@ -202,9 +201,7 @@ class Roller(object):
             cur_new_order = new_order[name]
             kwargs_list = func_kwargs[name]
 
-            for col in self._df._columns:
-
-                dtype, loc, _ = self._df._column_info[col].values
+            for col, dtype, loc in self._df._col_info_iter():  # type: str, str, int
                 try:
                     idx = agg_cols.index(col)
                 except ValueError:

@@ -161,6 +161,27 @@ class DataFrame(object):
         self._column_info = new_column_info
         self._columns = new_columns2
 
+    def _get_col_dtype_loc(self, col):
+        col_info = self._column_info[col]
+        return col_info.dtype, col_info.loc
+
+    def _get_col_dtype_loc_order(self, col):
+        return self._column_info[col].values
+
+    def _col_info_iter(self, with_order=False, with_arr=False):
+        for col in self._columns:
+            dtype, loc, order = self._get_col_dtype_loc_order(col)
+            if with_arr and with_order:
+                arr = self._data[dtype][:, loc]
+                yield col, dtype, loc, order, arr
+            elif with_arr:
+                arr = self._data[dtype][:, loc]
+                yield col, dtype, loc, arr
+            elif with_order:
+                yield col, dtype, loc, order
+            else:
+                yield col, dtype, loc
+
     @property
     def values(self) -> ndarray:
         """
@@ -182,21 +203,19 @@ class DataFrame(object):
 
         v: ndarray = np.empty(self.shape, dtype=arr_dtype, order='F')
 
-        for col, col_obj in self._column_info.items():
-            dtype, loc, order2 = col_obj.values  # type: str, int, int
-            col_arr = self._data[dtype][:, loc]
+        for col, dtype, loc, order, col_arr in self._col_info_iter(with_order=True, with_arr=True):
             if dtype == 'S':
                 cur_list_map = self._str_reverse_map[loc]
-                _va.make_object_str_array(cur_list_map, v, col_arr, order2)
+                _va.make_object_str_array(cur_list_map, v, col_arr, order)
             elif dtype == 'M':
                 unit = col_arr.dtype.name.replace(']', '').split('[')[1]
                 # changes array in place
-                _va.make_object_datetime_array(v, col_arr.view('uint64'), order2, unit)
+                _va.make_object_datetime_array(v, col_arr.view('uint64'), order, unit)
             elif dtype == 'm':
                 unit = col_arr.dtype.name.replace(']', '').split('[')[1]
-                _va.make_object_timedelta_array(v, col_arr.view('uint64'), order2, unit)
+                _va.make_object_timedelta_array(v, col_arr.view('uint64'), order, unit)
             else:
-                v[:, order2] = col_arr
+                v[:, order] = col_arr
         return v
 
     def _values_number(self) -> ndarray:
@@ -216,19 +235,16 @@ class DataFrame(object):
         shape: Tuple[int, int] = (len(self), col_num)
 
         v: ndarray = np.empty(shape, dtype=arr_dtype, order='F')
-        i: int = 0
-        for col in self._columns:
-            dtype, loc, order = self._column_info[col].values  # type: str, int, int
+        for i, (_, col_arr, dtype, _) in enumerate(self._col_info_iter(with_arr=True)):
             if dtype in 'ifb':
-                v[:, i] = self._data[dtype][:, loc]
-                i += 1
+                v[:, i] = col_arr
         return v
 
     def _get_column_values(self, col: str) -> ndarray:
         """
         Retrieve a 1d array of a single column
         """
-        dtype, loc, _ = self._column_info[col].values
+        dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
         return self._data[dtype][:, loc]
 
     def _build_repr(self) -> Tuple[List[List[str]], List[int], List[int], List[int]]:
@@ -576,7 +592,7 @@ class DataFrame(object):
     def _getitem_scalar(self, rs: int, cs: Union[int, str]) -> Scalar:
         # most common case, string column, integer row
         try:
-            dtype, loc, _ = self._column_info[cs].values  # type: ignore
+            dtype, loc = self._get_col_dtype_loc(cs)  # type: str, int
         # if its not a key error then it will be an index error
         # for the rows and raise the default exception message
         except KeyError:
@@ -592,7 +608,7 @@ class DataFrame(object):
                     raise IndexError(f'Column integer location {cs} is '
                                      'out of range from the columns')
                 # now we know column is valid
-                dtype, loc, _ = self._column_info[cs].values  # type: ignore
+                dtype, loc = self._get_col_dtype_loc(cs)  # type: str, int
 
         if dtype == 'S':
             val = self._data[dtype][rs, loc]
@@ -602,7 +618,7 @@ class DataFrame(object):
 
     def _select_entire_single_column(self, col_sel):
         self._validate_column_name(col_sel)
-        dtype, loc, _ = self._column_info[col_sel].values
+        dtype, loc = self._get_col_dtype_loc(col_sel)  # type: str, int
         new_data = {dtype: self._data[dtype][:, loc].reshape(-1, 1)}
         new_columns = np.array([col_sel], dtype='O')
         new_column_info = {col_sel: utils.Column(dtype, 0, 0)}
@@ -620,7 +636,7 @@ class DataFrame(object):
         new_str_reverse_map: StrRevMap = {}
 
         for i, col in enumerate(cs):
-            dtype, loc, _ = self._column_info[col].values
+            dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
             cur_loc: int = len(dt_positions[dtype])
             new_column_info[col] = utils.Column(dtype, cur_loc, i)
             dt_positions[dtype].append(loc)
@@ -737,8 +753,10 @@ class DataFrame(object):
         return 'S' in self._data
 
     def _copy_column_info(self) -> ColInfoT:
-        return {col: utils.Column(*col_obj.values)
-                for col, col_obj in self._column_info.items()}
+        new_column_info = {}
+        for col, dtype, loc, order in self._col_info_iter(with_order=True):
+            new_column_info[col] = utils.Column(dtype, loc, order)
+        return new_column_info
 
     def _is_empty(self):
         """
@@ -763,7 +781,7 @@ class DataFrame(object):
         new_data: Dict[str, ndarray] = {dt: arr.copy() for dt, arr in self._data.items()}
         new_columns: ColumnT = self._columns.copy()
         new_column_info: ColInfoT = self._copy_column_info()
-        new_str_reverse_map = self._str_reverse_map.copy()
+        new_str_reverse_map = deepcopy(self._str_reverse_map)
         return self._construct_from_new(new_data, new_column_info, new_columns, new_str_reverse_map)
 
     def select_dtypes(self, include: Optional[Union[str, List[str]]] = None,
@@ -816,8 +834,7 @@ class DataFrame(object):
         new_columns: ColumnT = []
         new_str_reverse_map: StrRevMap = {}
         order: int = 0
-        for col in self._columns:
-            dtype, loc, _ = self._column_info[col].values  # type: str, int, int
+        for col, dtype, loc in self._col_info_iter():  # type: str, str, int
             if dtype in include_final:
                 new_column_info[col] = utils.Column(dtype, loc, order)
                 new_columns.append(col)
@@ -1064,7 +1081,8 @@ class DataFrame(object):
         Changes one column dtype in-place
         """
         new_kind: str = utils.convert_numpy_to_kind(numpy_dtype)
-        dtype, loc, order = self._column_info[column].values  # type: str, int, int
+        dtype, loc, order = self._get_col_dtype_loc_order(column)  # type: str, int, int
+
         srm = []
 
         if dtype == new_kind:
@@ -1104,6 +1122,7 @@ class DataFrame(object):
         self._data[dtype] = np.delete(self._data[dtype], loc, axis=1)
         if self._data[dtype].shape[1] == 0:
             del self._data[dtype]
+
         for col, col_obj in self._column_info.items():
             if col_obj.dtype == dtype and col_obj.loc > loc:
                 col_obj.loc -= 1
@@ -1144,7 +1163,7 @@ class DataFrame(object):
         # column is in df
         else:
             # data type has changed
-            dtype, loc, order = self._column_info[column].values  # type: str, int, int
+            dtype, loc, order = self._get_col_dtype_loc_order(column)  # type: str, int, int
             if dtype != kind:
                 self._remove_column(column)
                 self._write_new_column_data(column, kind, data, srm, order)
@@ -1160,7 +1179,7 @@ class DataFrame(object):
         # row selection and column selection
         rs, cs = key  # type: RowSel, ColSel
         if isinstance(rs, int) and isinstance(cs, (int, str)):
-            return self._setitem_scalar(rs, cs, value)
+            return self._setitem_single_scalar(rs, cs, value)
 
         # select an entire column or new column
         if utils.is_entire_column_selection(rs, cs):
@@ -1169,9 +1188,13 @@ class DataFrame(object):
 
         col_list: List[str] = self._convert_col_sel(cs)
         row_list: Union[List[int], ndarray] = self._convert_row_sel(rs)
-        self._setitem_all_other(row_list, col_list, value)
 
-    def _setitem_scalar(self, rs: RowSel, cs: Union[int, str], value: Scalar) -> None:
+        if utils.is_scalar(value):
+            self._setitem_multiple_scalar(row_list, col_list, value)
+        else:
+            self._setitem_multiple_multiple(row_list, col_list, value)
+
+    def _setitem_single_scalar(self, rs: RowSel, cs: Union[int, str], value: Scalar) -> None:
         """
         Assigns a scalar to exactly a single cell
         """
@@ -1194,9 +1217,9 @@ class DataFrame(object):
         else:
             col_name = self._get_col_name_from_int(cs)
 
-        dtype, loc, _ = self._column_info[col_name].values
+        dtype, loc = self._get_col_dtype_loc(col_name)  # type: str, int
         value = self._setitem_change_dtype(value, dtype, loc, col_name)
-        dtype, loc, _ = self._column_info[col_name].values
+        dtype, loc = self._get_col_dtype_loc(col_name)  # type: str, int
         if dtype == 'S':
             # update
             old_codes = self._data[dtype][:, loc]
@@ -1278,6 +1301,7 @@ class DataFrame(object):
         return value
 
     def _setitem_entire_column(self, cs: str, value: Union[Scalar, ndarray, 'DataFrame']) -> None:
+        # TODO: Change to string
         """
         Called when setting an entire column (old or new)
         df[:, 'col'] = value
@@ -1326,63 +1350,92 @@ class DataFrame(object):
             arr = arr.astype('timedelta64[ns]')
         self._full_columm_add(cs, kind, arr, srm)
 
-    def _setitem_all_other(self, rows: Union[List[int], ndarray], cols: List[str], value: Any) -> None:
+    def _setitem_multiple_scalar(self, rows: Union[List[int], ndarray], cols: List[str], value: Any) -> None:
         """
-        Sets new data when not assigning a scalar
-        and not assigning a single column
+        Sets new data when the selection is a list or array. Could be boolean array.
+        Not assigning a single column
         """
         cur_kinds = [self._column_info[col].dtype for col in cols]
-        if utils.is_scalar(value):
-            value_kind = _va.get_kind(value)
-            if value_kind == 'unknown':
-                raise TypeError(f'Cannot set new value {value} which has type {type(value)}')
-            kinds = [value_kind] * len(cols)
-            utils.setitem_validate_col_types(cur_kinds, kinds, cols)
-            for col in cols:
-                dtype, loc, _ = self._column_info[col].values  # type: str, int, int
-                if dtype == 'i' and value_kind == 'f':
-                    self._astype_internal(col, 'float64')
-                    dtype, loc, _ = self._column_info[col].values
+        value_kind = _va.get_kind(value)
+        if value_kind == 'unknown':
+            raise TypeError(f'Cannot set new value {value} which has type {type(value)}')
+        utils.setitem_validate_scalar_col_types(cur_kinds, value_kind, cols)
 
-                if value_kind == 'missing':
-                    value = utils.get_missing_value_code(dtype)
-                elif value_kind == 'S':
-                    srm = self._str_reverse_map[loc]
-                    try:
-                        value = srm.index(value)
-                    except ValueError:
-                        srm.append(value)
-                        value = len(srm) - 1
-                elif value_kind == 'b':
-                    value = int(value)
+        for col, dtype, loc, col_arr in self._col_info_iter(False, True):  # type: str, str, int
+            if dtype == 'i' and value_kind == 'f':
+                self._astype_internal(col, 'float64')
+                dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
 
-                self._data[dtype][rows, loc] = value
-        # not scalar
-        else:
-            nrows_to_set, ncols_to_set = self._setitem_nrows_ncols_to_set(rows, cols)  # type: int, int
-            arrs: List[ndarray] = []
-            kinds = []
-            srms = []
-            if isinstance(value, list):
-                value = utils.convert_lists_vertical(value)
-                arrs, kinds, srms = utils.convert_to_arrays(value, ncols_to_set, cur_kinds)
-            elif isinstance(value, ndarray):
-                arrs, kinds, srms = utils.convert_to_arrays(value, ncols_to_set, cur_kinds)
-            elif isinstance(value, DataFrame):
-                for col in value._columns:
-                    srm = []
-                    kind, loc, _ = value._column_info[col].values
-                    arrs.append(value._data[kind][:, loc])
-                    kinds.append(kind)
-                    if kind == 'S':
-                        srm = value._str_reverse_map[loc]
-                    srms.append(srm)
+            if value_kind == 'missing':
+                value = utils.get_missing_value_code(dtype)
+            elif value_kind == 'b':
+                value = int(value)
+
+            if value_kind == 'S':
+                srm = self._str_reverse_map[loc]
+                codes = col_arr
+                str_map = {False: 0}
+                new_srm = [False]
+                new_codes = np.empty(len(codes), 'uint32', 'F')
+                if isinstance(rows, ndarray) and rows.dtype.kind == 'b':
+                    for i, code in enumerate(codes):
+                        if rows[i]:
+                            cur_str = value
+                        else:
+                            cur_str = srm[code]
+                        n_before = len(str_map)
+                        new_codes[i] = str_map.setdefault(cur_str, len(str_map))
+                        n_after = len(str_map)
+                        if n_after > n_before:
+                            new_srm.append(cur_str)
+                else:
+                    j = 0
+                    for i, code in enumerate(codes):
+                        if j < len(rows) and rows[j] == i:
+                            cur_str = value
+                            j += 1
+                        else:
+                            cur_str = srm[code]
+                        n_before = len(str_map)
+                        new_codes[i] = str_map.setdefault(cur_str, len(str_map))
+                        n_after = len(str_map)
+                        if n_after > n_before:
+                            new_srm.append(cur_str)
+
+                self._str_reverse_map[loc] = new_srm
+                self._data[dtype][:, loc] = new_codes
+
             else:
-                raise TypeError('Must use a scalar, a list, an array, or a '
-                                'DataFrame when setting new values')
-            utils.setitem_validate_shape(nrows_to_set, ncols_to_set, arrs)
-            utils.setitem_validate_col_types(cur_kinds, kinds, cols)
-            self._setitem_other_cols(rows, cols, arrs, cur_kinds, kinds, srms)
+                self._data[dtype][rows, loc] = value
+
+    def _setitem_multiple_multiple(self, rows: Union[List[int], ndarray], cols: List[str],
+                                         value: Any) -> None:
+        cur_kinds = [self._column_info[col].dtype for col in cols]
+        nrows_to_set, ncols_to_set = self._setitem_nrows_ncols_to_set(rows, cols)  # type: int, int
+        arrs: List[ndarray] = []
+        kinds = []
+        srms = []
+        if isinstance(value, list):
+            value = utils.convert_lists_vertical(value)
+            # need to update convert_to_arrays to cover missing values
+            arrs, kinds, srms = utils.convert_to_arrays(value, ncols_to_set, cur_kinds)
+        elif isinstance(value, ndarray):
+            arrs, kinds, srms = utils.convert_to_arrays(value, ncols_to_set, cur_kinds)
+        elif isinstance(value, DataFrame):
+            for col in value._columns:
+                srm = []
+                kind, loc, _ = value._column_info[col].values
+                arrs.append(value._data[kind][:, loc])
+                kinds.append(kind)
+                if kind == 'S':
+                    srm = value._str_reverse_map[loc]
+                srms.append(srm)
+        else:
+            raise TypeError('Must use a scalar, a list, an array, or a '
+                            'DataFrame when setting new values')
+        utils.setitem_validate_shape(nrows_to_set, ncols_to_set, arrs)
+        utils.setitem_validate_col_types(cur_kinds, kinds, cols)
+        self._setitem_non_scalar(rows, cols, arrs, cur_kinds, kinds, srms)
 
     def _setitem_nrows_ncols_to_set(self, rs: Union[List[int], ndarray],
                                     cs: List[str]) -> Tuple[int, int]:
@@ -1393,14 +1446,14 @@ class DataFrame(object):
         ncols: int = len(cs)
         return nrows, ncols
 
-    def _setitem_other_cols(self, rows: Union[List[int], ndarray], cols: List[str],
+    def _setitem_non_scalar(self, rows: Union[List[int], ndarray], cols: List[str],
                             arrs: List[ndarray], kinds1: List[str], kinds2: List[str],
                             srms: List[List]) -> None:
         for col, arr, k1, k2, srm in zip(cols, arrs, kinds1, kinds2, srms):  # type: str, ndarray, str, str, List
             if k1 == 'i' and k2 == 'f':
                 dtype_internal: str = utils.convert_kind_to_numpy(k2)
                 self._astype_internal(col, dtype_internal)
-            dtype, loc, _ = self._column_info[col].values  # type: str, int, int
+            dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
             if dtype == 'S':
                 cur_srm = self._str_reverse_map[loc]
                 for val in srm:
@@ -1408,7 +1461,8 @@ class DataFrame(object):
                         cur_srm.append(val)
                 arr = [cur_srm.index(srm[code]) for code in arr]
 
-            self._data[dtype][rows, loc] = arr
+            else:
+                self._data[dtype][rows, loc] = arr
 
     def _validate_column_name(self, column: str) -> None:
         if column not in self._column_info:
@@ -1424,11 +1478,9 @@ class DataFrame(object):
 
     def _new_col_info_from_kind_shape(self, kind_shape: Dict[str, int], new_kind: str) -> ColInfoT:
         new_column_info: ColInfoT = {}
-        for col, col_obj in self._column_info.items():
-            dtype, loc, order = col_obj.values  # type: str, int, int
+        for col, dtype, loc, order in self._col_info_iter(with_order=True):  # type: str, str, int, int
             add_loc: int = kind_shape[dtype]
-            new_column_info[col] = utils.Column(new_kind, loc + add_loc,
-                                                order)
+            new_column_info[col] = utils.Column(new_kind, loc + add_loc, order)
         return new_column_info
 
     def astype(self, dtype: Union[Dict[str, str], str]) -> 'DataFrame':
@@ -1542,10 +1594,8 @@ class DataFrame(object):
                     self._hasnans[kind] = np.zeros(arr.shape[1], dtype='bool')
 
         bool_array: ndarray = np.empty(len(self), dtype='bool')
-
-        for col, col_obj in self._column_info.items():  # type: str, utils.Column
-            kind2, loc, order = col_obj.values  # type: str, int, int
-            bool_array[order] = self._hasnans[kind2][loc]
+        for col, dtype2, loc, order in self._col_info_iter(with_order=True):  # type: str, str, int, int
+            bool_array[order] = self._hasnans[dtype2][loc]
 
         columns: ndarray = np.array(['Column Name', 'Has NaN'])
         new_data: Dict[str, ndarray] = {'S': self._columns[:, np.newaxis],
@@ -1877,9 +1927,8 @@ class DataFrame(object):
         new_data = {'b': np.empty(self.shape, 'int8', 'F')}
         new_column_info: ColInfoT = {}
 
-        for i, col in enumerate(self._columns):
-            dtype, loc, _ = self._column_info[col].values
-            new_data[:, i] = utils.isna_array(self._data[dtype][:, loc])
+        for i, (col, _, _, col_arr) in enumerate(self._col_info_iter(with_arr=True)):  # type: str, str, int, int
+            new_data[:, i] = utils.isna_array(col_arr)
             new_column_info[col] = utils.Column('b', i, i)
 
         return self._construct_from_new(new_data, new_column_info, self._columns.copy(), {})
@@ -2066,9 +2115,7 @@ class DataFrame(object):
         new_columns[0] = 'Column Name'
 
         i: int = 0
-        col: str
-        for col in self._columns:
-            dtype, loc, order = self._column_info[col].values  # type: str, int, int
+        for col, dtype, loc in self._col_info_iter():  # type: str, str, int
             if dtype not in 'ifb':
                 continue
             new_column_info[col] = utils.Column('f', i, i + 1)
@@ -2125,9 +2172,7 @@ class DataFrame(object):
         new_columns[0] = 'Column Name'
 
         i: int = 0
-        col: str
-        for col in self._columns:
-            dtype, loc, order = self._column_info[col].values  # type: str, int, int
+        for col, dtype, loc in self._col_info_iter():  # type: str, str, int
             if dtype not in 'ifb':
                 continue
             new_column_info[col] = utils.Column('f', i, i + 1)
@@ -2513,7 +2558,7 @@ class DataFrame(object):
             self._validate_column_name_list(list(values))
             dtype_locs: Dict[str, List[Tuple[str, int, Scalar]]] = defaultdict(list)
             for col, val in values.items():
-                dtype, loc, _ = self._column_info[col].values
+                dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
                 if dtype in 'fO':
                     dtype_locs[dtype].append((col, loc, val))
 
@@ -2686,7 +2731,7 @@ class DataFrame(object):
 
         if len(by) == 1:
             col = by[0]
-            dtype, loc, _ = self._column_info[col].values
+            dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
             col_arr = self._data[dtype][:, loc]
             hasnans: ndarray = self._hasnans.get(col, True)
             asc = ascending[0]
@@ -2728,7 +2773,7 @@ class DataFrame(object):
         else:
             single_cols: List[ndarray] = []
             for col, asc in zip(by, ascending):
-                dtype, loc, _ = self._column_info[col].values
+                dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
                 col_arr = self._data[dtype][:, loc]
                 hasnans = self._hasnans.get(col, True)
                 col_arr = self._replace_nans(dtype, col_arr, asc, hasnans)
@@ -2777,8 +2822,7 @@ class DataFrame(object):
         dtype_loc: Dict[str, List[int]] = defaultdict(list)
         dtype_order: Dict[str, List[int]] = defaultdict(list)
 
-        for col in self._columns:
-            dtype, loc, order = self._column_info[col].values
+        for col, dtype, loc, order in self._col_info_iter(with_order=True):  # type: str, str, int, int
             dtype_order[dtype].append(order)
             dtype_loc[dtype].append(loc)
             dtype_col[dtype].append(col)
@@ -2792,8 +2836,7 @@ class DataFrame(object):
         new_col_order: Dict[str, int] = {}
 
         if subset is None or len(subset) == len(self._columns):
-            for i, col in enumerate(self._columns):
-                dtype, loc, order = self._column_info[col].values
+            for i, (col, dtype, loc) in enumerate(self._col_info_iter()):  # type: str, str, int
                 dtype_loc[dtype].append(loc)
                 dtype_col[dtype].append(col)
                 new_col_order[col] = i
@@ -2803,13 +2846,12 @@ class DataFrame(object):
             col_set = set(subset)
             new_columns = np.empty(len(col_set), dtype='O')
             i = 0
-            for col in self._columns:
+            for col, dtype, loc in self._col_info_iter():  # type: str, str, int
                 if col not in col_set:
                     continue
                 new_columns[i] = col
                 new_col_order[col] = i
                 i += 1
-                dtype, loc, order = self._column_info[col].values
                 dtype_loc[dtype].append(loc)
                 dtype_col[dtype].append(col)
 
@@ -2891,7 +2933,7 @@ class DataFrame(object):
         if not isinstance(col, str):
             raise TypeError('`col` must be the name of a column')
         self._validate_column_name(col)
-        dtype, loc, _ = self._column_info[col].values
+        dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
         arr = self._data[dtype][:, loc]
         if dtype == 'S':
             groups, counts = _gb.value_counts_str(arr, dropna=dropna)
@@ -2969,7 +3011,7 @@ class DataFrame(object):
         if not isinstance(group, (bool, np.bool_)):
             raise TypeError('`group` must be either True or False')
 
-        dtype, loc, _ = self._column_info[column].values
+        dtype, loc = self._get_col_dtype_loc(column)  # type: str, int
         col_arr = self._data[dtype][:, loc]
 
         if not group:
@@ -3084,15 +3126,14 @@ class DataFrame(object):
 
         dtype_drop_info = defaultdict(list)
         for col in column_strings:
-            dtype, loc, order = self._column_info[col].values
+            dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
             dtype_drop_info[dtype].append(loc)
 
         new_column_info = {}
         new_columns = []
         order_sub = 0
-        for col in self._columns:
+        for col, dtype, loc, order in self._col_info_iter(with_order=True):  # type: str, str, int, int
             if col not in column_strings:
-                dtype, loc, order = self._column_info[col].values
                 loc_sub = 0
                 for loc_drops in dtype_drop_info.get(dtype, ()):
                     loc_sub += loc > loc_drops
@@ -3187,7 +3228,7 @@ class DataFrame(object):
         new_column_info: ColInfoT = {}
         data_dict: Dict[str, List[int]] = defaultdict(list)
         for i, col in enumerate(new_columns):
-            dtype, loc, _ = self._column_info[col].values
+            dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
             cur_loc = len(data_dict[dtype])
             new_column_info[col] = utils.Column(dtype, cur_loc, i)
             data_dict[dtype].append(loc)
@@ -3211,7 +3252,7 @@ class DataFrame(object):
             raise TypeError('`column` must a name of a column as a string')
 
         self._validate_column_name(column)
-        dtype, loc, _ = self._column_info[column].values
+        dtype, loc = self._get_col_dtype_loc(column)  # type: str, int
         col_arr = self._data[dtype][:, loc]
 
         if n < 100:
@@ -3320,7 +3361,7 @@ class DataFrame(object):
 
     def factorize(self, column: str) -> Tuple[ndarray, ndarray]:
         self._validate_column_name(column)
-        dtype, loc, _ = self._column_info[column].values
+        dtype, loc = self._get_col_dtype_loc(column)  # type: str, int
         col_arr = self._data[dtype][:, loc]
         if dtype in 'mM':
             col_arr = col_arr.view('int64')
@@ -3409,7 +3450,7 @@ class DataFrame(object):
             new_column_info = {}
             for i, num in enumerate(new_idx):
                 col = self._columns[num]
-                dtype, loc, _ = self._column_info[col].values
+                dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
                 cur_col_num = column_ints[col]
                 if cur_col_num == 0:
                     col_new = col
@@ -3464,8 +3505,7 @@ class DataFrame(object):
                     arrs.append(np.isin(arr, val_numbers))
 
             new_column_info = {}
-            for col in self._columns:
-                dtype, loc, order = self._column_info[col].values
+            for col, dtype, loc, order in self._col_info_iter(with_order=True):  # type: str, str, int, int
                 new_column_info[col] = utils.Column('b', loc + dtype_add[dtype], order)
 
             new_columns = self._columns.copy()
@@ -3479,7 +3519,7 @@ class DataFrame(object):
                     vals = [vals]  # type: ignore
                 if not isinstance(vals, list):
                     raise TypeError('The dictionary values must be lists or a scalar')
-                dtype, loc, order = self._column_info[col].values
+                dtype, loc, order = self._get_col_dtype_loc_order(col)  # type: str, int, int
                 col_arr = self._data[dtype][:, loc]
                 val_numbers, val_strings, val_datetimes, val_timedeltas = separate_value_types(vals)
                 if dtype == 'S':
@@ -3814,7 +3854,7 @@ class DataFrame(object):
             extra_cols = 0
             for col_name, (dt, arr) in appended_data.items():
                 if col_name in new_column_info:
-                    old_dtype, loc, order = new_column_info[col_name].values
+                    old_dtype, loc, order = self._get_col_dtype_loc_order(col_name)  # type: str, int, int
                     if old_dtype == dt:
                         new_data[old_dtype][:, loc] = arr
                     else:
@@ -3894,7 +3934,7 @@ class DataFrame(object):
                             if not has_appended_column:
                                 has_appended_column = True
                                 new_columns.append(col)
-                            dtype, loc, _ = obj._column_info[col].values
+                            dtype, loc = obj._get_col_dtype_loc(col)  # type: str, int
                             col_dtype.add(dtype)
                             piece.append(obj._data[dtype][:, loc])
                         else:
@@ -3986,13 +4026,11 @@ class DataFrame(object):
 
                 i = 0
                 for nrow, obj, col_map in zip(nrs, objs, col_maps):
-                    for col in obj._columns:
-                        dtype, loc, _ = obj._column_info[col].values
-                        data = obj._data[dtype][:, loc]
+                    for col, dtype, loc, col_arr in obj._col_info_iter(with_arr=True):  # type: str, str, int, int
                         if nrow < nr and dtype in 'bi':
                             dtype = 'f'
                         loc = len(data_dict[dtype])
-                        data_dict[dtype].append(data)
+                        data_dict[dtype].append(col_arr)
                         new_column_info[col_map[col]] = utils.Column(dtype, loc, i)
                         i += 1
 
@@ -4340,7 +4378,7 @@ class DataFrame(object):
                 warnings.simplefilter("ignore")
                 df_group = self.groupby(group).size()
             size_col = df_group._columns[-1]
-            dtype, loc, _ = df_group._column_info[size_col].values
+            dtype, loc = df_group._get_col_dtype_loc(size_col)  # type: str, int
             max_size = df_group._data[dtype][:, loc].max()
             if max_size > 1:
                 raise ValueError('You did not provide an `aggfunc` which means that each '
@@ -4357,7 +4395,7 @@ class DataFrame(object):
         row_idx, row_names = df_group.factorize(row)
         col_idx, col_names = df_group.factorize(column)
 
-        dtype, loc, _ = df_group._column_info[temp_col_name].values
+        dtype, loc = df_group._get_col_dtype_loc(temp_col_name)  # type: str, int
         value_arr = df_group._data[dtype][:, loc]
 
         new_data = {}
@@ -4484,7 +4522,7 @@ class DataFrame(object):
         new_columns = []
         # get the id_vars (non-melted) columns
         for i, col in enumerate(id_vars):
-            dtype, loc, _ = self._column_info[col].values
+            dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
             arr = self._data[dtype][:, loc]
             arr = np.tile(arr, max_group_len)
             new_loc = len(data_dict[dtype])
@@ -4499,7 +4537,7 @@ class DataFrame(object):
         for i, (val_v, var_n, val_n, vvl) in enumerate(vars_zipped):
             dtype_loc = defaultdict(list)
             for col in val_v:
-                dtype, loc, _ = self._column_info[col].values
+                dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
                 dtype_loc[dtype].append(loc)
 
             if len(dtype_loc) > 1:
@@ -4796,7 +4834,7 @@ class DataFrame(object):
             if subtract_common_cols and col in right_cols:
                 continue
 
-            dtype, loc, _ = right._column_info[col].values
+            dtype, loc = right._get_col_dtype_loc(col)  # type: str, int
             cur_loc = dtype_cur_loc[dtype]
             col_y = col
             if col in self._column_info:

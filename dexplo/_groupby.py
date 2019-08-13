@@ -40,7 +40,7 @@ class Grouper(object):
         self._group_dtype_loc: Dict[str, List[int]] = defaultdict(list)
         self._column_info: ColInfoT = {}
         for i, col in enumerate(columns):
-            dtype, loc, _ = self._df._column_info[col].values  # type: str, int, int
+            dtype, loc = self._df._get_col_dtype_loc(col)  # type: str, int
             cur_loc = len(self._group_dtype_loc[dtype])
             self._group_dtype_loc[dtype].append(loc)
             self._column_info[col] = utils.Column(dtype, cur_loc, i)
@@ -281,10 +281,9 @@ class Grouper(object):
         calc_columns: List[str] = []
         calc_dtype_loc: List[Tuple[str, int]] = []
         np_dtype = 'int64'
-        for col in self._df._columns:
+        for col, dtype, loc in self._df._col_info_iter():  # type: str, str, int
             if col in self._group_columns:
                 continue
-            dtype, loc, order = self._df._column_info[col].values
             if dtype in 'fib':
                 if dtype == 'f':
                     np_dtype = 'float64'
@@ -391,9 +390,7 @@ class Grouper(object):
             cur_new_order = new_order[name]
             kwargs_list = func_kwargs[name]
 
-            for col in self._df._columns:
-
-                dtype, loc, _ = self._df._column_info[col].values
+            for col, dtype, loc in self._df._col_info_iter():  # type: str, str, int
                 try:
                     idx = agg_cols.index(col)
                 except ValueError:

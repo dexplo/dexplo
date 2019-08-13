@@ -358,6 +358,20 @@ def setitem_validate_col_types(cur_kinds: List[str], kinds: List[str], cols: Lis
             raise TypeError(f'Trying to set a {dt} on column {col} which has type {ct}')
 
 
+def setitem_validate_scalar_col_types(cur_kinds: List[str], kind: str, cols: List[str]) -> None:
+    """
+    Used to verify column dtypes when setting a scalar
+    to many columns
+    """
+    for cur_kind, col in zip(cur_kinds, cols):
+        if cur_kind == kind or (cur_kind in 'if' and kind in 'if') or kind == 'missing':
+            continue
+        else:
+            dt: str = convert_kind_to_dtype(kind)
+            ct: str = convert_kind_to_dtype(cur_kind)
+            raise TypeError(f'Trying to set a {dt} on column {col} which has type {ct}')
+
+
 def setitem_validate_shape(nrows_to_set: int, ncols_to_set: int,
                             other: Union[List, 'DataFrame']) -> None:
     if isinstance(other, list):
