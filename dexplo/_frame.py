@@ -447,8 +447,11 @@ class DataFrame(object):
 
             if isinstance(col, (int, np.integer)):
                 new_cols.append(self._get_col_name_from_int(col))
+            elif not isinstance(col, str):
+                raise TypeError('Column selection must be either a string, integer, or boolean. '
+                                f'{col} is a {type(col).__name__}')
             elif col not in self._column_info:
-                raise KeyError(f'{col} is not in the columns')
+                raise KeyError(f'{col} is not one of the column names')
             else:
                 new_cols.append(col)
             if bool_count > 0:
@@ -460,7 +463,7 @@ class DataFrame(object):
                 raise ValueError('The length of the boolean list must match the number of '
                                  f'columns {i} != {self.shape[1]}')
 
-        utils.check_duplicate_list(new_cols)
+        utils.check_duplicate_column(new_cols)
         return new_cols
 
     def _find_col_location(self, col: str) -> int:
@@ -524,7 +527,7 @@ class DataFrame(object):
             raise TypeError('Selection must either be one of '
                             'int, str, list, array, slice or DataFrame')
 
-    def _convert_row_sel(self, rs: RowSel) -> Union[List[int], ndarray]:
+    def _convert_row_sel(self, rs: RowSel, is_setitem=False) -> Union[List[int], ndarray]:
         if isinstance(rs, slice):
             def check_none_int(obj: Any) -> bool:
                 return obj is None or isinstance(obj, int)
@@ -544,15 +547,38 @@ class DataFrame(object):
                     continue
                 # self.columns is a list to prevent numpy warning
                 if not isinstance(row, int):
-                    raise TypeError('Row selection must consist only of integers')
+                    raise TypeError('Row selection must be entirely integers or entirely booleans')
 
                 if bool_count > 0:
                     raise TypeError('Your row selection has a mix of boolean and integers. They '
                                     'must be either all booleans or all integers.')
 
-            if bool_count > 0 and bool_count != len(self):
-                raise ValueError('Length of boolean list must be the same as DataFrame. '
-                                 f'{len(rs)} != {len(self)}')
+            if bool_count > 0:
+                if bool_count != len(self):
+                    raise ValueError('Length of boolean list must be the same as DataFrame. '
+                                     f'{len(rs)} != {len(self)}')
+                else:
+                    rs = np.array(rs)
+            else:
+                new_rs = []
+                rs_set = set()
+                for r in rs:
+                    if r < 0:
+                        if r < -len(self):
+                            raise IndexError(f'Integer location {r} is out of bounds for '
+                                             f'DataFrame with length {len(self)}')
+                        r = len(self) + r
+
+                    if r >= len(self):
+                        raise IndexError(f'Integer location {r} is out of bounds for '
+                                         f'DataFrame with length {len(self)}')
+                    elif is_setitem:
+                        if r in rs_set:
+                            raise ValueError(f'Integer location {r}')
+                        else:
+                            rs_set.add(r)
+                    new_rs.append(r)
+                rs = np.array(new_rs)
         elif isinstance(rs, ndarray):
             row_array: ndarray = utils.try_to_squeeze_array(rs)
             if row_array.dtype.kind == 'b':
@@ -596,7 +622,7 @@ class DataFrame(object):
         # if its not a key error then it will be an index error
         # for the rows and raise the default exception message
         except KeyError:
-            # if its a key error, then column not found
+            # if it's a key error, then column not found
             # must check if string or integer
             if isinstance(cs, str):
                 raise KeyError(f'{cs} is not a column')
@@ -1187,7 +1213,7 @@ class DataFrame(object):
             return self._setitem_entire_column(cs, value)  # type: ignore
 
         col_list: List[str] = self._convert_col_sel(cs)
-        row_list: Union[List[int], ndarray] = self._convert_row_sel(rs)
+        row_list: Union[List[int], ndarray] = self._convert_row_sel(rs, is_setitem=True)
 
         if utils.is_scalar(value):
             self._setitem_multiple_scalar(row_list, col_list, value)
@@ -1361,10 +1387,12 @@ class DataFrame(object):
             raise TypeError(f'Cannot set new value {value} which has type {type(value)}')
         utils.setitem_validate_scalar_col_types(cur_kinds, value_kind, cols)
 
-        for col, dtype, loc, col_arr in self._col_info_iter(False, True):  # type: str, str, int
+        for col in cols:
+            dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
             if dtype == 'i' and value_kind == 'f':
                 self._astype_internal(col, 'float64')
-                dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
+                dtype, loc = self._get_col_dtype_loc(col)
+            col_arr = self._get_column_values(col)
 
             if value_kind == 'missing':
                 value = utils.get_missing_value_code(dtype)

@@ -94,12 +94,13 @@ def get_whole_len(num: float) -> int:
         return len(str(num).split('.')[0])
 
 
-def check_duplicate_list(lst: List[str]) -> None:
+def check_duplicate_column(col_list: List[str]) -> None:
     s: Set[str] = set()
-    for i, elem in enumerate(lst):
-        if elem in s:
-            raise ValueError(f'Column {elem} is selected more than once')
-        s.add(elem)
+    for col in col_list:
+        if col in s:
+            raise ValueError(f'Column {col} is selected more than once. You may only select each '
+                             f'column once.')
+        s.add(col)
 
 
 def check_empty_slice(s: slice) -> bool:
