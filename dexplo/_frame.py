@@ -551,7 +551,7 @@ class DataFrame(object):
                                     'must be either all booleans or all integers.')
 
             if bool_count > 0 and bool_count != len(self):
-                raise ValueError('Length of boolean array must be the same as DataFrame. '
+                raise ValueError('Length of boolean list must be the same as DataFrame. '
                                  f'{len(rs)} != {len(self)}')
         elif isinstance(rs, ndarray):
             row_array: ndarray = utils.try_to_squeeze_array(rs)
@@ -1419,6 +1419,7 @@ class DataFrame(object):
             value = utils.convert_lists_vertical(value)
             # need to update convert_to_arrays to cover missing values
             arrs, kinds, srms = utils.convert_to_arrays(value, ncols_to_set, cur_kinds)
+            print(arrs)
         elif isinstance(value, ndarray):
             arrs, kinds, srms = utils.convert_to_arrays(value, ncols_to_set, cur_kinds)
         elif isinstance(value, DataFrame):
@@ -1435,7 +1436,53 @@ class DataFrame(object):
                             'DataFrame when setting new values')
         utils.setitem_validate_shape(nrows_to_set, ncols_to_set, arrs)
         utils.setitem_validate_col_types(cur_kinds, kinds, cols)
-        self._setitem_non_scalar(rows, cols, arrs, cur_kinds, kinds, srms)
+
+        for col, arr, k1, k2, cur_srm in zip(cols, arrs, cur_kinds, kinds, srms):  # type: str, ndarray, str, str, List
+            if k1 == 'i' and k2 == 'f':
+                dtype_internal: str = utils.convert_kind_to_numpy(k2)
+                self._astype_internal(col, dtype_internal)
+            dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
+            if dtype == 'S':
+                old_srm = self._str_reverse_map[loc]
+                old_codes = self._data[dtype][:, loc]
+                str_map = {False: 0}
+                new_srm = [False]
+                new_codes = np.empty(len(old_codes), 'uint32', 'F')
+                if isinstance(rows, slice):
+                    # convert to integer location
+                    rows = np.arange(len(self))[rows]
+                j = 0
+                if isinstance(rows, ndarray) and rows.dtype.kind == 'b':
+                    for i, code in enumerate(old_codes):
+                        if rows[i]:
+                            cur_str = cur_srm[arr[j]]
+                            j += 1
+                        else:
+                            cur_str = old_srm[code]
+                        n_before = len(str_map)
+                        new_codes[i] = str_map.setdefault(cur_str, len(str_map))
+                        n_after = len(str_map)
+                        if n_after > n_before:
+                            new_srm.append(cur_str)
+                else:
+                    print(rows)
+                    for i, code in enumerate(old_codes):
+                        if j < len(rows) and rows[j] == i:
+                            cur_str = cur_srm[arr[j]]
+                            j += 1
+                        else:
+                            cur_str = old_srm[code]
+                        print('cur_str is', cur_str)
+                        n_before = len(str_map)
+                        new_codes[i] = str_map.setdefault(cur_str, len(str_map))
+                        n_after = len(str_map)
+                        if n_after > n_before:
+                            new_srm.append(cur_str)
+
+                self._str_reverse_map[loc] = new_srm
+                self._data[dtype][:, loc] = new_codes
+            else:
+                self._data[dtype][rows, loc] = arr
 
     def _setitem_nrows_ncols_to_set(self, rs: Union[List[int], ndarray],
                                     cs: List[str]) -> Tuple[int, int]:
@@ -1445,24 +1492,6 @@ class DataFrame(object):
             nrows = len(np.arange(len(self))[rs])
         ncols: int = len(cs)
         return nrows, ncols
-
-    def _setitem_non_scalar(self, rows: Union[List[int], ndarray], cols: List[str],
-                            arrs: List[ndarray], kinds1: List[str], kinds2: List[str],
-                            srms: List[List]) -> None:
-        for col, arr, k1, k2, srm in zip(cols, arrs, kinds1, kinds2, srms):  # type: str, ndarray, str, str, List
-            if k1 == 'i' and k2 == 'f':
-                dtype_internal: str = utils.convert_kind_to_numpy(k2)
-                self._astype_internal(col, dtype_internal)
-            dtype, loc = self._get_col_dtype_loc(col)  # type: str, int
-            if dtype == 'S':
-                cur_srm = self._str_reverse_map[loc]
-                for val in srm:
-                    if val not in cur_srm:
-                        cur_srm.append(val)
-                arr = [cur_srm.index(srm[code]) for code in arr]
-
-            else:
-                self._data[dtype][rows, loc] = arr
 
     def _validate_column_name(self, column: str) -> None:
         if column not in self._column_info:

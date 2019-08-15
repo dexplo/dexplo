@@ -8,7 +8,7 @@ import dexplo._libs.validate_arrays as va
 def _check_1d_arrays(a: ndarray, b: ndarray, kind: str, tol: float = 10 ** -4) -> bool:
     if kind == 'O':
         if not va.is_equal_1d_object(a, b):
-            raise AssertionError(f'The values of column {col} are not equal')
+            raise AssertionError(f'The values of the columns are not equal')
         return True
     elif kind == 'f':
         with np.errstate(invalid='ignore'):
@@ -30,18 +30,11 @@ def assert_frame_equal(df1: DataFrame, df2: DataFrame) -> None:
             raise AssertionError(f'column number {i} in left DataFrame not equal to right '
                                  f'{col} != {df2.columns[i]}')
 
-        kind1: str
-        loc1: int
-        kind2: str
-        loc2: int
-        arr1: ndarray
-        arr2: ndarray
+        kind1, loc1 = df1._get_col_dtype_loc(col)  # type: str, int
+        arr1: ndarray = df1._data[kind1][:, loc1]
 
-        kind1, loc1, _ = df1._column_info[col].values
-        arr1 = df1._data[kind1][:, loc1]
-
-        kind2, loc2, order = df2._column_info[col].values
-        arr2 = df2._data[kind2][:, loc2]
+        kind2, loc2 = df2._get_col_dtype_loc(col)  # type: str, int
+        arr2: ndarray = df2._data[kind2][:, loc2]
 
         if kind1 != kind2:
             dtype1 = utils.convert_kind_to_dtype(kind1)
