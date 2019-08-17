@@ -915,7 +915,7 @@ class DataFrame(object):
             new_kind, new_loc = kind_shape[old_kind]  # type: str, int
             new_column_info[col] = utils.Column(new_kind, new_loc + old_loc, order)
 
-        new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
+        new_data: Dict[str, ndarray] = utils.concat_data_arrays(data_dict)
         return self._construct_from_new(new_data, new_column_info, self._columns.copy(),
                                         new_str_reverse_map)
 
@@ -1533,10 +1533,10 @@ class DataFrame(object):
                 raise ValueError(f'"{col}" has already been selected as a column')
             col_set.add(col)
 
-    def _new_col_info_from_kind_shape(self, kind_shape: Dict[str, int], new_kind: str) -> ColInfoT:
+    def _new_col_info_from_kind_shape(self, kind_num_cols: Dict[str, int], new_kind: str) -> ColInfoT:
         new_column_info: ColInfoT = {}
-        for col, dtype, loc, order in self._col_info_iter(with_order=True):  # type: str, str, int, int
-            add_loc: int = kind_shape[dtype]
+        for col, old_kind, loc, order in self._col_info_iter(with_order=True):  # type: str, str, int, int
+            add_loc: int = kind_num_cols[old_kind]
             new_column_info[col] = utils.Column(new_kind, loc + add_loc, order)
         return new_column_info
 
@@ -1548,7 +1548,7 @@ class DataFrame(object):
 
         Parameters
         ----------
-        dtype : str or list of strings
+        dtype : str or dict mapping column names to data type
 
         Returns
         -------
@@ -1557,49 +1557,74 @@ class DataFrame(object):
         """
         if isinstance(dtype, str):
             new_dtype: str = utils.check_valid_dtype_convert(dtype)
-            data_dict: DictListArr = defaultdict(list)
-            kind_shape: Dict[str, int] = OrderedDict()
-            total_shape: int = 0
+            new_kind: str = utils.convert_numpy_to_kind(new_dtype)
+            utils.check_astype_compatible(new_kind, self._data.keys())
 
-            old_kind: str
-            arr: ndarray
-            for old_kind, arr in self._data.items():
-                kind_shape[old_kind] = total_shape
-                total_shape += arr.shape[1]
+            new_column_info: ColInfoT = {}
+            new_arr = utils.create_empty_arr(new_kind, self.shape)
+            new_srm = {}
+            missing_value_code = utils.get_missing_value_code(new_kind)
+            col_iter = enumerate(self._col_info_iter(with_order=True, with_arr=True))
+            for i, (col, old_kind, loc, order, arr) in col_iter:
+                new_column_info[col] = utils.Column(new_kind, i, order)
 
-                if new_dtype != old_kind:
-                    nanable = False
-                    if old_kind == 'f':
-                        nanable = True
-                        na_arr = np.isnan(arr)
-                    elif old_kind == 'S':
-                        nanable = True
-                        na_arr = _math.isna_str(arr, np.zeros(len(arr), dtype='bool'))
-                    elif old_kind in 'mM':
-                        nanable = True
-                        na_arr = np.isnat(arr)
+                if new_kind == 'S':
+                    if old_kind == 'b':
+                        arr = arr + 1
+                        cur_srm = [False, 'False', 'True']
+                    elif old_kind == 'i':
+                        cur_srm, arr = _va.convert_int_to_str(arr)
+                    elif old_kind == 'f':
+                        cur_srm, arr = _va.convert_float_to_str(arr)
 
-                    if new_dtype == 'S':
-                        arr = arr.astype('U').astype('O')
-                        if nanable:
-                            arr[na_arr] = None
-                    elif new_dtype == 'M':
-                        arr = arr.astype(new_dtype).astype('datetime64[ns]')
-                    elif new_dtype == 'm':
-                        arr = arr.astype(new_dtype).astype('timedelta64[ns]')
-                    elif new_dtype == 'f':
-                        arr = arr.astype(new_dtype)
-                        if nanable:
-                            arr[na_arr] = nan
-                    else:
-                        arr = arr.astype(new_dtype)
+                    new_arr[:, i] = arr
+                    new_srm[i] = cur_srm
+                else:
+                    if new_kind == 'b' and old_kind != 'b':
+                        arr = arr.astype('bool').astype('int8')
+                    new_arr[:, i] = arr
+                    if new_kind != old_kind:
+                        nas = utils.isna_array(arr, old_kind)
+                        new_arr[nas, i] = missing_value_code
 
-                new_kind = arr.dtype.kind
-                data_dict[new_kind].append(arr)
+            new_data = {new_kind: new_arr}
+            new_columns = self._columns.copy()
+            return self._construct_from_new(new_data, new_column_info, new_columns, new_srm)
 
-            new_column_info: ColInfoT = self._new_col_info_from_kind_shape(kind_shape, new_kind)
-            new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
-            return self._construct_from_new(new_data, new_column_info, self._columns.copy())
+
+
+            # data_dict: DictListArr = defaultdict(list)
+            # kind_num_cols: Dict[str, int] = OrderedDict()
+            # total_cols: int = 0
+            # new_srm = {}
+            #
+            # for old_kind, arr in self._data.items():  # type: str, ndarray
+            #     kind_num_cols[old_kind] = total_cols
+            #     total_cols += arr.shape[1]
+            #
+            #     if new_kind != old_kind:
+            #         nas = utils.isna_array(arr)
+            #         if new_kind == 'f':
+            #             arr = arr.astype('float64')
+            #             arr[nas] = nan
+            #         elif new_kind == 'i':
+            #             arr = arr.astype('int64')
+            #             arr[nas] = MIN_INT
+            #         elif new_kind == 'b':
+            #             arr = arr.astype('bool').astype('int8')
+            #             arr[nas] = -1
+            #         elif new_kind == 'S':
+            #             locs = []
+            #             if old_kind == 'b':
+            #                 arr = arr + 1
+            #                 new_srm[old_kind] = {loc: [False, 'False', 'True'] for loc in locs}
+            #
+            #
+            #     data_dict[new_kind].append(arr)
+            #
+            # new_column_info: ColInfoT = self._new_col_info_from_kind_shape(kind_num_cols, new_kind)
+            # new_data: Dict[str, ndarray] = utils.concat_data_arrays(data_dict)
+            # return self._construct_from_new(new_data, new_column_info, self._columns.copy())
 
         elif isinstance(dtype, dict):
             df_new: 'DataFrame' = self.copy()
@@ -1762,7 +1787,7 @@ class DataFrame(object):
                 new_column_info[col] = utils.Column(new_kind, loc + add_loc, i)
                 i += 1
 
-        new_data: Dict[str, ndarray] = utils.concat_stat_arrays(data_dict)
+        new_data: Dict[str, ndarray] = utils.concat_data_arrays(data_dict)
         return self._construct_from_new(new_data, new_column_info, new_columns, new_str_reverse_map)
 
     def _stat_funcs_axis1(self, name, **kwargs: Any) -> 'DataFrame':
@@ -2981,7 +3006,7 @@ class DataFrame(object):
             for col, loc, order in zip(dtype_col[dtype], dtype_loc[dtype], dtype_order[dtype]):
                 new_column_info[col] = utils.Column(new_dtype, loc + cur_loc, order)
 
-        new_data = utils.concat_stat_arrays(data_dict)
+        new_data = utils.concat_data_arrays(data_dict)
         new_columns = self._columns.copy()
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
@@ -3518,7 +3543,7 @@ class DataFrame(object):
                 data_dict[dtype].append(self._data[dtype][:, [loc]])
                 new_columns.append(col_new)
 
-            new_data = utils.concat_stat_arrays(data_dict)
+            new_data = utils.concat_data_arrays(data_dict)
             return self._construct_from_new(new_data, new_column_info,
                                             np.asarray(new_columns, dtype='O'))
 
@@ -3774,7 +3799,7 @@ class DataFrame(object):
                 new_column_info[col] = utils.Column(new_dtype, pos + cur_loc, order)
 
         new_columns = self._columns.copy()
-        new_data = utils.concat_stat_arrays(data_dict)
+        new_data = utils.concat_data_arrays(data_dict)
         return self._construct_from_new(new_data, new_column_info, new_columns)
 
     def rolling(self, left, right, min_window=None, kept_columns=False):

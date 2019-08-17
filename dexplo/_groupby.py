@@ -210,7 +210,7 @@ class Grouper(object):
             new_column_info[col].order = i
             i += 1
 
-        new_data = utils.concat_stat_arrays(data_dict)
+        new_data = utils.concat_data_arrays(data_dict)
 
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
@@ -220,7 +220,7 @@ class Grouper(object):
         size = _gb.size(self._group_labels, len(self._group_position))[:, np.newaxis]
         data_dict = self._get_group_col_data()
         data_dict['i'].append(size)
-        new_data = utils.concat_stat_arrays(data_dict)
+        new_data = utils.concat_data_arrays(data_dict)
         new_column_info = self._get_new_column_info()
         new_column_info[name] = utils.Column('i', new_data['i'].shape[1] - 1,
                                              len(new_columns) - 1)
@@ -236,7 +236,7 @@ class Grouper(object):
         cumcount = _gb.cumcount(self._group_labels, len(self._group_position))[:, np.newaxis]
         data_dict = self._get_group_col_data_all()
         data_dict['i'].append(cumcount)
-        new_data = utils.concat_stat_arrays(data_dict)
+        new_data = utils.concat_data_arrays(data_dict)
         new_column_info = self._get_new_column_info()
         new_column_info[name] = utils.Column('i', new_data['i'].shape[1] - 1,
                                              len(new_columns) - 1)
@@ -317,7 +317,7 @@ class Grouper(object):
             new_columns.append(col)
 
         data_dict_final['f'].append(result)
-        new_data = utils.concat_stat_arrays(data_dict_final)
+        new_data = utils.concat_data_arrays(data_dict_final)
 
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 
@@ -453,7 +453,7 @@ class Grouper(object):
                     new_column_info[cur_name] = utils.Column(new_kind, cur_loc + i, cur_order[i])
                     new_columns[cur_order[i]] = cur_name
 
-        new_data = utils.concat_stat_arrays(data_dict)
+        new_data = utils.concat_data_arrays(data_dict)
         new_columns = np.array(new_columns, dtype='O')
         return DataFrame._construct_from_new(new_data, new_column_info, new_columns)
 

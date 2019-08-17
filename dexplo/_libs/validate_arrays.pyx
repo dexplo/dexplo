@@ -95,7 +95,6 @@ def convert_object_array_with_kinds(arr, cur_kind):
         kind = get_kind(arr[i])
         if kind != 'missing':
             break
-    print(cur_kind, kind)
     if cur_kind == 'f':
         if kind in ['b', 'i', 'f', 'missing']:
             result = np.array(arr, dtype='float64')
@@ -433,3 +432,75 @@ def bool_selection_str_mapping(ndarray[np.uint32_t, ndim=2] a, dict str_reverse_
                 new_srm.append(cur_srm[cur_code])
             b[j, i] = new_val
     return new_str_reverse_map, b
+
+def convert_int_to_str(ndarray[np.int64_t] a):
+    cdef:
+        Py_ssize_t i
+        int nr = a.shape[0]
+        ndarray[np.uint32_t] b = np.empty(nr, 'uint32', 'F')
+        dict cur_str_map
+        int cur_val
+        str cur_str_val
+        int cur_len
+        list cur_srm
+
+    cur_str_map = {False: 0}
+    cur_srm = [False]
+    for i in range(nr):
+        if a[i] == MIN_INT:
+            b[i] = 0
+        else:
+            cur_str_val = str(a[i])
+            cur_len = len(cur_str_map)
+            b[i] = cur_str_map.setdefault(cur_str_val, cur_len)
+            if len(cur_str_map) > cur_len:
+                cur_srm.append(cur_str_val)
+    return cur_srm, b
+
+def convert_float_to_str(ndarray[np.float64_t] a):
+    cdef:
+        Py_ssize_t i
+        int nr = a.shape[0]
+        ndarray[np.uint32_t] b = np.empty(nr, 'uint32', 'F')
+        dict cur_str_map
+        int cur_val
+        str cur_str_val
+        int cur_len
+        list cur_srm
+
+    cur_str_map = {False: 0}
+    cur_srm = [False]
+    for i in range(nr):
+        if a[i] == MIN_INT:
+            b[i] = 0
+        else:
+            cur_str_val = str(a[i])
+            cur_len = len(cur_str_map)
+            b[i] = cur_str_map.setdefault(cur_str_val, cur_len)
+            if len(cur_str_map) > cur_len:
+                cur_srm.append(cur_str_val)
+    return cur_srm, b
+
+def convert_float_to_str(ndarray[np.float64_t] a):
+    cdef:
+        Py_ssize_t i
+        int nr = a.shape[0]
+        ndarray[np.uint32_t] b = np.empty(nr, 'uint32', 'F')
+        dict cur_str_map
+        int cur_val
+        str cur_str_val
+        int cur_len
+        list cur_srm
+
+    cur_str_map = {False: 0}
+    cur_srm = [False]
+    for i in range(nr):
+        if a[i] == MIN_INT:
+            b[i] = 0
+        else:
+            cur_str_val = str(a[i])
+            cur_len = len(cur_str_map)
+            b[i] = cur_str_map.setdefault(cur_str_val, cur_len)
+            if len(cur_str_map) > cur_len:
+                cur_srm.append(cur_str_val)
+    return cur_srm, b

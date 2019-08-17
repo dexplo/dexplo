@@ -26,7 +26,7 @@ _DTYPES = {'int': 'int64', 'float': 'float64', 'bool': 'bool', 'str': 'S',
            'timedelta64[D]': 'timedelta64[D]', 'timedelta64[W]': 'timedelta64[W]',
            'timedelta64[M]': 'timedelta64[M]', 'timedelta64[Y]': 'timedelta64[Y]'
            }
-_KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'bool', 'S': 'uint32',
+_KIND_NP = {'i': 'int64', 'f': 'float64', 'b': 'int8', 'S': 'uint32',
             'M': 'datetime64[ns]', 'm': 'timedelta64[ns]'}
 _NP_KIND = {'int64': 'i', 'float64': 'f', 'bool': 'b', 'S': 'S', 'U': 'U'}
 
@@ -416,6 +416,28 @@ def convert_kind_to_dtype(kind: str) -> str:
     return _DT[kind]
 
 
+def check_astype_compatible(new_kind, cur_kinds):
+    bad_kinds = {'f': {'S', 'm', 'M'},
+                 'i': {'S', 'm', 'M'},
+                 'b': {'S', 'm', 'M'},
+                 'S': {},
+                 'm': {'b', 'S', 'M'},
+                 'M': {'b', 'S', 'm'}
+                 }
+    cur_bad_kinds = bad_kinds[new_kind] & cur_kinds
+    if cur_bad_kinds:
+        new_dtype = convert_kind_to_dtype(new_kind)
+        bad_types = [convert_kind_to_dtype(kind) for kind in cur_bad_kinds]
+        if len(bad_types) == 1:
+            info = bad_types[0]
+        elif len(bad_types) == 2:
+            info = bad_types[0] + ' and ' + bad_types[1]
+        else:
+            info = ', '.join(bad_types[:-1]) + ' and ' + bad_types[-1]
+
+        raise ValueError(f'Cannot convert columns with type {info} to type {new_dtype}. ')
+
+
 def convert_kind_to_dtype_generic(kind: str) -> str:
     return _DT_GENERIC[kind]
 
@@ -502,17 +524,21 @@ def swap_axis_name(axis: str) -> str:
 
 def create_empty_arrs(data_dict):
     empty_arrs = {}
-    for dtype, list_arrs in data_dict.items():
+    for kind, arrs in data_dict.items():
         nc = 0
-        for arr in list_arrs:
+        for arr in arrs:
             if arr.ndim == 1:
                 nc += 1
             else:
                 nc += arr.shape[1]
-        nr = len(list_arrs[0])
+        nr = len(arrs[0])
         if nc > 1:
-            empty_arrs[dtype] = np.empty((nr, nc), _KIND_NP[dtype], 'F')
+            empty_arrs[kind] = np.empty((nr, nc), _KIND_NP[kind], 'F')
     return empty_arrs
+
+
+def create_empty_arr(kind, shape):
+    return np.empty(shape, _KIND_NP[kind], 'F')
 
 
 def get_missing_value_code(kind):
@@ -543,30 +569,30 @@ def get_missing_value_array(kind, n):
         return np.full(n, 0, 'int32', 'F')
 
 
-def isna_array(arr, dtype):
-    if dtype == 'b':
+def isna_array(arr, kind):
+    if kind == 'b':
         return arr == -1
-    elif dtype == 'i':
+    elif kind == 'i':
         return arr == MIN_INT
-    elif dtype == 'f':
+    elif kind == 'f':
         return np.isnan(arr)
-    elif dtype in 'mM':
+    elif kind in 'mM':
         return np.isnat(arr)
-    elif dtype == 'S':
+    elif kind == 'S':
         return arr == 0
 
 
-def concat_stat_arrays(data_dict: Dict[str, List[ndarray]]) -> Dict[str, ndarray]:
+def concat_data_arrays(data_dict: Dict[str, List[ndarray]]) -> Dict[str, ndarray]:
     new_data: Dict[str, ndarray] = {}
     empty_arrs = create_empty_arrs(data_dict)
-    for dtype, arrs in data_dict.items():
+    for kind, arrs in data_dict.items():
         if len(arrs) == 1:
             arr = arrs[0]
             if arr.ndim == 1:
                 arr = arr.reshape(-1, 1)
-            new_data[dtype] = np.asfortranarray(arr)
+            new_data[kind] = np.asfortranarray(arr)
         else:
-            data = empty_arrs[dtype]
+            data = empty_arrs[kind]
             i = 0
             for arr in arrs:
                 if arr.ndim == 1:
@@ -576,7 +602,7 @@ def concat_stat_arrays(data_dict: Dict[str, List[ndarray]]) -> Dict[str, ndarray
                     for j in range(arr.shape[1]):
                         data[:, i] = arr[:, j]
                         i += 1
-            new_data[dtype] = data
+            new_data[kind] = data
     return new_data
 
 

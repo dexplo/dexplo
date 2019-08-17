@@ -90,6 +90,6 @@ class OP_2D:
             raise NotImplementedError('Cannot operate on dataframes with different '
                                       'number of columns yet')
 
-        new_data = utils.concat_stat_arrays(data_dict)
+        new_data = utils.concat_data_arrays(data_dict)
         new_columns = self.left._columns.copy()
         return self.left._construct_from_new(new_data, new_column_info, new_columns, str_reverse_map)
