@@ -1,5 +1,5 @@
 options_dict = {'max_cols': 200,
-                'max_rows': 3,
+                'max_rows': 5,
                 'max_colwidth': 50,
                 'show_tail': False}
 

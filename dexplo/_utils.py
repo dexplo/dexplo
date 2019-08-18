@@ -421,8 +421,8 @@ def check_astype_compatible(new_kind: str, cur_kinds: Iterable) -> None:
                  'i': {'S', 'm', 'M'},
                  'b': {'S', 'm', 'M'},
                  'S': set(),
-                 'm': {'b', 'S', 'M'},
-                 'M': {'b', 'S', 'm'}
+                 'm': {'b', 'S', 'M', 'f', 'i'},
+                 'M': {'b', 'S', 'm', 'f', 'i'}
                  }
     cur_bad_kinds = bad_kinds[new_kind] & cur_kinds
     if cur_bad_kinds:

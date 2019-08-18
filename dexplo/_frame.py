@@ -1578,7 +1578,7 @@ class DataFrame(object):
 
         """
 
-        def change_each_array(new_loc, new_kind, old_kind, arr, new_arr):
+        def change_each_array(new_loc, new_kind, old_kind, arr, new_arr, cur_srm):
             missing_value_code = utils.get_missing_value_code(new_kind)
             if new_kind == 'S':
                 if old_kind == 'b':
@@ -1594,11 +1594,12 @@ class DataFrame(object):
                 new_arr[:, new_loc] = arr
                 new_srm[new_loc] = cur_srm
             else:
+                if new_kind != old_kind:
+                    nas = utils.isna_array(arr, old_kind)
                 if new_kind == 'b' and old_kind != 'b':
                     arr = arr.astype('bool').astype('int8')
                 new_arr[:, new_loc] = arr
                 if new_kind != old_kind:
-                    nas = utils.isna_array(arr, old_kind)
                     new_arr[nas, new_loc] = missing_value_code
 
         if isinstance(dtype, str):
@@ -1613,7 +1614,11 @@ class DataFrame(object):
             col_iter = enumerate(self._col_info_iter(with_order=True, with_arr=True))
             for i, (col, old_kind, loc, order, arr) in col_iter:
                 new_column_info[col] = utils.Column(new_kind, i, order)
-                change_each_array(i, new_kind, old_kind, arr, new_arr)
+                if old_kind == 'S':
+                    cur_srm = self._str_reverse_map[loc].copy()
+                else:
+                    cur_srm = []
+                change_each_array(i, new_kind, old_kind, arr, new_arr, cur_srm)
         elif isinstance(dtype, dict):
             col_kind_convert = {}
             for col, new_dtype in dtype.items():
@@ -1643,7 +1648,11 @@ class DataFrame(object):
                 new_kind = new_column_info[col].dtype
                 new_loc = new_column_info[col].loc
                 new_arr = new_data[new_kind]
-                change_each_array(new_loc, new_kind, old_kind, arr, new_arr)
+                if old_kind == 'S':
+                    cur_srm = self._str_reverse_map[loc].copy()
+                else:
+                    cur_srm = []
+                change_each_array(new_loc, new_kind, old_kind, arr, new_arr, cur_srm)
         else:
             raise TypeError('Argument dtype must be either a string or a dictionary')
 

@@ -17,7 +17,11 @@ def _check_1d_arrays(a: ndarray, b: ndarray, kind: str, tol: float = 10 ** -4) -
             criteria3 = np.isinf(a) & np.isinf(b)
         return (criteria1 | criteria2 | criteria3).all()
     else:
-        return (a == b).all()
+        try:
+            np.testing.assert_array_equal(a, b)
+        except AssertionError:
+            return False
+        return True
 
 
 def assert_frame_equal(df1: DataFrame, df2: DataFrame) -> None:
