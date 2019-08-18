@@ -1,5 +1,5 @@
 import decimal
-from typing import List, Dict, Set, Any, Union, Tuple
+from typing import List, Dict, Set, Any, Union, Tuple, Iterable
 import numpy as np
 from numpy import ndarray
 from ._libs import validate_arrays as va
@@ -416,11 +416,11 @@ def convert_kind_to_dtype(kind: str) -> str:
     return _DT[kind]
 
 
-def check_astype_compatible(new_kind, cur_kinds):
+def check_astype_compatible(new_kind: str, cur_kinds: Iterable) -> None:
     bad_kinds = {'f': {'S', 'm', 'M'},
                  'i': {'S', 'm', 'M'},
                  'b': {'S', 'm', 'M'},
-                 'S': {},
+                 'S': set(),
                  'm': {'b', 'S', 'M'},
                  'M': {'b', 'S', 'm'}
                  }

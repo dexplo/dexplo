@@ -481,26 +481,21 @@ def convert_float_to_str(ndarray[np.float64_t] a):
                 cur_srm.append(cur_str_val)
     return cur_srm, b
 
-def convert_float_to_str(ndarray[np.float64_t] a):
+def convert_datetime_str_to_str(a):
     cdef:
         Py_ssize_t i
         int nr = a.shape[0]
         ndarray[np.uint32_t] b = np.empty(nr, 'uint32', 'F')
-        dict cur_str_map
-        int cur_val
-        str cur_str_val
+        dict cur_str_map = {'NaT': 0}
+        list cur_srm = [False]
         int cur_len
-        list cur_srm
 
-    cur_str_map = {False: 0}
-    cur_srm = [False]
     for i in range(nr):
-        if a[i] == MIN_INT:
+        if a[i] == 'NaT':
             b[i] = 0
         else:
-            cur_str_val = str(a[i])
             cur_len = len(cur_str_map)
-            b[i] = cur_str_map.setdefault(cur_str_val, cur_len)
+            b[i] = cur_str_map.setdefault(a[i], cur_len)
             if len(cur_str_map) > cur_len:
-                cur_srm.append(cur_str_val)
+                cur_srm.append(a[i])
     return cur_srm, b

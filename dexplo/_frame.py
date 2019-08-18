@@ -1,4 +1,4 @@
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from math import ceil
 from copy import deepcopy
 from typing import (Union, Dict, List, Optional, Tuple, Callable, overload,
@@ -250,15 +250,23 @@ class DataFrame(object):
     def _build_repr(self) -> Tuple[List[List[str]], List[int], List[int], List[int]]:
         columns: List[str] = self.columns
         num_rows: int = len(self)
-        if len(columns) > options.max_cols:
-            col_num: int = options.max_cols // 2
+        max_cols = options.options_dict['max_cols']
+        max_rows = options.options_dict['max_rows']
+        max_colwidth = options.options_dict['max_colwidth']
+        if options._head_method:
+            max_rows = num_rows
+
+        if len(columns) > max_cols:
+            col_num: int = max_cols // 2
             columns = columns[:col_num] + ['...'] + columns[-col_num:]
 
-        if num_rows > options.max_rows:
-            first: List[int] = list(range(options.max_rows // 2))
-            last: List[int] = list(range(num_rows - options.max_rows // 2,
-                                         num_rows))
-            idx: List[int] = first + last
+        if num_rows > max_rows:
+            if options.options_dict['show_tail']:
+                first: List[int] = list(range(max_rows // 2))
+                last: List[int] = list(range(num_rows - max_rows // 2, num_rows))
+                idx: List[int] = first + last
+            else:
+                idx = list(range(max_rows))
         else:
             idx = list(range(num_rows))
 
@@ -313,7 +321,7 @@ class DataFrame(object):
 
             if self._column_info[column].dtype == 'S':
                 cur_len = max([len(str(x)) for x in data])
-                cur_len = min(cur_len, options.max_colwidth)
+                cur_len = min(cur_len, max_colwidth)
                 long_len.append(cur_len)
                 decimal_len.append(0)
             elif self._column_info[column].dtype == 'f':
@@ -346,6 +354,13 @@ class DataFrame(object):
         data_list: List[List[str]]
         decimal_len: List[int]
         idx: List[int]
+
+        max_rows = options.options_dict['max_rows']
+        max_colwidth = options.options_dict['max_colwidth']
+        show_tail = options.options_dict['show_tail']
+        if options._head_method:
+            max_rows = len(self)
+
         data_list, long_len, decimal_len, idx = self._build_repr()
         return_string: str = ''
 
@@ -357,13 +372,13 @@ class DataFrame(object):
 
                 if isinstance(d, str):
                     cur_str = d
-                    if len(cur_str) > options.max_colwidth:
-                        cur_str = cur_str[:options.max_colwidth - 3] + "..."
+                    if len(cur_str) > max_colwidth:
+                        cur_str = cur_str[:max_colwidth - 3] + "..."
                     return_string += f'{cur_str: >{fl}}  '
                 else:
                     return_string += f'{d: >{fl}.{dl}f}  '
 
-            if i == options.max_rows // 2 and len(self) > options.max_rows:
+            if i == max_rows // 2 and len(self) > max_rows and show_tail:
                 return_string += '\n'
                 for j, fl in enumerate(long_len):
                     return_string += f'{"...": >{str(fl)}}'
@@ -374,9 +389,16 @@ class DataFrame(object):
         data_list: List[List[str]]
         decimal_len: List[int]
         idx: List[int]
-        data_list, long_len, decimal_len, idx = self._build_repr()
 
+        max_rows = options.options_dict['max_rows']
+        max_colwidth = options.options_dict['max_colwidth']
+        show_tail = options.options_dict['show_tail']
+        if options._head_method:
+            max_rows = len(self)
+
+        data_list, long_len, decimal_len, idx = self._build_repr()
         return_string: str = '<table>'
+
         for i in range(len(idx) + 1):
             if i == 0:
                 return_string += '<thead>'
@@ -395,12 +417,12 @@ class DataFrame(object):
                     d[i] = str(d[i])
                 if isinstance(d[i], str):
                     cur_str = d[i]
-                    if len(cur_str) > options.max_colwidth:
-                        cur_str = cur_str[:options.max_colwidth - 3] + "..."
+                    if len(cur_str) > max_colwidth:
+                        cur_str = cur_str[:max_colwidth - 3] + "..."
                     return_string += f'{ts}{cur_str: >{fl}}{te}'
                 else:
                     return_string += f'{ts}{d[i]: >{fl}.{dl}f}{te}'
-            if i == options.max_rows // 2 and len(self) > options.max_rows:
+            if i == max_rows // 2 and len(self) > max_rows and show_tail:
                 return_string += '<tr>'
                 for j, fl in enumerate(long_len):
                     ts = '<th>' if j == 0 else '<td>'
@@ -410,7 +432,10 @@ class DataFrame(object):
             return_string += '</tr>'
             if i == 0:
                 return_string += '</thead>'
-        return return_string + '</tbody></table>'
+        options._head_method = False
+        return_string += '</tbody></table>'
+        return_string += f'<p>{self.shape[0]} rows x {self.shape[1]} columns</p>'
+        return return_string
 
     def __len__(self) -> int:
         for _, arr in self._data.items():
@@ -1447,7 +1472,6 @@ class DataFrame(object):
             value = utils.convert_lists_vertical(value)
             # need to update convert_to_arrays to cover missing values
             arrs, kinds, srms = utils.convert_to_arrays(value, ncols_to_set, cur_kinds)
-            print(arrs)
         elif isinstance(value, ndarray):
             arrs, kinds, srms = utils.convert_to_arrays(value, ncols_to_set, cur_kinds)
         elif isinstance(value, DataFrame):
@@ -1493,14 +1517,12 @@ class DataFrame(object):
                         if n_after > n_before:
                             new_srm.append(cur_str)
                 else:
-                    print(rows)
                     for i, code in enumerate(old_codes):
                         if j < len(rows) and rows[j] == i:
                             cur_str = cur_srm[arr[j]]
                             j += 1
                         else:
                             cur_str = old_srm[code]
-                        print('cur_str is', cur_str)
                         n_before = len(str_map)
                         new_codes[i] = str_map.setdefault(cur_str, len(str_map))
                         n_after = len(str_map)
@@ -1555,6 +1577,30 @@ class DataFrame(object):
         New DataFrame with new data types
 
         """
+
+        def change_each_array(new_loc, new_kind, old_kind, arr, new_arr):
+            missing_value_code = utils.get_missing_value_code(new_kind)
+            if new_kind == 'S':
+                if old_kind == 'b':
+                    arr = arr + 1
+                    cur_srm = [False, 'False', 'True']
+                elif old_kind in 'i':
+                    cur_srm, arr = _va.convert_int_to_str(arr)
+                elif old_kind == 'f':
+                    cur_srm, arr = _va.convert_float_to_str(arr)
+                elif old_kind in 'mM':
+                    cur_srm, arr = _va.convert_datetime_str_to_str(arr.astype('str'))
+
+                new_arr[:, new_loc] = arr
+                new_srm[new_loc] = cur_srm
+            else:
+                if new_kind == 'b' and old_kind != 'b':
+                    arr = arr.astype('bool').astype('int8')
+                new_arr[:, new_loc] = arr
+                if new_kind != old_kind:
+                    nas = utils.isna_array(arr, old_kind)
+                    new_arr[nas, new_loc] = missing_value_code
+
         if isinstance(dtype, str):
             new_dtype: str = utils.check_valid_dtype_convert(dtype)
             new_kind: str = utils.convert_numpy_to_kind(new_dtype)
@@ -1562,80 +1608,47 @@ class DataFrame(object):
 
             new_column_info: ColInfoT = {}
             new_arr = utils.create_empty_arr(new_kind, self.shape)
+            new_data = {new_kind: new_arr}
             new_srm = {}
-            missing_value_code = utils.get_missing_value_code(new_kind)
             col_iter = enumerate(self._col_info_iter(with_order=True, with_arr=True))
             for i, (col, old_kind, loc, order, arr) in col_iter:
                 new_column_info[col] = utils.Column(new_kind, i, order)
-
-                if new_kind == 'S':
-                    if old_kind == 'b':
-                        arr = arr + 1
-                        cur_srm = [False, 'False', 'True']
-                    elif old_kind == 'i':
-                        cur_srm, arr = _va.convert_int_to_str(arr)
-                    elif old_kind == 'f':
-                        cur_srm, arr = _va.convert_float_to_str(arr)
-
-                    new_arr[:, i] = arr
-                    new_srm[i] = cur_srm
-                else:
-                    if new_kind == 'b' and old_kind != 'b':
-                        arr = arr.astype('bool').astype('int8')
-                    new_arr[:, i] = arr
-                    if new_kind != old_kind:
-                        nas = utils.isna_array(arr, old_kind)
-                        new_arr[nas, i] = missing_value_code
-
-            new_data = {new_kind: new_arr}
-            new_columns = self._columns.copy()
-            return self._construct_from_new(new_data, new_column_info, new_columns, new_srm)
-
-
-
-            # data_dict: DictListArr = defaultdict(list)
-            # kind_num_cols: Dict[str, int] = OrderedDict()
-            # total_cols: int = 0
-            # new_srm = {}
-            #
-            # for old_kind, arr in self._data.items():  # type: str, ndarray
-            #     kind_num_cols[old_kind] = total_cols
-            #     total_cols += arr.shape[1]
-            #
-            #     if new_kind != old_kind:
-            #         nas = utils.isna_array(arr)
-            #         if new_kind == 'f':
-            #             arr = arr.astype('float64')
-            #             arr[nas] = nan
-            #         elif new_kind == 'i':
-            #             arr = arr.astype('int64')
-            #             arr[nas] = MIN_INT
-            #         elif new_kind == 'b':
-            #             arr = arr.astype('bool').astype('int8')
-            #             arr[nas] = -1
-            #         elif new_kind == 'S':
-            #             locs = []
-            #             if old_kind == 'b':
-            #                 arr = arr + 1
-            #                 new_srm[old_kind] = {loc: [False, 'False', 'True'] for loc in locs}
-            #
-            #
-            #     data_dict[new_kind].append(arr)
-            #
-            # new_column_info: ColInfoT = self._new_col_info_from_kind_shape(kind_num_cols, new_kind)
-            # new_data: Dict[str, ndarray] = utils.concat_data_arrays(data_dict)
-            # return self._construct_from_new(new_data, new_column_info, self._columns.copy())
-
+                change_each_array(i, new_kind, old_kind, arr, new_arr)
         elif isinstance(dtype, dict):
-            df_new: 'DataFrame' = self.copy()
+            col_kind_convert = {}
+            for col, new_dtype in dtype.items():
+                self._validate_column_name(col)
+                new_dtype: str = utils.check_valid_dtype_convert(new_dtype)
+                new_kind: str = utils.convert_numpy_to_kind(new_dtype)
+                col_kind_convert[col] = new_kind
+                old_kind = self._column_info[col].dtype
+                utils.check_astype_compatible(new_kind, {old_kind})
 
-            for column, new_dtype2 in dtype.items():  # type: str, str
-                df_new._validate_column_name(column)
-                new_dtype_numpy: str = utils.check_valid_dtype_convert(new_dtype2)
-                df_new._astype_internal(column, new_dtype_numpy)
-            return df_new
+            new_column_info: ColInfoT = {}
+            cols_per_kind: Dict[str, int] = defaultdict(int)
+            for col, old_kind, loc, order in self._col_info_iter(with_order=True):
+                new_kind = col_kind_convert.get(col, old_kind)
+                cur_loc = cols_per_kind[new_kind]
+                new_column_info[col] = utils.Column(new_kind, cur_loc, order)
+                cols_per_kind[new_kind] += 1
+
+            # create empty arrays for each type
+            new_data = {}
+            for new_kind, num_cols in cols_per_kind.items():
+                shape = len(self), num_cols
+                new_data[new_kind] = utils.create_empty_arr(new_kind, shape)
+
+            new_srm = {}
+            for col, old_kind, loc, order, arr in self._col_info_iter(with_order=True, with_arr=True):
+                new_kind = new_column_info[col].dtype
+                new_loc = new_column_info[col].loc
+                new_arr = new_data[new_kind]
+                change_each_array(new_loc, new_kind, old_kind, arr, new_arr)
         else:
             raise TypeError('Argument dtype must be either a string or a dictionary')
+
+        new_columns = self._columns.copy()
+        return self._construct_from_new(new_data, new_column_info, new_columns, new_srm)
 
     def head(self, n: int = 5) -> 'DataFrame':
         """
@@ -1646,6 +1659,7 @@ class DataFrame(object):
         n : int
 
         """
+        options._head_method = True
         return self[:n, :]  # type: ignore
 
     def tail(self, n: int = 5) -> 'DataFrame':
