@@ -914,6 +914,7 @@ class DataFrame(object):
         kind_shape: Dict[str, Tuple[str, int]] = {}
         arr_res: ndarray
         new_str_reverse_map: StrRevMap = {}
+        from ._libs import math_oper
 
         for old_kind, arr in self._data.items():
             if old_kind == 'S':
@@ -927,7 +928,11 @@ class DataFrame(object):
             else:
                 with np.errstate(invalid='ignore', divide='ignore'):
                     # TODO: do something about zero division error
-                    arr_res = getattr(arr, op_string)(other)
+                    if old_kind == 'i':
+                        # must do this for all operations
+                        arr_res = math_oper.add_int(arr, other)
+                    else:
+                        arr_res = getattr(arr, op_string)(other)
                 new_kind = arr_res.dtype.kind
 
             cur_len: int = utils.get_num_cols(data_dict.get(new_kind, []))

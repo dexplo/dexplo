@@ -23,7 +23,6 @@ def get_dtypes_first_line(char * chars, int nc, ndarray[np.uint8_t, cast=True] u
         bint is_float = False
         bint is_str = False
         bint begun = False
-
         bytes temp
 
     dtypes = np.zeros(nc, dtype='int64')
@@ -137,10 +136,11 @@ cdef double get_float(char * string):
 def add_new_string_column(dict string_mapping, ndarray[np.uint32_t, ndim=2] orig_str_cat,
                           ndarray a_tmp_str, int col_num):
     # n is current row number
-    cdef Py_ssize_t i
-    cdef int val, n = len(a_tmp_str)
-    cdef ndarray[np.uint32_t] new_arr = np.empty(len(orig_str_cat), np.uint32, 'F')
-    cdef dict cur_str_map = {False: 0}
+    cdef:
+        Py_ssize_t i
+        int val, n = len(a_tmp_str)
+        ndarray[np.uint32_t] new_arr = np.empty(len(orig_str_cat), np.uint32, 'F')
+        dict cur_str_map = {False: 0}
 
     string_mapping[col_num] = cur_str_map
 
