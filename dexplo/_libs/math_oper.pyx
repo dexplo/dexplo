@@ -868,7 +868,7 @@ def bool_rmod_float(ndarray[np.int8_t, ndim=2] a, np.float64_t other):
 
 # int operation bool
 
-def int_add_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_add_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -877,13 +877,13 @@ def int_add_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = a[j, i] + other
     return a_new
 
-def int_radd_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_radd_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -892,13 +892,13 @@ def int_radd_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = a[j, i] + other
     return a_new
 
-def int_sub_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_sub_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -907,13 +907,13 @@ def int_sub_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = a[j, i] - other
     return a_new
 
-def int_rsub_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_rsub_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -922,13 +922,13 @@ def int_rsub_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = other - a[j, i]
     return a_new
 
-def int_mul_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_mul_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -937,13 +937,13 @@ def int_mul_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = a[j, i] * other
     return a_new
 
-def int_rmul_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_rmul_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -952,13 +952,13 @@ def int_rmul_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = a[j, i] * other
     return a_new
 
-def int_truediv_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_truediv_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -967,13 +967,13 @@ def int_truediv_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = np.nan
             else:
                 a_new[j, i] = a[j, i] / other
     return a_new
 
-def int_rtruediv_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_rtruediv_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -982,13 +982,13 @@ def int_rtruediv_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = np.nan
             else:
                 a_new[j, i] = other / a[j, i]
     return a_new
 
-def int_floordiv_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_floordiv_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -997,13 +997,13 @@ def int_floordiv_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = a[j, i] // other
     return a_new
 
-def int_rfloordiv_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_rfloordiv_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -1012,13 +1012,13 @@ def int_rfloordiv_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = other // a[j, i]
     return a_new
 
-def int_pow_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_pow_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -1027,13 +1027,13 @@ def int_pow_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = a[j, i] ** other
     return a_new
 
-def int_rpow_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_rpow_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -1042,13 +1042,13 @@ def int_rpow_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = other ** a[j, i]
     return a_new
 
-def int_mod_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_mod_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -1057,13 +1057,13 @@ def int_mod_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = a[j, i] % other
     return a_new
 
-def int_rmod_int(ndarray[np.int64_t, ndim=2] a, int other):
+def int_rmod_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0]
@@ -1072,7 +1072,220 @@ def int_rmod_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = other % a[j, i]
+    return a_new
+
+
+# bool operation bool
+
+def bool_add_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = a[j, i] + other
+    return a_new
+
+def bool_radd_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = a[j, i] + other
+    return a_new
+
+def bool_sub_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = a[j, i] - other
+    return a_new
+
+def bool_rsub_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = other - a[j, i]
+    return a_new
+
+def bool_mul_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = a[j, i] * other
+    return a_new
+
+def bool_rmul_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = a[j, i] * other
+    return a_new
+
+def bool_truediv_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.float64_t, ndim=2] a_new = np.empty((nr, nc), dtype='float64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = np.nan
+            else:
+                a_new[j, i] = a[j, i] / other
+    return a_new
+
+def bool_rtruediv_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.float64_t, ndim=2] a_new = np.empty((nr, nc), dtype='float64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = np.nan
+            else:
+                a_new[j, i] = other / a[j, i]
+    return a_new
+
+def bool_floordiv_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = a[j, i] // other
+    return a_new
+
+def bool_rfloordiv_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = other // a[j, i]
+    return a_new
+
+def bool_pow_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = a[j, i] ** other
+    return a_new
+
+def bool_rpow_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = other ** a[j, i]
+    return a_new
+
+def bool_mod_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
+                a_new[j, i] = MIN_INT
+            else:
+                a_new[j, i] = a[j, i] % other
+    return a_new
+
+def bool_rmod_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int64_t, ndim=2] a_new = np.empty((nr, nc), dtype='int64')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == -1 or other == -1:
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = other % a[j, i]
