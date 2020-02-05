@@ -9,11 +9,11 @@ class TestArithmeticOperations:
     df = dx.DataFrame({'a': [0, nan, 5],
                        'b': [0, 1.5, nan],
                        'c': [''] + list('bg'),
-                       'd': [False, False, True],
+                       'd': [nan, False, True],
                        'e': ['', None, 'ad'],
                        'f': [0, 4, 5],
                        'g': np.zeros(3, dtype='int'),
-                       'h': [np.nan] * 3})
+                       'h': [nan, nan, nan]})
 
     def test_add_number_frame(self):
         with pytest.raises(TypeError):
@@ -34,7 +34,7 @@ class TestArithmeticOperations:
                             'b': [5, 6.5, nan],
                             'f': [5, 9, 10],
                             'g': [5, 5, 5],
-                            'h': [np.nan] * 3},
+                            'h': [nan, nan, nan]},
                            columns=list('abfgh'))
         assert_frame_equal(df1, df2)
 
@@ -44,14 +44,54 @@ class TestArithmeticOperations:
         df1 = self.df.select_dtypes(['number', 'bool']) + 5
         df2 = dx.DataFrame({'a': [5, nan, 10],
                             'b': [5, 6.5, nan],
-                            'd': [5, 5, 6],
+                            'd': [nan, 5, 6],
                             'f': [5, 9, 10],
                             'g': [5, 5, 5],
-                            'h': [np.nan] * 3},
+                            'h': [nan, nan, nan]},
                            columns=list('abdfgh'))
         assert_frame_equal(df1, df2)
 
         df1 = 5 + self.df.select_dtypes(['number', 'bool'])
+        assert_frame_equal(df1, df2)
+
+    def test_add_float_frame(self):
+        some_float = 5.0
+        with pytest.raises(TypeError):
+            self.df + some_float
+
+        df1 = self.df.select_dtypes('int') + some_float
+        df2 = dx.DataFrame({'a': [5., nan, 10],
+                            'f': [5., 9, 10],
+                            'g': [5., 5, 5]},
+                           columns=['a', 'f', 'g'])
+        assert_frame_equal(df1, df2)
+
+        df1 = some_float + self.df.select_dtypes('int')
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.select_dtypes('number') + some_float
+        df2 = dx.DataFrame({'a': [5., nan, 10],
+                            'b': [5., 6.5, nan],
+                            'f': [5., 9, 10],
+                            'g': [5., 5, 5],
+                            'h': [nan, nan, nan]},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+        df1 = some_float + self.df.select_dtypes('number')
+        assert_frame_equal(df1, df2)
+
+        df1 = self.df.select_dtypes(['number', 'bool']) + some_float
+        df2 = dx.DataFrame({'a': [5., nan, 10],
+                            'b': [5., 6.5, nan],
+                            'd': [nan, 5, 6],
+                            'f': [5., 9, 10],
+                            'g': [5., 5, 5],
+                            'h': [nan, nan, nan]},
+                           columns=list('abdfgh'))
+        assert_frame_equal(df1, df2)
+
+        df1 = some_float + self.df.select_dtypes(['number', 'bool'])
         assert_frame_equal(df1, df2)
 
     def test_add_string_frame(self):
@@ -89,36 +129,36 @@ class TestArithmeticOperations:
             self.df.select_dtypes('str') - 10
 
         df1 = self.df.select_dtypes('int') - 5
-        df2 = dx.DataFrame({'a': [-5, -5, 0],
+        df2 = dx.DataFrame({'a': [-5, nan, 0],
                             'f': [-5, -1, 0],
-                            'g': np.zeros(3, dtype='int') - 5},
+                            'g': [-5, -5, -5]},
                            columns=['a', 'f', 'g'])
         assert_frame_equal(df1, df2)
 
         df1 = 5 - self.df.select_dtypes('int')
-        df2 = dx.DataFrame({'a': [5, 5, 0],
+        df2 = dx.DataFrame({'a': [5, nan, 0],
                             'f': [5, 1, 0],
                             'g': 5 - np.zeros(3, dtype='int')},
                            columns=['a', 'f', 'g'])
         assert_frame_equal(df1, df2)
 
         df1 = self.df.select_dtypes(['number', 'bool']) - 5
-        df2 = dx.DataFrame({'a': [-5, -5, 0],
+        df2 = dx.DataFrame({'a': [-5, nan, 0],
                             'b': [-5, -3.5, nan],
-                            'd': [-5, -5, -4],
+                            'd': [nan, -5, -4],
                             'f': [-5, -1, 0],
                             'g': np.zeros(3, dtype='int') - 5,
-                            'h': [np.nan] * 3},
+                            'h': [nan, nan, nan]},
                            columns=list('abdfgh'))
         assert_frame_equal(df1, df2)
 
         df1 = 5 - self.df.select_dtypes(['number', 'bool'])
-        df2 = dx.DataFrame({'a': [5, 5, 0],
+        df2 = dx.DataFrame({'a': [5, nan, 0],
                             'b': [5, 3.5, nan],
-                            'd': [5, 5, 4],
+                            'd': [nan, 5, 4],
                             'f': [5, 1, 0],
                             'g': 5 - np.zeros(3, dtype='int'),
-                            'h': [np.nan] * 3},
+                            'h': [nan, nan, nan]},
                            columns=list('abdfgh'))
         assert_frame_equal(df1, df2)
 
@@ -127,7 +167,7 @@ class TestArithmeticOperations:
         df2 = dx.DataFrame({'a': [0, 0, 10],
                             'b': [0, 3.0, nan],
                             'c': ['', 'bb', 'gg'],
-                            'd': [0, 0, 2],
+                            'd': [nan, 0, 2],
                             'e': ['', None, 'adad'],
                             'f': [0, 8, 10],
                             'g': np.zeros(3, dtype='int'),
@@ -138,7 +178,7 @@ class TestArithmeticOperations:
         df2 = dx.DataFrame({'a': [0, 0, 10],
                             'b': [0, 3.0, nan],
                             'c': ['', 'bb', 'gg'],
-                            'd': [0, 0, 2],
+                            'd': [nan, 0, 2],
                             'e': ['', None, 'adad'],
                             'f': [0, 8, 10],
                             'g': np.zeros(3, dtype='int'),
@@ -156,20 +196,20 @@ class TestArithmeticOperations:
             self.df / 'asdf'
 
         df1 = self.df.select_dtypes('number') / 2
-        df2 = dx.DataFrame({'a': [0, 0, 2.5],
+        df2 = dx.DataFrame({'a': [0, nan, 2.5],
                             'b': [0, .75, nan],
                             'f': [0, 2, 2.5],
                             'g': np.zeros(3),
-                            'h': [np.nan] * 3},
+                            'h': [nan, nan, nan]},
                            columns=list('abfgh'))
         assert_frame_equal(df1, df2)
 
         df1 = 10 / self.df.select_dtypes('number')
-        df2 = dx.DataFrame({'a': [np.inf, np.inf, 2],
+        df2 = dx.DataFrame({'a': [np.inf, nan, 2],
                             'b': [np.inf, 10 / 1.5, nan],
                             'f': [np.inf, 2.5, 2],
                             'g': [np.inf] * 3,
-                            'h': [np.nan] * 3},
+                            'h': [nan, nan, nan]},
                            columns=list('abfgh'))
         assert_frame_equal(df1, df2)
 
@@ -187,7 +227,7 @@ class TestArithmeticOperations:
                            'b': [0, 20, nan],
                            'f': [0, 100, 10],
                            'g': np.zeros(3, dtype='int'),
-                           'h': [np.nan] * 3},
+                           'h': [nan, nan, nan]},
                           columns=list('abfgh'))
 
         df1 = df // 3
@@ -195,7 +235,7 @@ class TestArithmeticOperations:
                             'b': [0, 6, nan],
                             'f': [0, 33, 3],
                             'g': np.zeros(3, dtype='int'),
-                            'h': [np.nan] * 3},
+                            'h': [nan, nan, nan]},
                            columns=list('abfgh'))
         assert_frame_equal(df1, df2)
 
@@ -213,14 +253,14 @@ class TestArithmeticOperations:
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
-                           'h': [np.nan] * 3},
+                           'h': [nan, nan, nan]},
                           columns=list('abfgh'))
         df1 = df ** 2
         df2 = dx.DataFrame({'a': [0, 0, 100],
                             'b': [0, 4, nan],
                             'f': [0, 100, 9],
                             'g': np.zeros(3, dtype='int'),
-                            'h': [np.nan] * 3},
+                            'h': [nan, nan, nan]},
                            columns=list('abfgh'))
 
         assert_frame_equal(df1, df2)
@@ -230,7 +270,7 @@ class TestArithmeticOperations:
                             'b': [1, 4, nan],
                             'f': [1, 1024, 8],
                             'g': np.ones(3, dtype='int'),
-                            'h': [np.nan] * 3},
+                            'h': [nan, nan, nan]},
                            columns=list('abfgh'))
         assert_frame_equal(df1, df2)
 
@@ -248,7 +288,7 @@ class TestArithmeticOperations:
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
-                           'h': [np.nan] * 3},
+                           'h': [nan, nan, nan]},
                           columns=list('abfgh'))
 
         df1 = df % 3
@@ -256,7 +296,7 @@ class TestArithmeticOperations:
                             'b': [0, 2, nan],
                             'f': [0, 1, 0],
                             'g': np.zeros(3, dtype='int'),
-                            'h': [np.nan] * 3},
+                            'h': [nan, nan, nan]},
                            columns=list('abfgh'))
         assert_frame_equal(df1, df2)
 
@@ -274,7 +314,7 @@ class TestArithmeticOperations:
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
-                           'h': [np.nan] * 3},
+                           'h': [nan, nan, nan]},
                           columns=list('abfgh'))
 
         df1 = df > 3
@@ -300,7 +340,7 @@ class TestArithmeticOperations:
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
-                           'h': [np.nan] * 3},
+                           'h': [nan, nan, nan]},
                           columns=list('abfgh'))
 
         df1 = df >= 3
@@ -326,7 +366,7 @@ class TestArithmeticOperations:
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
-                           'h': [np.nan] * 3},
+                           'h': [nan, nan, nan]},
                           columns=list('abfgh'))
 
         df1 = df < 3
@@ -352,7 +392,7 @@ class TestArithmeticOperations:
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
-                           'h': [np.nan] * 3})
+                           'h': [nan, nan, nan]})
         df1 = df <= 3
 
         df2 = dx.DataFrame({'a': [False, False, False],
@@ -374,14 +414,14 @@ class TestArithmeticOperations:
                            'b': [0, 2, nan],
                            'f': [0, 10, 3],
                            'g': np.zeros(3, dtype='int'),
-                           'h': [np.nan] * 3})
+                           'h': [nan, nan, nan]})
         df1 = -df
 
         df2 = dx.DataFrame({'a': [-6, -7, -10],
                             'b': [0, -2, nan],
                             'f': [0, -10, -3],
                             'g': np.zeros(3, dtype='int'),
-                            'h': [np.nan] * 3})
+                            'h': [nan, nan, nan]})
         assert_frame_equal(df1, df2)
 
     def test_inplace_operators(self):

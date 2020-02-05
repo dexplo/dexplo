@@ -6,9 +6,10 @@ cimport numpy as np
 import cython
 import datetime
 
+MONTHS365 = np.array([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], dtype='int64')
+MONTHS366 = np.array([31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], dtype='int64')
+
 cdef:
-    ndarray[np.int64_t] MONTHS365 = np.array([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], dtype='int64')
-    ndarray[np.int64_t] MONTHS366 = np.array([31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], dtype='int64')
     long YEAR_NANOS = 10 ** 9 * 86400
     np.int64_t NAT = np.datetime64('nat').astype('int64')
     int DAYS_SINCE_1600 = 135140

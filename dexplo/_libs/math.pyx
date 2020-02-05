@@ -585,7 +585,7 @@ def prod_float(ndarray[np.float64_t, ndim=2] a, axis, hasnans, **kwargs):
     cdef:
         Py_ssize_t i, j
         int nr = a.shape[0], nc = a.shape[1]
-        ndarray[np.int64_t] total
+        ndarray[np.float64_t] total
         double *arr = <double*> a.data
         long idx
 

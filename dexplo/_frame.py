@@ -23,7 +23,7 @@ from ._libs import (groupby as _gb,
                     out_files as _of,
                     join as _join)
 from ._strings import StringClass
-from . import _stat_funcs as stat
+from . import _stat_funcs as _sf
 from ._arithmetic_ops import OP_2D
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
@@ -928,9 +928,23 @@ class DataFrame(object):
             else:
                 with np.errstate(invalid='ignore', divide='ignore'):
                     # TODO: do something about zero division error
-                    if old_kind == 'i':
-                        # must do this for all operations
-                        arr_res = math_oper.add_int(arr, other)
+                    if old_kind in ['i', 'b']:
+                        start_func = 'int' if old_kind == 'i' else 'bool'
+                        if utils.is_integer(other):
+                            end_func = 'int'
+                        elif utils.is_float(other):
+                            end_func = 'float'
+                        elif utils.is_bool(other):
+                            end_func = 'bool'
+                        else:
+                            end_func = 'nope'
+                        # check if int or float
+                        final_op_string = f"{start_func}_{op_string.strip('_')}_{end_func}"
+                        try:
+                            func = getattr(math_oper, final_op_string)
+                        except AttributeError:
+                            raise TypeError('Operation does not work on int columns')
+                        arr_res = func(arr, other)
                     else:
                         arr_res = getattr(arr, op_string)(other)
                 new_kind = arr_res.dtype.kind
@@ -1115,6 +1129,7 @@ class DataFrame(object):
             arr_right = other
 
         if arr_left.dtype.kind != 'b' or arr_left.dtype.kind != 'b':
+            d = {'__and__': '&', '__or__': '|'}
             raise TypeError(f'The logical operator {d[op_logical]} only works with boolean arrays'
                             'or DataFrames')
 
@@ -1734,7 +1749,7 @@ class DataFrame(object):
 
     def _check_stat_dtypes_axis1(self, name: str) -> None:
         for dtype in self._data:
-            if name not in stat.funcs[dtype]:
+            if name not in _sf.funcs[dtype]:
                 raise TypeError(f'Cannot compute {name} method on DataFrame with data type '
                                 f'{utils._DT[dtype]} when axis="columns"')
             if len(self._data) > 1 and dtype in 'OMm' and name not in {'count', 'nunique'}:
@@ -1836,7 +1851,7 @@ class DataFrame(object):
             if len(arrs) == 1:
                 result = arrs[0]
             else:
-                func_across: Callable = stat.funcs_columns[name]
+                func_across: Callable = _sf.funcs_columns[name]
                 result = func_across(arrs)
 
         if utils.is_agg_func(name):

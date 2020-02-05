@@ -136,6 +136,10 @@ def is_number(value: Any) -> bool:
     return isinstance(value, (int, float, np.number))
 
 
+def is_bool(value: Any) -> bool:
+    return isinstance(value, (bool, np.bool_))
+
+
 def is_integer(value: Any) -> bool:
     return isinstance(value, (int, np.integer))
 

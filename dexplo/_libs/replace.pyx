@@ -1,11 +1,6 @@
 import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
-import cython
-from numpy import nan
-from .math import var_int as var_int_math
-from collections import defaultdict
-from dexplo import _utils
 
 try:
     import bottleneck as bn
@@ -17,8 +12,8 @@ cdef extern from "numpy/npy_math.h":
 
 
 def replace_bool_with_bool(ndarray[np.uint8_t, ndim=2, cast=True] a,
-                               ndarray[np.uint8_t, cast=True] to_replace,
-                               ndarray[np.uint8_t, cast=True] replacements):
+                           ndarray[np.uint8_t, cast=True] to_replace,
+                           ndarray[np.uint8_t, cast=True] replacements):
     cdef:
         Py_ssize_t i, j, nr = a.shape[0], nc = a.shape[1]
         Py_ssize_t k, n = replacements.shape[0]
@@ -36,8 +31,8 @@ def replace_bool_with_bool(ndarray[np.uint8_t, ndim=2, cast=True] a,
     return result
 
 def replace_bool_with_int(ndarray[np.uint8_t, ndim=2, cast=True] a,
-                               ndarray[np.uint8_t, cast=True] to_replace,
-                               ndarray[np.int64_t] replacements):
+                          ndarray[np.uint8_t, cast=True] to_replace,
+                          ndarray[np.int64_t] replacements):
     cdef:
         Py_ssize_t i, j, nr = a.shape[0], nc = a.shape[1]
         Py_ssize_t k, n = replacements.shape[0]
@@ -55,8 +50,8 @@ def replace_bool_with_int(ndarray[np.uint8_t, ndim=2, cast=True] a,
     return result
 
 def replace_bool_with_float(ndarray[np.uint8_t, ndim=2, cast=True] a,
-                               ndarray[np.uint8_t, cast=True] to_replace,
-                               ndarray[np.float64_t] replacements):
+                            ndarray[np.uint8_t, cast=True] to_replace,
+                            ndarray[np.float64_t] replacements):
     cdef:
         Py_ssize_t i, j, nr = a.shape[0], nc = a.shape[1]
         Py_ssize_t k, n = replacements.shape[0]
@@ -73,9 +68,8 @@ def replace_bool_with_float(ndarray[np.uint8_t, ndim=2, cast=True] a,
 
     return result
 
-def replace_int_with_int(ndarray[np.int64_t, ndim=2] a,
-                               ndarray[np.int64_t] to_replace,
-                               ndarray[np.int64_t] replacements):
+def replace_int_with_int(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] to_replace,
+                         ndarray[np.int64_t] replacements):
     cdef:
         Py_ssize_t i, j, nr = a.shape[0], nc = a.shape[1]
         Py_ssize_t k, n = replacements.shape[0]
@@ -92,9 +86,8 @@ def replace_int_with_int(ndarray[np.int64_t, ndim=2] a,
 
     return result
 
-def replace_int_with_float(ndarray[np.int64_t, ndim=2] a,
-                               ndarray[np.int64_t] to_replace,
-                               ndarray[np.float64_t] replacements):
+def replace_int_with_float(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] to_replace,
+                           ndarray[np.float64_t] replacements):
     cdef:
         Py_ssize_t i, j, nr = a.shape[0], nc = a.shape[1]
         Py_ssize_t k, n = replacements.shape[0]
@@ -111,9 +104,8 @@ def replace_int_with_float(ndarray[np.int64_t, ndim=2] a,
 
     return result
 
-def replace_float_with_float(ndarray[np.float64_t, ndim=2] a,
-                               ndarray[np.float64_t] to_replace,
-                               ndarray[np.float64_t] replacements):
+def replace_float_with_float(ndarray[np.float64_t, ndim=2] a, ndarray[np.float64_t] to_replace,
+                             ndarray[np.float64_t] replacements):
     cdef:
         Py_ssize_t i, j, nr = a.shape[0], nc = a.shape[1]
         Py_ssize_t k, n = replacements.shape[0], nan_idx = 0
@@ -152,9 +144,8 @@ def replace_float_with_float(ndarray[np.float64_t, ndim=2] a,
                         result[i, j] = a[i, j]
     return result
 
-def replace_str_with_str(ndarray[object, ndim=2] a,
-                               ndarray[object] to_replace,
-                               ndarray[object] replacements):
+def replace_str_with_str(ndarray[object, ndim=2] a, ndarray[object] to_replace,
+                         ndarray[object] replacements):
     cdef:
         Py_ssize_t i, j, nr = a.shape[0], nc = a.shape[1]
         Py_ssize_t k, n = replacements.shape[0]
@@ -171,8 +162,7 @@ def replace_str_with_str(ndarray[object, ndim=2] a,
 
     return result
 
-def replace_datetime_with_datetime(ndarray[np.int64_t, ndim=2] a,
-                                   ndarray[np.int64_t] to_replace,
+def replace_datetime_with_datetime(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] to_replace,
                                    ndarray[np.int64_t] replacements):
     cdef:
         Py_ssize_t i, j, nr = a.shape[0], nc = a.shape[1]
@@ -190,8 +180,7 @@ def replace_datetime_with_datetime(ndarray[np.int64_t, ndim=2] a,
 
     return result.astype('datetime64[ns]')
 
-def replace_timedelta_with_timedelta(ndarray[np.int64_t, ndim=2] a,
-                                     ndarray[np.int64_t] to_replace,
+def replace_timedelta_with_timedelta(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] to_replace,
                                      ndarray[np.int64_t] replacements):
     cdef:
         Py_ssize_t i, j, nr = a.shape[0], nc = a.shape[1]

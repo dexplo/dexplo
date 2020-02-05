@@ -35,12 +35,12 @@ cdef extern from "numpy/npy_math.h":
 
 
 def get_group_assignment_str_1d(ndarray[object] a):
-    cdef int i
-    cdef int nr = a.shape[0]
-    cdef int count = 0
-    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
-    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
-    cdef dict d = {}
+    cdef:
+        Py_ssize_t i
+        int nr = a.shape[0], count = 0
+        ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+        ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+        dict d = {}
 
     for i in range(nr):
         group[i] = d.get(a[i], -1)
@@ -53,14 +53,13 @@ def get_group_assignment_str_1d(ndarray[object] a):
     return group, group_position[:count]
 
 def get_group_assignment_str_1d_idx(ndarray[object] a):
-    cdef int i, j, k, group_num
-    cdef int nr = a.shape[0]
-    cdef int nc = a.shape[1]
-    cdef int count = 0
-    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
-    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
-    cdef ndarray[object] group_idx = np.empty(nr, dtype='O')
-    cdef dict d = {}
+    cdef:
+        Py_ssize_t i, j, k
+        int group_num, nr = a.shape[0], nc = a.shape[1], count = 0
+        ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+        ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+        ndarray[object] group_idx = np.empty(nr, dtype='O')
+        dict d = {}
 
     for i in range(nr):
         group_idx[i] = []
@@ -79,15 +78,14 @@ def get_group_assignment_str_1d_idx(ndarray[object] a):
     return group, group_position[:count], group_idx[:count]
 
 def get_group_assignment_str_2d(ndarray[object, ndim=2] a):
-    cdef int i, j, k
-    cdef int nr = a.shape[0]
-    cdef int nc = a.shape[1]
-    cdef int count = 0
-    cdef ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
-    cdef ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
-    cdef dict d = {}
-    cdef list v = list(range(nc))
-    cdef tuple t
+    cdef:
+        Py_ssize_t i, j, k
+        int nr = a.shape[0], nc = a.shape[1], count = 0
+        ndarray[np.int64_t] group = np.empty(nr, dtype=np.int64)
+        ndarray[np.int64_t] group_position = np.empty(nr, dtype=np.int64)
+        dict d = {}
+        list v = list(range(nc))
+        tuple t
 
     for i in range(nr):
         for j in range(nc):
@@ -104,12 +102,12 @@ def get_group_assignment_str_2d(ndarray[object, ndim=2] a):
     return group, group_position[:count]
 
 def get_group_assignment_int_1d(ndarray[np.int64_t] a):
-    cdef int i
-    cdef int n = len(a)
-    cdef int count = 0
-    cdef ndarray[np.int64_t] group = np.empty(n, dtype=np.int64)
-    cdef ndarray[np.int64_t] group_position = np.empty(n, dtype=np.int64)
-    cdef dict d = {}
+    cdef:
+        Py_ssize_t i
+        int n = len(a), count = 0
+        ndarray[np.int64_t] group = np.empty(n, dtype=np.int64)
+        ndarray[np.int64_t] group_position = np.empty(n, dtype=np.int64)
+        dict d = {}
 
     low, high = min_max_int(a)
     if high - low < 10_000_000:
@@ -125,16 +123,14 @@ def get_group_assignment_int_1d(ndarray[np.int64_t] a):
     return group, group_position[:count]
 
 def get_group_assignment_int_bounded(ndarray[np.int64_t] a, np.int64_t low, np.int64_t high):
-    cdef int i
-    cdef int count = 0
-    cdef int n = len(a)
-    cdef ndarray[np.int64_t] unique
-    cdef np.int64_t rng
+    cdef:
+        Py_ssize_t i
+        int n = len(a), count = 0
+        ndarray[np.int64_t] unique
+        np.int64_t rng = high - low + 1
+        ndarray[np.int64_t] group = np.empty(n, dtype=np.int64)
+        ndarray[np.int64_t] group_position = np.empty(n, dtype=np.int64)
 
-    cdef ndarray[np.int64_t] group = np.empty(n, dtype=np.int64)
-    cdef ndarray[np.int64_t] group_position = np.empty(n, dtype=np.int64)
-
-    rng = high - low + 1
     unique = np.full(rng, -1, dtype='int64')
 
     for i in range(n):
@@ -149,18 +145,16 @@ def get_group_assignment_int_bounded(ndarray[np.int64_t] a, np.int64_t low, np.i
     return group, group_position[:count]
 
 def get_group_assignment_int_2d(ndarray[np.int64_t, ndim=2] a):
-    cdef int i
-    cdef int n = len(a)
-    cdef int nc = a.shape[1]
-    cdef int count = 0
-    cdef ndarray[np.int64_t] group = np.empty(n, dtype=np.int64)
-    cdef ndarray[np.int64_t] group_position = np.empty(n, dtype=np.int64)
-    cdef dict d = {}
-    cdef ndarray[np.int64_t] ranges
-    cdef np.int64_t total_range = 1
-    cdef int cur_range = 10 ** 7
-    cdef int size = sizeof(np.int64_t) * nc
-    cdef bytes string
+    cdef:
+        Py_ssize_t i
+        int n = len(a), nc = a.shape[1], count = 0
+        ndarray[np.int64_t] group = np.empty(n, dtype=np.int64)
+        ndarray[np.int64_t] group_position = np.empty(n, dtype=np.int64)
+        dict d = {}
+        ndarray[np.int64_t] ranges
+        np.int64_t total_range = 1
+        int cur_range = 10 ** 7, size = sizeof(np.int64_t) * nc
+        bytes string
 
     lows, highs = min_max_int2(a, 0)
 
@@ -184,19 +178,17 @@ def get_group_assignment_int_2d(ndarray[np.int64_t, ndim=2] a):
     return group, group_position[:count]
 
 def get_group_assignment_int_bounded_2d(ndarray[np.int64_t, ndim=2] a, ndarray[np.int64_t] lows,
-                                        ndarray[np.int64_t] highs, ndarray[np.int64_t] ranges, int total_range):
-    cdef int i, j
-    cdef int count = 0
-    cdef int n = len(a)
-    cdef int nc = a.shape[1]
-
-    cdef ndarray[np.int64_t] group = np.empty(n, dtype=np.int64)
-    cdef ndarray[np.int64_t] group_position = np.empty(n, dtype=np.int64)
-    cdef ndarray[np.int64_t, ndim=2] idx
-    cdef long *unique = <long *>malloc(total_range * sizeof(long))
-    cdef long iloc
-    cdef ndarray[np.int64_t] range_prod
-
+                                        ndarray[np.int64_t] highs, ndarray[np.int64_t] ranges,
+                                        int total_range):
+    cdef:
+        Py_ssize_t i, j
+        int count = 0, n = len(a), nc = a.shape[1]
+        ndarray[np.int64_t] group = np.empty(n, dtype=np.int64)
+        ndarray[np.int64_t] group_position = np.empty(n, dtype=np.int64)
+        ndarray[np.int64_t, ndim=2] idx
+        long *unique = <long *>malloc(total_range * sizeof(long))
+        long iloc
+        ndarray[np.int64_t] range_prod
 
     for i in range(total_range):
         unique[i] = -1
@@ -218,7 +210,6 @@ def get_group_assignment_int_bounded_2d(ndarray[np.int64_t, ndim=2] a, ndarray[n
             group[i] = unique[iloc]
 
     free(unique)
-
     return group, group_position[:count]
 
 def get_group_assignment_float_1d(ndarray[np.float64_t] a):

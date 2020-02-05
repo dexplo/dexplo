@@ -1,7 +1,6 @@
 from collections import defaultdict
 from . import _utils as utils
 from ._libs import math_oper_string as mos
-from ._libs import math_oper as mo
 
 
 class OP_2D:
