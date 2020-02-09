@@ -141,11 +141,15 @@ def is_bool(value: Any) -> bool:
 
 
 def is_integer(value: Any) -> bool:
-    return isinstance(value, (int, np.integer))
+    return isinstance(value, (int, np.integer)) and not isinstance(value, bool)
 
 
 def is_float(value: Any) -> bool:
     return isinstance(value, (float, np.floating))
+
+
+def is_string(value: Any) -> bool:
+    return isinstance(value, (str, np.str_))
 
 
 def get_overall_dtype(value: Any) -> str:

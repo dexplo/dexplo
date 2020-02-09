@@ -27,10 +27,9 @@ def readme():
 if '--use-cython' in sys.argv:
     USE_CYTHON = True
     sys.argv.remove('--use-cython')
-    print('here')
 
     from Cython.Build import cythonize
-    extensions = cythonize(['dexplo/_libs/*.pyx'])
+    extensions = cythonize(['dexplo/_libs/*.pyx'], language_level='3')
 else:
     extensions = []
     for fn in glob.glob('dexplo/_libs/*.c'):

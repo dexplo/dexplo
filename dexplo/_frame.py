@@ -24,7 +24,7 @@ from ._libs import (groupby as _gb,
                     join as _join)
 from ._strings import StringClass
 from . import _stat_funcs as _sf
-from ._arithmetic_ops import OP_2D
+from ._arithmetic_ops import Operations2D
 
 DataC = Union[Dict[str, Union[ndarray, List]], ndarray]
 DictListArr = Dict[str, List[ndarray]]
@@ -920,11 +920,15 @@ class DataFrame(object):
             if old_kind == 'S':
                 func_name = f'str{op_string}'
                 if hasattr(_mos, func_name):
+                    if op_string in ['__mul__', '__rmul__']:
+                        if not utils.is_integer(other):
+                            raise TypeError(f'When multiplying a string column, you must use an integer, not a {type(other)}.')
+                    elif not utils.is_string(other):
+                        raise TypeError(f'This operation only works with strings. You attempted it with {type(other)}')
                     func = getattr(_mos, func_name)
                     new_str_reverse_map, arr_res, new_kind = func(self._str_reverse_map, self._data['S'], other)
                 else:
                     raise TypeError('Operation does not work on string columns')
-
             else:
                 with np.errstate(invalid='ignore', divide='ignore'):
                     # TODO: do something about zero division error
@@ -964,7 +968,7 @@ class DataFrame(object):
                                         new_str_reverse_map)
 
     def _op_df(self, other: Any, op_string: str) -> 'DataFrame':
-        op = OP_2D(self, other, op_string)
+        op = Operations2D(self, other, op_string)
         return op.operate()
 
     def _op(self, other: Any, op_string: str) -> 'DataFrame':

@@ -334,21 +334,22 @@ class TestArithmeticOperations:
 
     def test_mul_bool(self):
         some_bool = True
-        df1 = self.df * some_bool
+        with pytest.raises(TypeError):
+            self.df * some_bool
+        
+        df1 = self.df.select_dtypes(['number', 'bool']) * some_bool
         df2 = dx.DataFrame({'a': [0, nan, 5],
                             'b': [0, 1.5, nan],
-                            'c': [''] + list('bg'),
-                            'd': [nan, False, True],
-                            'e': ['', None, 'ad'],
+                            'd': [nan, 0, 1],
                             'f': [0, 4, 5],
                             'g': np.zeros(3, dtype='int'),
                             'h': [nan, nan, nan]})
         assert_frame_equal(df1, df2)
 
-        df1 = some_bool * self.df
+        df1 = some_bool * self.df.select_dtypes(['number', 'bool'])
         assert_frame_equal(df1, df2)
 
-    def test_truediv_frame(self):
+    def test_truediv_int(self):
         with pytest.raises(TypeError):
             self.df / 5
 
@@ -359,6 +360,64 @@ class TestArithmeticOperations:
             self.df / 'asdf'
 
         df1 = self.df.select_dtypes('number') / 2
+        df2 = dx.DataFrame({'a': [0, nan, 2.5],
+                            'b': [0, .75, nan],
+                            'f': [0, 2, 2.5],
+                            'g': np.zeros(3),
+                            'h': [nan, nan, nan]},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+        df1 = 10 / self.df.select_dtypes('number')
+        df2 = dx.DataFrame({'a': [np.inf, nan, 2],
+                            'b': [np.inf, 10 / 1.5, nan],
+                            'f': [np.inf, 2.5, 2],
+                            'g': [np.inf] * 3,
+                            'h': [nan, nan, nan]},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+    def test_truediv_float(self):
+        with pytest.raises(TypeError):
+            self.df / 5.
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') / 10.
+
+        with pytest.raises(TypeError):
+            self.df / 'asdf'
+
+        df1 = self.df.select_dtypes('number') / 2.
+        df2 = dx.DataFrame({'a': [0, nan, 2.5],
+                            'b': [0, .75, nan],
+                            'f': [0, 2, 2.5],
+                            'g': np.zeros(3),
+                            'h': [nan, nan, nan]},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+        df1 = 10. / self.df.select_dtypes('number')
+        df2 = dx.DataFrame({'a': [np.inf, nan, 2],
+                            'b': [np.inf, 10 / 1.5, nan],
+                            'f': [np.inf, 2.5, 2],
+                            'g': [np.inf] * 3,
+                            'h': [nan, nan, nan]},
+                           columns=list('abfgh'))
+        assert_frame_equal(df1, df2)
+
+    def test_truediv_bool(self):
+        some_bool = True
+
+        with pytest.raises(TypeError):
+            self.df / some_bool
+
+        with pytest.raises(TypeError):
+            self.df.select_dtypes('str') / 10
+
+        with pytest.raises(TypeError):
+            self.df / 'asdf'
+
+        df1 = self.df.select_dtypes('number')
         df2 = dx.DataFrame({'a': [0, nan, 2.5],
                             'b': [0, .75, nan],
                             'f': [0, 2, 2.5],

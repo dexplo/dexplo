@@ -3,7 +3,7 @@ from . import _utils as utils
 from ._libs import math_oper_string as mos
 
 
-class OP_2D:
+class Operations2D:
     """
     Arithmetic and comparison operations with a DataFrame and another DataFrame/Array
     """
