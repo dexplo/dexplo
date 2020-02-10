@@ -4,6 +4,7 @@
 import numpy as np
 cimport numpy as np
 from numpy cimport ndarray
+from libc.math cimport isnan
 
 try:
     import bottleneck as bn
@@ -162,15 +163,8 @@ def int_floordiv_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or other == 0:
                 a_new[j, i] = MIN_INT
-            elif other == 0:
-                if a[j, i] < 0:
-                    a_new[j, i] = -np.inf
-                elif a[j, i] > 0:
-                    a_new[j, i] = np.inf
-                else:
-                    a_new[j, i] = np.nan
             else:
                 a_new[j, i] = a[j, i] // other
     return a_new
@@ -184,15 +178,8 @@ def int_rfloordiv_int(ndarray[np.int64_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT:
+            if a[j, i] == MIN_INT or a[j, i] == 0:
                 a_new[j, i] = MIN_INT
-            elif a[j, i] == 0:
-                if other < 0:
-                    a_new[j, i] = -np.inf
-                elif other > 0:
-                    a_new[j, i] = np.inf
-                else:
-                    a_new[j, i] = np.nan
             else:
                 a_new[j, i] = other // a[j, i]
     return a_new
@@ -641,13 +628,8 @@ def bool_floordiv_int(ndarray[np.int8_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == -1:
+            if a[j, i] == -1 or other == 0:
                 a_new[j, i] = MIN_INT
-            elif other == 0:
-                if a[j, i]:
-                    a_new[j, i] = np.inf
-                else:
-                    a_new[j, i] = np.nan
             else:
                 a_new[j, i] = a[j, i] // other
     return a_new
@@ -661,15 +643,8 @@ def bool_rfloordiv_int(ndarray[np.int8_t, ndim=2] a, int other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == -1:
+            if a[j, i] == -1 or a[j, i] == 0:
                 a_new[j, i] = MIN_INT
-            elif a[j, i] == 0:
-                if other < 0:
-                    a_new[j, i] = -np.inf
-                elif other > 0:
-                    a_new[j, i] = np.inf
-                else:
-                    a_new[j, i] = np.nan
             else:
                 a_new[j, i] = other // a[j, i]
     return a_new
@@ -912,7 +887,7 @@ def bool_pow_float(ndarray[np.int8_t, ndim=2] a, np.float64_t other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == -1:
+            if a[j, i] == -1 or isnan(other):
                 a_new[j, i] = np.nan
             else:
                 a_new[j, i] = a[j, i] ** other
@@ -927,7 +902,7 @@ def bool_rpow_float(ndarray[np.int8_t, ndim=2] a, np.float64_t other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == -1:
+            if a[j, i] == -1 or isnan(other):
                 a_new[j, i] = np.nan
             else:
                 a_new[j, i] = other ** a[j, i]
@@ -1106,15 +1081,8 @@ def int_floordiv_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT or other == -1:
+            if a[j, i] == MIN_INT or other == -1 or other == 0:
                 a_new[j, i] = MIN_INT
-            elif other == 0:
-                if a[j, i] < 0:
-                    a_new[j, i] = -np.inf
-                elif a[j, i] > 0:
-                    a_new[j, i] = np.inf
-                else:
-                    a_new[j, i] = np.nan
             else:
                 a_new[j, i] = a[j, i] // other
     return a_new
@@ -1128,13 +1096,8 @@ def int_rfloordiv_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == MIN_INT or other == -1:
+            if a[j, i] == MIN_INT or a[j, i] == 0 or other == -1:
                 a_new[j, i] = MIN_INT
-            elif a[j, i] == 0:
-                if other > 0:
-                    a_new[j, i] = np.inf
-                else:
-                    a_new[j, i] = np.nan
             else:
                 a_new[j, i] = other // a[j, i]
     return a_new
@@ -1331,13 +1294,8 @@ def bool_floordiv_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == -1 or other == -1:
+            if a[j, i] == -1 or other == -1 or other == 0:
                 a_new[j, i] = MIN_INT
-            elif other == 0:
-                if a[j, i] > 0:
-                    a_new[j, i] = np.inf
-                else:
-                    a_new[j, i] = np.nan
             else:
                 a_new[j, i] = a[j, i] // other
     return a_new
@@ -1351,13 +1309,8 @@ def bool_rfloordiv_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
 
     for i in range(nc):
         for j in range(nr):
-            if a[j, i] == -1 or other == -1:
+            if a[j, i] == -1 or other == -1 or other == 0:
                 a_new[j, i] = MIN_INT
-            elif a[j, i] == 0:
-                if other > 0:
-                    a_new[j, i] = np.inf
-                else:
-                    a_new[j, i] = np.nan
             else:
                 a_new[j, i] = other // a[j, i]
     return a_new
