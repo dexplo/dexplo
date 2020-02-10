@@ -932,8 +932,9 @@ class DataFrame(object):
             else:
                 with np.errstate(invalid='ignore', divide='ignore'):
                     # TODO: do something about zero division error
-                    if old_kind in ['i', 'b']:
-                        start_func = 'int' if old_kind == 'i' else 'bool'
+
+                    if old_kind in ['i', 'b', 'f']:
+                        start_func = {'i': 'int', 'b': 'bool', 'f': 'float'}[old_kind]
                         if utils.is_integer(other):
                             end_func = 'int'
                         elif utils.is_float(other):
@@ -951,7 +952,10 @@ class DataFrame(object):
                         arr_res = func(arr, other)
                     else:
                         arr_res = getattr(arr, op_string)(other)
-                new_kind = arr_res.dtype.kind
+                if arr_res.dtype == np.int8:
+                    new_kind = 'b'
+                else:
+                    new_kind = arr_res.dtype.kind
 
             cur_len: int = utils.get_num_cols(data_dict.get(new_kind, []))
             kind_shape[old_kind] = (new_kind, cur_len)

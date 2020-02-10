@@ -1,4 +1,3 @@
-#cython: cdivision=False
 #asdfcython: boundscheck=False
 #asfdcython: wraparound=False
 import numpy as np
@@ -589,7 +588,7 @@ def bool_truediv_int(ndarray[np.int8_t, ndim=2] a, int other):
             if a[j, i] == -1:
                 a_new[j, i] = np.nan
             elif other == 0:
-                if a[j, i]:
+                if a[j, i] == 1:
                     a_new[j, i] = np.inf
                 else:
                     a_new[j, i] = np.nan
@@ -608,7 +607,7 @@ def bool_rtruediv_int(ndarray[np.int8_t, ndim=2] a, int other):
         for j in range(nr):
             if a[j, i] == -1:
                 a_new[j, i] = np.nan
-            elif not a[j, i]:
+            elif a[j, i] == 0:
                 if other < 0:
                     a_new[j, i] = -np.inf
                 elif other > 0:
@@ -813,7 +812,7 @@ def bool_truediv_float(ndarray[np.int8_t, ndim=2] a, np.float64_t other):
             if a[j, i] == -1:
                 a_new[j, i] = np.nan
             elif other == 0:
-                if a[j, i]:
+                if a[j, i] == 1:
                     a_new[j, i] = np.inf
                 else:
                     a_new[j, i] = np.nan
@@ -1373,4 +1372,68 @@ def bool_rmod_bool(ndarray[np.int8_t, ndim=2] a, np.int8_t other):
                 a_new[j, i] = MIN_INT
             else:
                 a_new[j, i] = other % a[j, i]
+    return a_new
+
+# Comparison operators
+
+def int_gt_int(ndarray[np.int64_t, ndim=2] a, int other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int8_t, ndim=2] a_new = np.empty((nr, nc), dtype='int8')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == MIN_INT or other == MIN_INT:
+                a_new[j, i] = -1
+            else:
+                a_new[j, i] = a[j, i] > other
+    return a_new
+
+def int_gt_float(ndarray[np.int64_t, ndim=2] a, np.float64_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int8_t, ndim=2] a_new = np.empty((nr, nc), dtype='int8')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == MIN_INT or isnan(other):
+                a_new[j, i] = -1
+            else:
+                a_new[j, i] = a[j, i] > other
+    return a_new
+
+def int_gt_bool(ndarray[np.int64_t, ndim=2] a, np.int8_t other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int8_t, ndim=2] a_new = np.empty((nr, nc), dtype='int8')
+
+    for i in range(nc):
+        for j in range(nr):
+            if a[j, i] == MIN_INT or other == -1:
+                a_new[j, i] = -1
+            else:
+                a_new[j, i] = a[j, i] > other
+    return a_new
+
+# float
+
+def float_gt_int(ndarray[np.float64_t, ndim=2] a, int other):
+    cdef:
+        Py_ssize_t i, j
+        int nr = a.shape[0]
+        int nc = a.shape[1]
+        ndarray[np.int8_t, ndim=2] a_new = np.empty((nr, nc), dtype='int8')
+
+    for i in range(nc):
+        for j in range(nr):
+            if isnan(a[j, i]) or other == MIN_INT:
+                a_new[j, i] = -1
+            else:
+                a_new[j, i] = a[j, i] > other
     return a_new
