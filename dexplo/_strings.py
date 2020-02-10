@@ -1,6 +1,6 @@
-import dexplo._utils as utils
-from dexplo._libs import (string_funcs as _sf,
-                          math as _math)
+from . import _utils as utils
+from ._libs import (string_funcs as _sf, 
+                    math as _math)
 import re
 import numpy as np
 from numpy import nan, ndarray
@@ -92,12 +92,12 @@ class StringClass(object):
         else:
             raise TypeError('`column` must be a column name as a string, a list of string, or None')
 
-    def _create_df(self, arr, dtype, columns):
+    def _create_df(self, arr, dtype, columns, str_reverse_map):
         new_data = {dtype: arr}
         new_column_info = {col: utils.Column(dtype, i, i) for i, col in enumerate(columns)}
-        return self._df._construct_from_new(new_data, new_column_info, columns)
+        return self._df._construct_from_new(new_data, new_column_info, np.array(columns), str_reverse_map)
 
-    def _create_df_all(self, arr, dtype):
+    def _create_df_all(self, arr, dtype, str_reverse_map):
         new_data = {}
         if dtype == 'S':
             for old_dtype, old_data in self._df._data.items():
@@ -127,9 +127,9 @@ class StringClass(object):
                     new_column_info[col] = utils.Column(old_dtype, loc, order)
 
         new_column_info = self._df._copy_column_info()
-        return self._df._construct_from_new(new_data, new_column_info, self._df._columns.copy())
+        return self._df._construct_from_new(new_data, new_column_info, self._df._columns.copy(), str_reverse_map)
 
-    def _create_df_multiple_dtypes(self, arr_new, columns, column_locs, columns_other, locs_other):
+    def _create_df_multiple_dtypes(self, arr_new, columns, column_locs, columns_other, locs_other, str_reverse_map):
         new_data = {}
         dtype_new = arr_new.dtype.kind
         try:
@@ -162,7 +162,7 @@ class StringClass(object):
             order = self._df._column_info[col].order
             new_column_info[col] = utils.Column('S', i, order)
 
-        return self._df._construct_from_new(new_data, new_column_info, self._df._columns.copy())
+        return self._df._construct_from_new(new_data, new_column_info, self._df._columns.copy(), str_reverse_map)
 
     def _get_other_str_cols(self, columns):
         col_set = set(columns)
@@ -174,7 +174,7 @@ class StringClass(object):
                 locs_other.append(self._df._column_info[col].loc)
         return cols_other, locs_other
 
-    def _str_generic_concat(self, name, column, keep, return_dtype, **kwargs):
+    def _str_generic_concat(self, name, column, keep, return_dtype, str_reverse_map, **kwargs):
         if not isinstance(keep, (bool, np.bool_)):
             raise TypeError('`keep` must be a boolean')
 
@@ -236,10 +236,10 @@ class StringClass(object):
         for i, col in enumerate(final_cols):
             new_column_info[col] = utils.Column(dtype_new, i + add_loc, i + add_order)
 
-        return self._df._construct_from_new(new_data, new_column_info, new_columns)
+        return self._df._construct_from_new(new_data, new_column_info, new_columns, str_reverse_map)
 
     def _str_generic(self, name, column, keep, multiple, **kwargs):
-        if not isinstance(keep, (bool, np.bool_)):
+        if not utils.is_bool(keep):
             raise TypeError('`keep` must be a boolean')
 
         if keep:
@@ -248,21 +248,23 @@ class StringClass(object):
             columns, locs = self._validate_columns(column)
 
         data = self._df._data['S']
+        str_reverse_map = self._df._str_reverse_map
         if len(locs) == 1:
-            arr = getattr(_sf, name)(data[:, locs[0]], **kwargs)[:, np.newaxis]
+            arr, str_reverse_map, kind = getattr(_sf, name)(data[:, locs[0]], str_reverse_map, **kwargs)
+            arr = arr[:, np.newaxis]
         else:
-            arr = getattr(_sf, name + '_2d')(data[:, locs], **kwargs)
+            arr, str_reverse_map, kind = getattr(_sf, name + '_2d')(data[:, locs], **kwargs)
 
         if keep:
             if multiple:
-                return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs)
+                return self._create_df_multiple_dtypes(arr, columns, locs, other_columns, other_locs, str_reverse_map)
             else:
                 data = data.copy()
                 for i, loc in enumerate(locs):
                     data[:, loc] = arr[:, i]
-                return self._create_df_all(data, 'S')
+                return self._create_df_all(data, kind, str_reverse_map)
         else:
-            return self._create_df(arr, arr.dtype.kind, columns)
+            return self._create_df(arr, kind, columns, str_reverse_map)
 
     def capitalize(self, column=None, keep=False):
         return self._str_generic(name='capitalize', column=column, keep=keep, multiple=False)

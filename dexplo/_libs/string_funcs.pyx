@@ -12,16 +12,31 @@ cimport cython
 cimport numpy as np
 
 
-def capitalize(ndarray[object] arr):
-    cdef int i
-    cdef int n = len(arr)
-    cdef ndarray[object] result = np.empty(n, dtype='object')
+def capitalize(ndarray[np.uint32_t] arr, dict str_reverse_map):
+    cdef:
+        Py_ssize_t i
+        int n = len(arr)
+        ndarray[np.uint32_t] result = np.empty(n, dtype='uint32')
+        dict new_str_map = {False: 0}
+        list cur_str_reverse_list = str_reverse_map[0]
+        int m = len(cur_str_reverse_list), num_unique = 1
+        ndarray[np.uint32_t] new_code_map = np.empty(m, dtype='uint32')
+        list new_str_reverse_map = [False]
+        str new_string
+
+    new_code_map[0] = 0
+
+    for i in range(1, m):
+        new_string = cur_str_reverse_list[i].capitalize()
+        new_code_map[i] = new_str_map.setdefault(new_string, len(new_str_map))
+        if len(new_str_map) > num_unique: # new entry
+            new_str_reverse_map.append(new_string)
+            num_unique += 1
+
     for i in range(n):
-        if arr[i] is not None:
-            result[i] = arr[i].capitalize()
-        else:
-            result[i] = None
-    return result
+        result[i] = new_code_map[arr[i]]
+
+    return result, {0: new_str_reverse_map}, 'S'
 
 def capitalize_2d(ndarray[object, ndim=2] arr):
     cdef int i, j
@@ -36,16 +51,31 @@ def capitalize_2d(ndarray[object, ndim=2] arr):
                 arr[i, j] = None
     return result
 
-def center(ndarray[object] arr, int width, str fillchar=' '):
-    cdef int i
-    cdef int n = len(arr)
-    cdef ndarray[object] result = np.empty(n, dtype='object')
+def center(ndarray[np.uint32_t] arr, dict str_reverse_map, int width, str fillchar=' '):
+    cdef:
+        Py_ssize_t i
+        int n = len(arr)
+        ndarray[np.uint32_t] result = np.empty(n, dtype='uint32')
+        dict new_str_map = {False: 0}
+        list cur_str_reverse_list = str_reverse_map[0]
+        int m = len(cur_str_reverse_list), num_unique = 1
+        ndarray[np.uint32_t] new_code_map = np.empty(m, dtype='uint32')
+        list new_str_reverse_map = [False]
+        str new_string
+
+    new_code_map[0] = 0
+
+    for i in range(1, m):
+        new_string = cur_str_reverse_list[i].center(width, fillchar)
+        new_code_map[i] = new_str_map.setdefault(new_string, len(new_str_map))
+        if len(new_str_map) > num_unique: # new entry
+            new_str_reverse_map.append(new_string)
+            num_unique += 1
+            
     for i in range(n):
-        if arr[i] is not None:
-            result[i] = arr[i].center(width, fillchar)
-        else:
-            result[i] = None
-    return result
+        result[i] = new_code_map[arr[i]]
+
+    return result, {0: new_str_reverse_map}, 'S'
 
 def center_2d(ndarray[object, ndim=2] arr, int width, str fillchar=' '):
     cdef int i, j
@@ -60,10 +90,15 @@ def center_2d(ndarray[object, ndim=2] arr, int width, str fillchar=' '):
                 result[i, j] = None
     return result
 
-def contains(ndarray[object] arr, pat, case=True, flags=0, na=nan, regex=True):
-    cdef int i
-    cdef int n = len(arr)
-    cdef ndarray[np.uint8_t, cast=True] result = np.empty(n, dtype='bool')
+def contains(ndarray[np.uint32_t] arr, dict str_reverse_map, pat, case=True, flags=0, na=nan, regex=True):
+    cdef:
+        Py_ssize_t i
+        list cur_str_reverse_list = str_reverse_map[0]
+        int m = len(cur_str_reverse_list), n = len(arr)
+        ndarray[np.int8_t] result = np.empty(n, dtype='int8')
+        ndarray[np.uint32_t] new_code_map = np.empty(m, dtype='uint32')
+        
+    new_code_map[0] = -1
 
     if regex:
         if isinstance(pat, Pattern):
@@ -73,26 +108,21 @@ def contains(ndarray[object] arr, pat, case=True, flags=0, na=nan, regex=True):
                 flags = flags | re.IGNORECASE
             pattern = re.compile(pat, flags=flags)
 
-        for i in range(n):
-            if arr[i] is not None:
-                result[i] = bool(pattern.search(arr[i]))
-            else:
-                result[i] = False
+        for i in range(1, m):
+            new_code_map[i] = bool(pattern.search(cur_str_reverse_list[i])) * 1
     else:
         if case:
-            for i in range(n):
-                if arr[i] is not None:
-                    result[i] = pat in arr[i]
-                else:
-                    result[i] = False
+            for i in range(m):
+                new_code_map[i] = (pat in cur_str_reverse_list[i]) * 1
         else:
             pat = pat.lower()
-            for i in range(n):
-                if arr[i] is not None:
-                    result[i] = pat in arr[i].lower()
-                else:
-                    result[i] = False
-    return result
+            for i in range(m):
+                new_code_map[i] = (pat in cur_str_reverse_list[i]) * 1
+
+    for i in range(n):
+        result[i] = new_code_map[arr[i]]
+
+    return result, {}, 'b'
 
 def contains_2d(ndarray[object, ndim=2] arr, pat, case=True, flags=0, na=nan, regex=True):
     cdef int i, j
