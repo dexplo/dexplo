@@ -1,12 +1,16 @@
 # dexplo
+
+[![](https://img.shields.io/pypi/v/dexplo)](https://pypi.org/project/dexplo)
+[![Build Status](https://travis-ci.org/dexplo/dexplo.svg?branch=master)](https://travis-ci.org/dexplo/dexplo)
+[![PyPI - License](https://img.shields.io/pypi/l/dexplo)](LICENSE)
+
 A data analysis library comparable to pandas
 
 # Installation
 You must have cython installed. Run `python setup.py build_ext --use-cython -i`
 
-[![Build Status](https://travis-ci.org/dexplo/dexplo.svg?branch=master)](https://travis-ci.org/dexplo/dexplo)
-
 # Main Goals
+
 * A minimal set of features 
 * Be as explicit as possible
 * There should be one-- and preferably only one --obvious way to do it.
@@ -54,13 +58,14 @@ All data types allow nulls
 ## API
 
 #### Attributes
+
 - [x] size
 - [x] shape
 - [x] values
 - [x] dtypes
 
-
 #### Methods
+
 **Stats**
 
 - [x] abs
@@ -141,6 +146,7 @@ All data types allow nulls
 - [ ] concat
 
 **Group By** - specifically with `groupby` method
+
 - [x] agg
 - [x] all
 - [x] apply
@@ -172,8 +178,8 @@ All data types allow nulls
 - [x] tail
 - [x] var
 
-
 **str** - `df.str.<method>`
+
 - [x] capitalize
 - [x] cat
 - [x] center
@@ -219,6 +225,7 @@ All data types allow nulls
 - [x] zfill
 
 **dt** - `df.dt.<method>`
+
 - [x] ceil
 - [x] day
 - [x] day_of_week
@@ -253,6 +260,7 @@ All data types allow nulls
 - [x] year
 
 **td** - `df.td.<method>`
+
 - [ ] ceil
 - [ ] components
 - [x] days
