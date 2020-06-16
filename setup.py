@@ -4,6 +4,11 @@ from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 import sys, glob
 
+with open('dexplo/__init__.py', 'r') as f:
+    for line in f:
+        if line.startswith('__version__'):
+            version = line.split("'")[1]
+
 
 class CustomBuildExtCommand(build_ext):
     """build_ext command for use when numpy headers are needed."""
@@ -37,7 +42,7 @@ else:
 
 setup(name='dexplo',
       cmdclass={'build_ext': CustomBuildExtCommand},
-      version='0.0.13',
+      version=version,
       description='A library for data exploration comparible to pandas. '
                   'No Series, No hierarchical indexing, only one indexer [ ]',
       long_description=readme(),
